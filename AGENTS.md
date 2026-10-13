@@ -18,8 +18,9 @@ the Codex half of
 Code; the difference is that you were woken by the node and do not poll, so
 there is no schedule to set up and no loop to stop.
 
-Find `ah` the same way the skill does: `AGENTHALLWAY_AH` if set, else `ah` on PATH,
-else `<this repo>/bin/ah`. Do not build it silently if none exists — say so.
+Find `ah` the same way the skill does: `AGENTHALLWAY_AH` (or the older
+`AGENTHUB_AH`) if set, else `ah` on PATH, else `<this repo>/bin/ah`. Do not
+build it silently if none exists — say so.
 
 Identify this session (`SELF`) once:
 

@@ -186,7 +186,7 @@ func restartApp(t *testing.T) *App {
 	logDir = func() (string, error) { return temporary, nil }
 	app := NewApp()
 	app.ctx = context.Background()
-	// NewApp reads AGENTHALLWAY_URL, and a developer's environment may point it
+	// NewApp reads AGENTHALLWAY_URL (or AGENTHUB_URL), and a developer's environment may point it
 	// somewhere else; this is a test about the restart, not about that.
 	app.url = defaultNodeURL
 	app.client = newClient(defaultNodeURL)

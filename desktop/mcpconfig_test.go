@@ -162,7 +162,7 @@ func TestLocateBinaryAnswersAbsolutely(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("AGENTHALLWAY_MCP", relative)
-	found, err := locateBinary("agenthallway-mcp", "AGENTHALLWAY_MCP")
+	found, err := locateBinary("agenthallway-mcp", "MCP")
 	if err != nil {
 		t.Fatal(err)
 	}

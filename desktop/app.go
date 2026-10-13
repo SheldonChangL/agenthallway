@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	runtimepkg "runtime"
 	"sort"
 	"strings"
@@ -38,7 +37,7 @@ type App struct {
 }
 
 func NewApp() *App {
-	nodeURL := os.Getenv("AGENTHALLWAY_URL")
+	nodeURL := getenvCompat("URL")
 	if nodeURL == "" {
 		nodeURL = defaultNodeURL
 	}

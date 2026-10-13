@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"agenthub.local/agenthub/internal/buildinfo"
 	"agenthub.local/agenthub/internal/model"
 	"agenthub.local/agenthub/internal/pairing"
+	"agenthub.local/agenthub/internal/product"
 )
 
 type runner struct {
@@ -29,14 +29,19 @@ type runner struct {
 	stdout  io.Writer
 }
 
+// defaultNodeURL is where ah looks for the node when -url is not given:
+// AGENTHALLWAY_URL, else the older AGENTHUB_URL, else the loopback default.
+func defaultNodeURL() string {
+	if given := product.Getenv("URL"); given != "" {
+		return given
+	}
+	return "http://127.0.0.1:7462"
+}
+
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("ah", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	defaultURL := os.Getenv("AGENTHALLWAY_URL")
-	if defaultURL == "" {
-		defaultURL = "http://127.0.0.1:7462"
-	}
-	baseURL := flags.String("url", defaultURL, "Agent Hallway node URL")
+	baseURL := flags.String("url", defaultNodeURL(), "Agent Hallway node URL")
 	jsonOutput := flags.Bool("json", false, "print JSON")
 	showVersion := flags.Bool("version", false, "print the build version and exit")
 	flags.Usage = func() { printUsage(stderr) }

@@ -61,7 +61,7 @@ func (a *App) MCPConfig(sessionID string) (MCPConfigResult, error) {
 	if sessionID == "" {
 		return MCPConfigResult{}, fmt.Errorf("select a session first")
 	}
-	command, err := locateBinary("agenthallway-mcp", "AGENTHALLWAY_MCP")
+	command, err := locateBinary(productMCPBinary, "MCP")
 	if err != nil {
 		return MCPConfigResult{}, err
 	}
@@ -76,7 +76,7 @@ func (a *App) MCPConfig(sessionID string) (MCPConfigResult, error) {
 	args := []string{"-as", sessionID, "-url", nodeURL}
 
 	encoded, err := json.MarshalIndent(mcpConfigFile{
-		Servers: map[string]mcpServer{"agenthallway": {Command: command, Args: args}},
+		Servers: map[string]mcpServer{productSlug: {Command: command, Args: args}},
 	}, "", "  ")
 	if err != nil {
 		return MCPConfigResult{}, fmt.Errorf("build the MCP config: %w", err)

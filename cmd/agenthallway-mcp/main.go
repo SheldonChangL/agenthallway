@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"agenthub.local/agenthub/internal/mcpserver"
+	"agenthub.local/agenthub/internal/product"
 )
 
 func main() {
@@ -24,12 +25,17 @@ func main() {
 	}
 }
 
-func run() error {
-	defaultURL := os.Getenv("AGENTHALLWAY_URL")
-	if defaultURL == "" {
-		defaultURL = "http://127.0.0.1:7462"
+// defaultNodeURL is where the server looks for the node when -url is not given:
+// AGENTHALLWAY_URL, else the older AGENTHUB_URL, else the loopback default.
+func defaultNodeURL() string {
+	if given := product.Getenv("URL"); given != "" {
+		return given
 	}
-	nodeURL := flag.String("url", defaultURL, "Agent Hallway node URL")
+	return "http://127.0.0.1:7462"
+}
+
+func run() error {
+	nodeURL := flag.String("url", defaultNodeURL(), "Agent Hallway node URL")
 	as := flag.String("as", "",
 		"the session this server acts for, as <provider>:<id> (required)")
 	channel := flag.Bool("channel", false,

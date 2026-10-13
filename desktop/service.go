@@ -117,7 +117,7 @@ var findTool = func() (string, error) {
 }
 
 func locateTool() (string, error) {
-	return locateBinary("ah", "AGENTHALLWAY_AH")
+	return locateBinary("ah", "AH")
 }
 
 // findNode locates the agenthallway-node the installed service should run, the same
@@ -130,13 +130,15 @@ func locateTool() (string, error) {
 // already knows which agenthallway-node it means, because the packaging step put it
 // beside this executable, so it says so.
 var findNode = func() (string, error) {
-	return locateBinary("agenthallway-node", "AGENTHALLWAY_NODE")
+	return locateBinary(productNodeBinary, "NODE")
 }
 
-// locateBinary is that search, with the binary's name and the environment
-// variable that overrides it as parameters: ah, agenthallway-node and agenthallway-mcp
-// ship side by side and are found the same way, and a second copy of this list
-// would be a second thing to keep in step with how the app is packaged.
+// locateBinary is that search, with the binary's name and the suffix of the
+// environment variable that overrides it as parameters: ah, agenthallway-node
+// and agenthallway-mcp ship side by side and are found the same way, and a
+// second copy of this list would be a second thing to keep in step with how the
+// app is packaged. The suffix AH is read as AGENTHALLWAY_AH, then as the older
+// AGENTHUB_AH.
 //
 // PATH is deliberately not one of the places. What this finds is run to install
 // a launchd job or a systemd unit; anything named ah that happened to come
@@ -148,12 +150,12 @@ var findNode = func() (string, error) {
 // The answer is always absolute. A relative path works for exec, which resolves
 // it against this process's working directory, but the caller may be writing it
 // into a config file that another program will read from somewhere else.
-func locateBinary(name, envName string) (string, error) {
+func locateBinary(name, envSuffix string) (string, error) {
 	self, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("find %s: locating this executable: %w", name, err)
 	}
-	return locateBinaryNear(filepath.Dir(self), name, envName)
+	return locateBinaryNear(filepath.Dir(self), name, envSuffix)
 }
 
 // executableName is what the file is actually called on this operating system.
@@ -172,8 +174,9 @@ func executableName(name string) string {
 // message about exec rather than about the path being wrong.
 func runnable(path string) bool {
 	// #nosec G703 -- the taint gosec follows is AGENTHALLWAY_AH / AGENTHALLWAY_NODE /
-	// AGENTHALLWAY_MCP, set by the person this app runs as to name a binary they
-	// want run instead of the bundled one; every other path here is built from
+	// AGENTHALLWAY_MCP (or their AGENTHUB_ forerunners), set by the person this
+	// app runs as to name a binary they want run instead of the bundled one;
+	// every other path here is built from
 	// this executable's own location. Nothing the window or the network
 	// supplies reaches it, and "traversal" into one's own account is not a
 	// boundary crossed.
@@ -191,14 +194,14 @@ func runnable(path string) bool {
 // locateBinaryNear is that search with the executable's directory given rather
 // than asked for, so a test can lay out a bundle or a checkout in a temporary
 // directory and watch which of them the search will and will not accept.
-func locateBinaryNear(dir, name, envName string) (string, error) {
+func locateBinaryNear(dir, name, envSuffix string) (string, error) {
 	file := executableName(name)
 	looked := make([]string, 0, 4)
-	if given := os.Getenv(envName); given != "" {
+	if given, variable := lookupEnvCompat(envSuffix); given != "" {
 		if runnable(given) {
 			return absolute(given)
 		}
-		looked = append(looked, "$"+envName+"="+given)
+		looked = append(looked, "$"+variable+"="+given)
 	}
 	// Where the packaging step puts them: beside this executable, which is
 	// Contents/MacOS in a bundle and the unpacked directory on Linux, and
@@ -220,8 +223,8 @@ func locateBinaryNear(dir, name, envName string) (string, error) {
 		}
 		looked = append(looked, candidate)
 	}
-	return "", fmt.Errorf("%s was not found (looked: %s); set %s to its path",
-		name, strings.Join(looked, ", "), envName)
+	return "", fmt.Errorf("%s was not found (looked: %s); set %s%s to its path",
+		name, strings.Join(looked, ", "), productEnvPrefix, envSuffix)
 }
 
 // modulePath is this project's Go module. A directory whose go.mod declares it

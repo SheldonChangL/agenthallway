@@ -11,7 +11,7 @@ same rules from version control instead of a prompt somebody typed once.
 
 ## 0. Locate `ah`
 
-`AGENTHALLWAY_AH` if set, else `ah` on PATH, else `<agenthallway repo>/bin/ah`. If none exists, stop
+`AGENTHALLWAY_AH` (or the older `AGENTHUB_AH`) if set, else `ah` on PATH, else `<repo>/bin/ah`. If none exists, stop
 and say so; do not build it silently.
 
 ## 1. Identify this session (once)

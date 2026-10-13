@@ -181,13 +181,14 @@ func TestLocateBinaryNeverRunsAnAhFromPATH(t *testing.T) {
 	}
 	t.Setenv("PATH", onPath)
 	t.Setenv("AGENTHALLWAY_AH", "")
+	t.Setenv("AGENTHUB_AH", "")
 
 	// An app installed somewhere with nothing beside it — the case a colleague
 	// hits, and the one where PATH used to answer.
 	installed := filepath.Join(t.TempDir(), "Applications", "agenthallway-desktop.app", "Contents", "MacOS")
 	dir := executable(t, filepath.Join(installed, "desktop"))
 
-	found, err := locateBinaryNear(dir, "ah", "AGENTHALLWAY_AH")
+	found, err := locateBinaryNear(dir, "ah", "AH")
 	if err == nil {
 		t.Fatalf("ah was found at %q; the only ah anywhere is the one on PATH", found)
 	}
@@ -202,12 +203,13 @@ func TestLocateBinaryNeverRunsAnAhFromPATH(t *testing.T) {
 // bundle. This is the path a released .app has to take.
 func TestLocateBinaryFindsWhatWasBundledBesideTheApp(t *testing.T) {
 	t.Setenv("AGENTHALLWAY_AH", "")
+	t.Setenv("AGENTHUB_AH", "")
 	macOS := filepath.Join(t.TempDir(), "agenthallway-desktop.app", "Contents", "MacOS")
 	dir := executable(t, filepath.Join(macOS, "desktop"))
 	bundled := filepath.Join(macOS, "ah")
 	executable(t, bundled)
 
-	found, err := locateBinaryNear(dir, "ah", "AGENTHALLWAY_AH")
+	found, err := locateBinaryNear(dir, "ah", "AH")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,6 +223,7 @@ func TestLocateBinaryFindsWhatWasBundledBesideTheApp(t *testing.T) {
 // is not this project's checkout are a stranger's bin/ah, and are refused.
 func TestLocateBinaryTakesTheSourceTreeOnlyFromThisProjectsCheckout(t *testing.T) {
 	t.Setenv("AGENTHALLWAY_AH", "")
+	t.Setenv("AGENTHUB_AH", "")
 	for _, layout := range []struct {
 		name   string
 		within string
@@ -234,12 +237,12 @@ func TestLocateBinaryTakesTheSourceTreeOnlyFromThisProjectsCheckout(t *testing.T
 			built := filepath.Join(root, "bin", "ah")
 			executable(t, built)
 
-			if found, err := locateBinaryNear(dir, "ah", "AGENTHALLWAY_AH"); err == nil {
+			if found, err := locateBinaryNear(dir, "ah", "AH"); err == nil {
 				t.Fatalf("found %q under a directory with no go.mod of ours", found)
 			}
 
 			checkout(t, root)
-			found, err := locateBinaryNear(dir, "ah", "AGENTHALLWAY_AH")
+			found, err := locateBinaryNear(dir, "ah", "AH")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -270,6 +273,7 @@ func TestSomeoneElsesCheckoutIsNotOurs(t *testing.T) {
 // decision one hop down, into a file written once and executed forever.
 func TestInstallArgsPinTheNodeBinaryInsideTheBundle(t *testing.T) {
 	t.Setenv("AGENTHALLWAY_NODE", "")
+	t.Setenv("AGENTHUB_NODE", "")
 	macOS := filepath.Join(t.TempDir(), "agenthallway-desktop.app", "Contents", "MacOS")
 	dir := executable(t, filepath.Join(macOS, "desktop"))
 	bundled := filepath.Join(macOS, "agenthallway-node")
@@ -277,7 +281,7 @@ func TestInstallArgsPinTheNodeBinaryInsideTheBundle(t *testing.T) {
 
 	previous := findNode
 	t.Cleanup(func() { findNode = previous })
-	findNode = func() (string, error) { return locateBinaryNear(dir, "agenthallway-node", "AGENTHALLWAY_NODE") }
+	findNode = func() (string, error) { return locateBinaryNear(dir, "agenthallway-node", "NODE") }
 
 	args, err := installArgs(ServiceForm{})
 	if err != nil {
@@ -312,6 +316,7 @@ func TestInstallArgsPinTheNodeBinaryInsideTheBundle(t *testing.T) {
 // Depth is not shape: it has to be desktop/build/bin.
 func TestLocateBinaryRefusesACheckoutPlantedBesideAnInstalledApp(t *testing.T) {
 	t.Setenv("AGENTHALLWAY_AH", "")
+	t.Setenv("AGENTHUB_AH", "")
 	shared := t.TempDir()
 	macOS := filepath.Join(shared, "agenthallway-desktop.app", "Contents", "MacOS")
 	dir := executable(t, filepath.Join(macOS, "desktop"))
@@ -322,7 +327,7 @@ func TestLocateBinaryRefusesACheckoutPlantedBesideAnInstalledApp(t *testing.T) {
 	planted := filepath.Join(shared, "bin", "ah")
 	executable(t, planted)
 
-	found, err := locateBinaryNear(dir, "ah", "AGENTHALLWAY_AH")
+	found, err := locateBinaryNear(dir, "ah", "AH")
 	if err == nil {
 		t.Fatalf("the app would run %q, which anyone with write access to %q could have put there", found, shared)
 	}
@@ -336,12 +341,13 @@ func TestLocateBinaryRefusesACheckoutPlantedBesideAnInstalledApp(t *testing.T) {
 // left the suite green.
 func TestLocateBinaryFindsWhatWasBundledInResources(t *testing.T) {
 	t.Setenv("AGENTHALLWAY_AH", "")
+	t.Setenv("AGENTHUB_AH", "")
 	app := filepath.Join(t.TempDir(), "agenthallway-desktop.app")
 	dir := executable(t, filepath.Join(app, "Contents", "MacOS", "desktop"))
 	bundled := filepath.Join(app, "Contents", "Resources", "ah")
 	executable(t, bundled)
 
-	found, err := locateBinaryNear(dir, "ah", "AGENTHALLWAY_AH")
+	found, err := locateBinaryNear(dir, "ah", "AH")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +380,7 @@ func TestLocateBinaryRefusesAnOverrideThatIsNotAnExecutableFile(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("AGENTHALLWAY_AH", given)
-			found, err := locateBinaryNear(dir, "ah", "AGENTHALLWAY_AH")
+			found, err := locateBinaryNear(dir, "ah", "AH")
 			if err != nil {
 				t.Fatal(err)
 			}
