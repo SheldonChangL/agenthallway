@@ -345,6 +345,7 @@ func windowsManager(t *testing.T, runner *fakeRunner) Manager {
 	// built from; set here so the test's answers do not depend on this
 	// machine's environment.
 	t.Setenv("LOCALAPPDATA", filepath.Join(t.TempDir(), "Local"))
+	t.Setenv("APPDATA", filepath.Join(t.TempDir(), "Roaming"))
 	return Manager{GOOS: "windows", Home: t.TempDir(), UID: "0", UserName: `DESK\me`, Runner: runner, Sleep: noSleep}
 }
 
@@ -510,7 +511,9 @@ func TestWindowsRestartStopsTheNodeNotTheLauncher(t *testing.T) {
 	if _, err := manager.Restart(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"taskkill /F /IM agenthallway-node.exe", "schtasks /Run /TN " + TaskName}
+	// Both images: an upgraded machine may still run the pre-rename one, on
+	// the same port (TestWindowsRestartAndUninstallStopBothNodeImages).
+	want := []string{"taskkill /F /IM agenthallway-node.exe", "taskkill /F /IM agenthub-node.exe", "schtasks /Run /TN " + TaskName}
 	if strings.Join(runner.calls, " | ") != strings.Join(want, " | ") {
 		t.Errorf("calls = %v, want %v", runner.calls, want)
 	}
@@ -715,7 +718,7 @@ func TestWaitUntilUnloadedDoesNotTrustAnUnrelatedPrintFailure(t *testing.T) {
 		"launchctl print gui/501/" + Label: {out: "Bootstrap failed: 125: Domain does not support specified action", err: errors.New("exit status 125")},
 	}}
 	manager := Manager{GOOS: "darwin", Home: t.TempDir(), UID: "501", Runner: runner, Sleep: noSleep}
-	manager.waitUntilUnloaded(context.Background(), "gui/501")
+	manager.waitUntilUnloaded(context.Background(), "gui/501", Label)
 	if len(runner.calls) != 20 {
 		t.Errorf("wait ended after %d probes; an unrelated failure should not count as unloaded", len(runner.calls))
 	}

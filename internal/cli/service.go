@@ -391,6 +391,16 @@ func (r runner) serviceStatus(ctx context.Context, manager service.Manager) erro
 	} else {
 		state := "not installed"
 		switch {
+		case status.Legacy:
+			// Only the pre-rename registration, which starts the old node.
+			// Said as what it is and what replaces it, not as "installed":
+			// restart refuses it, and the node will not move its identity
+			// while it is there.
+			state = "registered under the pre-rename name " + manager.LegacyName()
+			if status.Program != "" {
+				state += " (runs " + status.Program + ")"
+			}
+			state += ` — "ah service install" replaces it and keeps its database`
 		case status.Installed && status.Running:
 			state = fmt.Sprintf("installed and running (pid %d)", status.PID)
 		case status.Installed:
@@ -402,6 +412,10 @@ func (r runner) serviceStatus(ctx context.Context, manager service.Manager) erro
 		fmt.Fprintln(r.stdout, "unit:", status.UnitPath)
 		if status.LogHint != "" {
 			fmt.Fprintln(r.stdout, "log:", status.LogHint)
+		}
+		if status.LegacyAlsoInstalled {
+			fmt.Fprintln(r.stdout, "note: the pre-rename service "+manager.LegacyName()+
+				` is still registered beside this one and starts the old node; "ah service install" removes it`)
 		}
 	}
 	if answer != "" {
