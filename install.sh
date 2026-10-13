@@ -1847,13 +1847,17 @@ retire_legacy_install() {
 		"${LEGACY_APP_PATH:+$LEGACY_APP_PATH/Contents/MacOS/$LEGACY_NODE_NAME}" \
 		"${LEGACY_OTHER_APP_PATH:+$LEGACY_OTHER_APP_PATH/Contents/MacOS/$LEGACY_NODE_NAME}" \
 		"$LEGACY_TREE/$LEGACY_NODE_NAME" "$LEGACY_TREE/$LEGACY_APP_NAME"
+	retire_skipped="$REMOVE_SKIPPED"
 	legacy_inventory remove
 	if [ "$DRY_RUN" -eq 1 ]; then
 		say "the commands above remove the pre-rename $LEGACY_PRODUCT install: $LEGACY_FOUND"
+		LEGACY_STATE="removed: $LEGACY_FOUND"
+	elif [ "$REMOVE_SKIPPED" != "$retire_skipped" ]; then
+		LEGACY_STATE="partly removed; delete what is left yourself:${REMOVE_SKIPPED#"$retire_skipped"}"
 	else
 		say "removed the pre-rename $LEGACY_PRODUCT install: $LEGACY_FOUND"
+		LEGACY_STATE="removed: $LEGACY_FOUND"
 	fi
-	LEGACY_STATE="removed: $LEGACY_FOUND"
 }
 
 # legacy_era_guard stops a pre-rename release from being installed over a

@@ -2490,6 +2490,38 @@ if assert_confined i6-dry "$work/i6-dry.txt"; then
 	lacks i6 "$work/i6-shims.log" "ditto shim: refusing"
 fi
 
+echo "== I6b a pre-rename app this account cannot remove is named, not claimed =="
+# The pre-rename app went to /Applications while this account was an admin;
+# it no longer is, so the upgrade installs into ~/Applications and cannot
+# delete the old bundle. Not root: root writes anyway.
+if [ "$(id -u)" -ne 0 ]; then
+	i6b_home="$work/i6b-home"
+	i6b_apps="$work/i6b-Applications"
+	mac_bundle "$i6b_apps/agenthub-desktop.app" "$work/i6b-old-ah.log"
+	mkdir -p "$i6b_home"
+	chmod 555 "$i6b_apps"
+	i6b_run() { # i6b_run <output file> [args...]
+		local out=$1
+		shift
+		PATH="$(fake_uname Darwin arm64):$bare_path" SHELL=/bin/zsh CLAUDE_CONFIG_DIR="$i6b_home/.claude" \
+			SB_APPLICATIONS="$i6b_apps" SB_DMG_SOURCE="$i6_contents" FAKE_AH_LOG="$work/i6b-ah.log" \
+			sandboxed "$i6b_home" sh "$installer" --from "$i6_dmg/agenthallway-desktop_v0.2.0_darwin_universal.dmg" \
+			--no-service --no-open "$@" >"$out" 2>&1
+	}
+	checks=$((checks + 1))
+	i6b_run "$work/i6b-dry.txt" --dry-run || fail "i6b-dry: failed: $(cat "$work/i6b-dry.txt")"
+	if assert_confined i6b-dry "$work/i6b-dry.txt"; then
+		checks=$((checks + 1))
+		i6b_run "$work/i6b.txt" || fail "i6b: the upgrade failed: $(cat "$work/i6b.txt")"
+		contains i6b "$work/i6b.txt" "could not remove $i6b_apps/agenthub-desktop.app"
+		contains i6b "$work/i6b.txt" "pre-rename install: partly removed; delete what is left yourself: $i6b_apps/agenthub-desktop.app"
+		lacks i6b "$work/i6b.txt" "removed the pre-rename AgentHub install"
+		checks=$((checks + 1))
+		[ -x "$i6b_home/Applications/agenthallway-desktop.app/Contents/MacOS/ah" ] || fail "i6b: the new app is not in ~/Applications"
+	fi
+	chmod 755 "$i6b_apps"
+fi
+
 echo "== I7 an owner's own agenthub-watch is left by the upgrade =="
 for i7_kind in link copy; do
 	i7_home="$work/i7-home-$i7_kind"
