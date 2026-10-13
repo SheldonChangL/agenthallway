@@ -488,11 +488,7 @@ var legacyStartupShortcuts = []string{"Agent Hallway Node.lnk", "agenthallway-de
 // running with a pid nobody asked for — worth saying, not worth refusing an
 // install over.
 func (m Manager) removeLegacyStartupShortcuts() []string {
-	directory := filepath.Join(m.Home, "AppData", "Roaming", "Microsoft", "Windows",
-		"Start Menu", "Programs", "Startup")
-	if base := os.Getenv("APPDATA"); base != "" {
-		directory = filepath.Join(base, "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-	}
+	directory := windowsStartupDirectory(m.Home)
 	var steps []string
 	for _, name := range legacyStartupShortcuts {
 		path := filepath.Join(directory, name)
@@ -515,6 +511,15 @@ func (m Manager) removeLegacyStartupShortcuts() []string {
 			" (the task above replaces it; both would start a node)")
 	}
 	return steps
+}
+
+// windowsStartupDirectory is the owner's Startup folder: APPDATA when the
+// environment has it, as in every real Windows session, else derived from home.
+func windowsStartupDirectory(home string) string {
+	if base := os.Getenv("APPDATA"); base != "" {
+		return filepath.Join(base, "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+	}
+	return filepath.Join(home, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
 }
 
 // taskAbsent recognises Task Scheduler saying there was no such task. Its
