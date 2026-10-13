@@ -90,6 +90,71 @@ Function .onInit
    !insertmacro wails.checkArchitecture
 FunctionEnd
 
+# Agent Hallway was called AgentHub up to v0.1.11, and that installer is still
+# on owners' machines under its own name: wails.json's "name" was
+# agenthub-desktop, so its uninstall key was <company><product> =
+# agenthub-desktopagenthub-desktop, its executables agenthub-desktop.exe and
+# agenthub-node.exe, and its skill agenthub-watch with its own marker. Every
+# pre-rename name is a LEGACY_* define, so all of it can be found, and one day
+# deleted, in one place.
+!define LEGACY_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\agenthub-desktopagenthub-desktop"
+!define LEGACY_NODE_EXE "agenthub-node.exe"
+!define LEGACY_DESKTOP_EXE "agenthub-desktop.exe"
+!define LEGACY_SKILL_DIR "agenthub-watch"
+!define LEGACY_SKILL_MARKER ".installed-by-agenthub"
+!define LEGACY_STARTUP_SHORTCUT "AgentHub Node.lnk"
+!define LEGACY_PRODUCT_STARTUP_SHORTCUT "agenthub-desktop Node.lnk"
+
+# LegacyRetireFrom runs the pre-rename uninstaller registered under one
+# registry root, silently, and waits for it.
+#
+# _?= runs it in place instead of from a temporary copy, which is what makes
+# ExecWait wait for the uninstall rather than for a launcher that returns at
+# once; the price is that it cannot delete its own executable, so that and the
+# directories it leaves empty are removed here — with Delete and a plain RMDir,
+# which removes a directory only when it is empty. Never RMDir /r: whatever is
+# left in there is not this installer's to know about.
+#
+# That uninstaller (v0.1.11's project.nsi) unregisters its scheduled task
+# through its own ah, stops its node and window, removes its shortcuts and,
+# only if it carries its marker, its skill. It never touches
+# %APPDATA%\agenthub, where the node's identity is: the new node moves its own
+# files out of there on its first start.
+!macro LegacyRetireFrom ROOT
+    ReadRegStr $0 ${ROOT} "${LEGACY_UNINST_KEY}" "UninstallString"
+    ${If} $0 != ""
+        StrCpy $1 $0 1
+        ${If} $1 == "$\""
+            StrCpy $1 $0 "" 1
+            StrCpy $1 $1 -1
+        ${Else}
+            StrCpy $1 $0
+        ${EndIf}
+        ${GetParent} $1 $2
+        ${If} ${FileExists} $1
+            DetailPrint "Removing the pre-rename AgentHub install in $2"
+            ExecWait '"$1" /S _?=$2' $3
+            DetailPrint "The pre-rename AgentHub uninstaller exited with $3"
+            Delete "$1"
+            RMDir "$2"
+            ${GetParent} $2 $4
+            RMDir "$4"
+        ${EndIf}
+    ${EndIf}
+!macroend
+
+# RetirePreRenameInstall removes the AgentHub install this one replaces. The
+# new product name is a new install directory and a new uninstall key, so
+# without it the old program files, shortcuts and Add/Remove entry would stay
+# beside the new ones, and the old Startup shortcut would keep starting the
+# old node at logon. Both roots, because the old installer could be per-machine
+# or per-user.
+Function RetirePreRenameInstall
+    SetRegView 64
+    !insertmacro LegacyRetireFrom HKLM
+    !insertmacro LegacyRetireFrom HKCU
+FunctionEnd
+
 Section "Agent Hallway" SecCore
     SectionIn RO
     !insertmacro wails.setShellContext
@@ -100,12 +165,20 @@ Section "Agent Hallway" SecCore
     # to overwrite a running executable — so on a reinstall or an upgrade the
     # copy below fails unless the old one is stopped first. /F because the node
     # has no window to close politely; it keeps no unflushed state of its own.
-    # Both are expected to fail on a first install, where there is nothing to
-    # stop, which is why neither result is checked.
+    # All are expected to fail on a first install, where there is nothing to
+    # stop, which is why no result is checked. The pre-rename names too: an
+    # AgentHub node still running would hold the identity the new node is
+    # about to move out of its directory.
     nsExec::Exec 'taskkill /F /IM agenthallway-node.exe'
     Pop $0
     nsExec::Exec 'taskkill /F /IM agenthallway-desktop.exe'
     Pop $0
+    nsExec::Exec 'taskkill /F /IM ${LEGACY_NODE_EXE}'
+    Pop $0
+    nsExec::Exec 'taskkill /F /IM ${LEGACY_DESKTOP_EXE}'
+    Pop $0
+
+    Call RetirePreRenameInstall
 
     SetOutPath $INSTDIR
 
@@ -218,6 +291,10 @@ Section "uninstall"
     Pop $0
     nsExec::Exec 'taskkill /F /IM agenthallway-desktop.exe'
     Pop $0
+    nsExec::Exec 'taskkill /F /IM ${LEGACY_NODE_EXE}'
+    Pop $0
+    nsExec::Exec 'taskkill /F /IM ${LEGACY_DESKTOP_EXE}'
+    Pop $0
 
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
 
@@ -232,14 +309,22 @@ Section "uninstall"
     # to tidy up after ours.
     IfFileExists "$PROFILE\.claude\skills\agenthallway-watch\.installed-by-agenthallway" 0 +2
         RMDir /r "$PROFILE\.claude\skills\agenthallway-watch"
+    # The pre-rename installer's copy carries its own marker; a copy without
+    # it is the user's, whichever name it has.
+    IfFileExists "$PROFILE\.claude\skills\${LEGACY_SKILL_DIR}\${LEGACY_SKILL_MARKER}" 0 +2
+        RMDir /r "$PROFILE\.claude\skills\${LEGACY_SKILL_DIR}"
 
     # Either this installer's fallback wrote it, or an installer from before
-    # the Task Scheduler registration existed did. `ah service install` removes
-    # it too; both deleting it is idempotent, and neither of them running is
-    # what leaves two nodes starting at logon.
+    # the Task Scheduler registration existed did — under this name or under
+    # the pre-rename ones (that installer's own fallback, and the one before
+    # it). `ah service install` removes them too; both deleting them is
+    # idempotent, and neither of them running is what leaves two nodes
+    # starting at logon.
     SetShellVarContext current
     Delete "$SMSTARTUP\${INFO_PRODUCTNAME} Node.lnk"
     Delete "$SMSTARTUP\Agent Hallway Node.lnk"
+    Delete "$SMSTARTUP\${LEGACY_STARTUP_SHORTCUT}"
+    Delete "$SMSTARTUP\${LEGACY_PRODUCT_STARTUP_SHORTCUT}"
     !insertmacro wails.setShellContext
 
     !insertmacro wails.unassociateFiles
