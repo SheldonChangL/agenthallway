@@ -70,6 +70,34 @@ type ServiceStatus struct {
 	// healthy shape: the node remembers its own configuration and the unit says
 	// only where the database is.
 	PinnedSettings []string `json:"pinnedSettings,omitempty"`
+
+	// Legacy is true when the registration described is the pre-rename one
+	// (local.agenthub.node, agenthub-node, "AgentHub Node") and there is no
+	// current one: UnitPath, DBPath and the running state are the old
+	// registration's, which starts the old node. Re-registering — `ah service
+	// install` with the same database — replaces it.
+	Legacy bool `json:"legacy"`
+	// LegacyAlsoInstalled is true when the current registration is described
+	// and the pre-rename one is still on disk beside it.
+	LegacyAlsoInstalled bool `json:"legacyAlsoInstalled"`
+}
+
+// legacyServiceNames are internal/service's LegacyLabel, LegacyUnitName and
+// LegacyTaskName: what each platform's service manager calls the pre-rename
+// registration. Copied, because this module cannot import that one;
+// TestLegacyServiceNamesMatchTheServicePackage reads the original.
+var legacyServiceNames = map[string]string{
+	"darwin":  "local.agenthub.node",
+	"linux":   "agenthub-node",
+	"windows": "AgentHub Node",
+}
+
+// legacyRegistrationError is what a restart says on a machine whose only
+// registration is the pre-rename one: the words internal/service's Restart
+// uses for the same refusal.
+func legacyRegistrationError(goos string) error {
+	return fmt.Errorf("the background service is registered under the pre-rename name %s; "+
+		"`ah service install` replaces it and keeps its database (pass --db if it had one)", legacyServiceNames[goos])
 }
 
 // ServiceResult is what an install or uninstall said.
@@ -320,6 +348,10 @@ func (a *App) ServiceStatus() ServiceStatus {
 			LogHint   string
 			Program   string
 			Arguments []string
+			// Absent from an ah built before the rename, which is read as
+			// false: that ah knows only one registration.
+			Legacy              bool
+			LegacyAlsoInstalled bool
 		} `json:"service"`
 		NodeAnswering bool   `json:"nodeAnswering"`
 		Node          string `json:"node"`
@@ -331,6 +363,7 @@ func (a *App) ServiceStatus() ServiceStatus {
 		Tool: tool, Supported: decoded.Service.Supported, Installed: decoded.Service.Installed,
 		Running: decoded.Service.Running, PID: decoded.Service.PID, UnitPath: decoded.Service.UnitPath,
 		LogHint: decoded.Service.LogHint, NodeAnswering: decoded.NodeAnswering, Node: decoded.Node,
+		Legacy: decoded.Service.Legacy, LegacyAlsoInstalled: decoded.Service.LegacyAlsoInstalled,
 	}
 	if decoded.Service.Installed && decoded.Service.Program != "" {
 		// Known because the unit was read, whatever it turned out to say. A

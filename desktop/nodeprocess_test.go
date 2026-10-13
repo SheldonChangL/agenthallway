@@ -41,6 +41,9 @@ type fakeRestart struct {
 	// appDB is the database appPaths names — this app's environment's
 	// default — made to exist unless a test sets it.
 	appDB string
+	// appLegacyDB is the pre-rename default appLegacyDatabase names for this
+	// app's environment: beside appDB's directory unless a test sets it.
+	appLegacyDB string
 
 	nodeEnv   []string
 	nodePaths nodePaths
@@ -48,13 +51,24 @@ type fakeRestart struct {
 
 var sameNode = NodeIdentity{ID: "node_same", Fingerprint: "AAAA BBBB CCCC DDDD EEEE FFFF"}
 
+// No test stops a real process. The machine running them may have a node of
+// its own — a developer's Mac runs one, under the pre-rename name too — and
+// the real stop would end it. A test that needs a stop installs a fake
+// (fakeRestart.install); one that reaches the real one has a bug, and fails
+// here without stopping anything.
+func init() {
+	stopNode = func(context.Context) (string, error) {
+		panic("a test reached the real stopNode")
+	}
+}
+
 func (f *fakeRestart) install(t *testing.T) {
 	t.Helper()
 	stopWas, startWas, probeWas := stopNode, startNode, probeNode
-	listWas, identityWas, pathsWas := listNodes, readNodeIdentity, appPaths
+	listWas, identityWas, pathsWas, legacyWas := listNodes, readNodeIdentity, appPaths, appLegacyDatabase
 	t.Cleanup(func() {
 		stopNode, startNode, probeNode = stopWas, startWas, probeWas
-		listNodes, readNodeIdentity, appPaths = listWas, identityWas, pathsWas
+		listNodes, readNodeIdentity, appPaths, appLegacyDatabase = listWas, identityWas, pathsWas, legacyWas
 	})
 	if f.identities == nil {
 		f.identities = []NodeIdentity{sameNode}
@@ -72,6 +86,10 @@ func (f *fakeRestart) install(t *testing.T) {
 	appPaths = func() (nodePaths, error) {
 		return nodePaths{database: f.appDB, claude: filepath.Join(appHome, ".claude"), codex: filepath.Join(appHome, ".codex")}, nil
 	}
+	if f.appLegacyDB == "" {
+		f.appLegacyDB = filepath.Join(filepath.Dir(appHome), "agenthub", "agenthub.db")
+	}
+	appLegacyDatabase = func() (string, error) { return f.appLegacyDB, nil }
 	stopNode = func(context.Context) (string, error) {
 		f.steps = append(f.steps, "stop")
 		f.stopped = true
@@ -455,8 +473,13 @@ func TestRestartNodeRefusesBeforeStoppingWhatItCannotStartAgain(t *testing.T) {
 		want     string
 	}{
 		{name: "command line unreadable", listErr: errors.New("operation not permitted"), want: "operation not permitted"},
-		{name: "two nodes", want: "2 agenthallway-node processes", running: func(*testing.T) []nodeProcess {
+		{name: "two nodes", want: "2 node processes", running: func(*testing.T) []nodeProcess {
 			return []nodeProcess{{PID: 1, Argv: []string{"agenthallway-node"}}, {PID: 2, Argv: []string{"agenthallway-node"}}}
+		}},
+		// Two of any kind: a pre-rename node beside a current one is the same
+		// two nodes, and a restart would stop both to bring back one.
+		{name: "a node and a pre-rename node", want: "2 node processes", running: func(*testing.T) []nodeProcess {
+			return []nodeProcess{{PID: 1, Argv: []string{"agenthallway-node"}}, {PID: 2, Argv: []string{"agenthub-node"}, Legacy: true}}
 		}},
 		{name: "relative database", want: "relative path", running: func(*testing.T) []nodeProcess {
 			return []nodeProcess{{PID: 3, Argv: []string{"agenthallway-node", "--db", "data/agenthallway.db"}}}

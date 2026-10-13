@@ -4,26 +4,64 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 )
 
 // nodeExecutable is what the running node is called in a process list.
-const nodeExecutable = "agenthallway-node"
+const nodeExecutable = productNodeBinary
 
-// stopNodeProcesses ends every agenthallway-node on this machine.
+// legacyNodeExecutable is what the pre-rename node is called there.
+const legacyNodeExecutable = productLegacyNodeBinary
+
+// stopNodeProcesses ends every node on this machine: each agenthallway-node
+// and pre-rename agenthub-node listNodeProcesses finds, by its pid.
 //
-// -x so the name has to match exactly: a pattern match would also catch
-// agenthallway-node-something, and on a developer's machine the `go run` of one.
+// By pid from this app's own listing, not `pkill -x` by name: the kernel keeps
+// 15 or 16 bytes of a process's name (truncatedName), so `pkill -x
+// agenthallway-node` matches nothing on Linux, and a pattern short enough to
+// match would match someone else's agenthallway-no... as well. The listing
+// confirms each process by its full executable name first.
+//
 // This path is only reached when no service manager holds the node — a
 // registered launchd job or systemd unit is restarted through ah instead, so
 // nothing here races a KeepAlive that would start the node behind this.
 func stopNodeProcesses(ctx context.Context) (string, error) {
-	return runCommand(ctx, "pkill", "-x", nodeExecutable)
+	processes, err := listNodesSettled(ctx)
+	if err != nil {
+		return "", fmt.Errorf("list the nodes to stop: %w", err)
+	}
+	var lines []string
+	var failures []error
+	for _, process := range processes {
+		// 0, -1 and the init process are not processes to signal: kill(2)
+		// reads 0 and -1 as "every process in the group" and "every process
+		// this user may signal". A listing never names them; this makes sure.
+		if process.PID <= 1 {
+			failures = append(failures, fmt.Errorf("%s was listed with pid %d, which is not one to signal", process.name(), process.PID))
+			continue
+		}
+		if err := signalProcess(process.PID, syscall.SIGTERM); err != nil {
+			lines = append(lines, fmt.Sprintf("could not stop %s (pid %d): %v", process.name(), process.PID, err))
+			failures = append(failures, err)
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("asked %s (pid %d) to stop", process.name(), process.PID))
+	}
+	return strings.Join(lines, "\n"), errors.Join(failures...)
+}
+
+// signalProcess sends sig to pid. A variable so that the tests can see what
+// would be signalled without signalling anything: the machine running them
+// may have a node of its own, and it is not theirs to stop.
+var signalProcess = func(pid int, sig syscall.Signal) error {
+	return syscall.Kill(pid, sig)
 }
 
 // startNodeDetached starts the node so that it outlives this window.

@@ -69,9 +69,14 @@ func TestParseProcargs2(t *testing.T) {
 				home := "/Users/me" + strings.Repeat("e", fill)
 				env := []string{"HOME=" + home, "XDG_CONFIG_HOME=/elsewhere"}
 				for _, trailing := range []bool{false, true} {
-					gotArgv, gotEnv, err := parseProcargs2(procargs2(path, argv, env, trailing))
+					gotPath, gotArgv, gotEnv, err := parseProcargs2(procargs2(path, argv, env, trailing))
 					if err != nil {
 						t.Fatalf("path %q, argv %q, env %q, trailing %v: %v", path, argv, env, trailing, err)
+					}
+					// The executable path is what the listing confirms a node by
+					// (confirmNode), whatever argv[0] says — empty included.
+					if gotPath != path {
+						t.Errorf("executable path = %q, want %q", gotPath, path)
 					}
 					if !slices.Equal(gotArgv, argv) {
 						t.Errorf("path %q: argv = %q, want %q", path, gotArgv, argv)
@@ -94,7 +99,7 @@ func TestParseProcargs2ReadsEmptyEnvironments(t *testing.T) {
 	for _, env := range [][]string{nil, {"HOME=/Users/me", "", "PATH=/usr/bin"}} {
 		want := append(slices.DeleteFunc(slices.Clone(env), func(entry string) bool { return entry == "" }), appleStrings...)
 		for _, trailing := range []bool{false, true} {
-			_, got, err := parseProcargs2(procargs2("/bin/agenthallway-node", []string{"agenthallway-node"}, env, trailing))
+			_, _, got, err := parseProcargs2(procargs2("/bin/agenthallway-node", []string{"agenthallway-node"}, env, trailing))
 			if err != nil || !slices.Equal(got, want) {
 				t.Errorf("env %q, trailing %v: read %q, %v; want %q", env, trailing, got, err, want)
 			}
@@ -107,15 +112,15 @@ func TestParseProcargs2ReadsEmptyEnvironments(t *testing.T) {
 	wiped = append(wiped, "/bin/agenthallway-node\x00\x00agenthallway-node\x00HOME=/Users/me\x00"...)
 	wiped = append(wiped, make([]byte, 61)...)
 	wiped = append(wiped, "th_port=\x00\x00\x00\x00\x00\x00security_config=0x0\x00\x00\x00\x00"...)
-	if _, env, err := parseProcargs2(wiped); err != nil || !slices.Equal(env, []string{"HOME=/Users/me", "th_port=", "security_config=0x0"}) {
+	if _, _, env, err := parseProcargs2(wiped); err != nil || !slices.Equal(env, []string{"HOME=/Users/me", "th_port=", "security_config=0x0"}) {
 		t.Errorf("wiped apple strings: env %q, err %v", env, err)
 	}
 	// A platform binary's environment is withheld: the buffer ends at the
 	// arguments.
 	raw := procargs2("/bin/agenthallway-node", []string{"agenthallway-node"}, nil, false)
 	raw = raw[:4+24+len("agenthallway-node\x00")]
-	if argv, env, err := parseProcargs2(raw); err != nil || len(argv) != 1 || len(env) != 0 {
-		t.Errorf("no environment: argv %q, env %q, err %v", argv, env, err)
+	if path, argv, env, err := parseProcargs2(raw); err != nil || path != "/bin/agenthallway-node" || len(argv) != 1 || len(env) != 0 {
+		t.Errorf("no environment: path %q, argv %q, env %q, err %v", path, argv, env, err)
 	}
 }
 
@@ -140,7 +145,7 @@ func TestParseProcargs2RefusesWhatItCannotRead(t *testing.T) {
 		"padding not zero":   {append(binary.LittleEndian.AppendUint32(nil, 1), "/bin/x\x00zz\x00"...), "no padding"},
 		"fewer arguments":    {lies(40), "ended after"},
 	} {
-		if argv, _, err := parseProcargs2(tc.raw); err == nil || !strings.Contains(err.Error(), tc.want) {
+		if _, argv, _, err := parseProcargs2(tc.raw); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: read %q, err %v; want an error saying %q", name, argv, err, tc.want)
 		}
 	}

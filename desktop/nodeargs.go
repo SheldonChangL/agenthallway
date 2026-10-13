@@ -205,11 +205,19 @@ func planNodeRestart(running nodeProcess, appPaths func() (nodePaths, error)) (n
 		}
 	}
 	var defaults nodePaths
+	// legacyDefault is the pre-rename default database in the same
+	// environment as defaults: where an agenthub-node started without --db
+	// has its database open.
+	legacyDefault := ""
 	if len(missing) > 0 {
 		from := "its own environment"
 		switch {
 		case running.EnvErr == nil:
-			defaults, err = nodeDefaultPaths(runtime.GOOS, environmentLookup(runtime.GOOS, running.Env))
+			lookup := environmentLookup(runtime.GOOS, running.Env)
+			defaults, err = nodeDefaultPaths(runtime.GOOS, lookup)
+			if err == nil {
+				legacyDefault, err = legacyDatabase(runtime.GOOS, lookup)
+			}
 			if err != nil {
 				return nodeRestartPlan{}, fmt.Errorf(
 					"it was started without -%s, and its own environment does not say where that is: %w",
@@ -217,6 +225,9 @@ func planNodeRestart(running nodeProcess, appPaths func() (nodePaths, error)) (n
 			}
 		case nodeEnvironmentFallback && running.UserErr == nil:
 			defaults, err = appPaths()
+			if err == nil {
+				legacyDefault, err = appLegacyDatabase()
+			}
 			if err != nil {
 				return nodeRestartPlan{}, fmt.Errorf(
 					"it was started without -%s, its environment could not be read (%v), and this app could not "+
@@ -242,12 +253,24 @@ func planNodeRestart(running nodeProcess, appPaths func() (nodePaths, error)) (n
 		}
 		if _, ok := given["db"]; !ok {
 			plan.dbFrom = from
+			if running.Legacy {
+				plan.dbFrom += ", where the pre-rename agenthub-node keeps it"
+			}
 		}
 	}
 
 	var added []string
 	for _, pathFlag := range missing {
 		path := defaults.pathFor(pathFlag)
+		// A pre-rename node started without --db has the pre-rename default
+		// open, and that is the database the node started in its place has to
+		// be given: the current default is an empty one beside it, which is a
+		// new identity. Given that path, the node moves it to its own default
+		// on its first start (internal/datadir) when it is the default of the
+		// node's own environment too, and opens it where it is otherwise.
+		if pathFlag == "db" && running.Legacy {
+			path = legacyDefault
+		}
 		if !filepath.IsAbs(path) {
 			return nodeRestartPlan{}, fmt.Errorf(
 				"its default -%s works out to %q, a relative path, which names a different place from another directory",
@@ -258,6 +281,9 @@ func planNodeRestart(running nodeProcess, appPaths func() (nodePaths, error)) (n
 	plan.db = given["db"]
 	if plan.db == "" {
 		plan.db = defaults.database
+		if running.Legacy {
+			plan.db = legacyDefault
+		}
 	}
 	plan.args = append(append(append(plan.args, kept...), added...), rest...)
 	if len(plan.inferred) > 0 {
@@ -270,13 +296,78 @@ func planNodeRestart(running nodeProcess, appPaths func() (nodePaths, error)) (n
 	// that names nothing means the command line or the environment was
 	// misread, and either way the node started from here would open a
 	// different one.
-	info, err := os.Stat(plan.db)
-	if err != nil || !info.Mode().IsRegular() {
-		return nodeRestartPlan{}, fmt.Errorf(
-			"its database %s (from %s) is not there, so this app cannot tell it would come back on the same one",
-			plan.db, plan.dbFrom)
+	//
+	// Except in one case, which is not a misreading: a node given the
+	// pre-rename default (its --db, carried from a unit or a command line
+	// written before the rename) moved that database to its own default when
+	// it started, and runs on it there. The arguments are passed on as they
+	// are (nothing outside the node rewrites a --db), so the node started from
+	// here does the same — provided that, in the environment it inherits,
+	// this app's, the path is still the pre-rename default; otherwise it would
+	// open the path as given and find nothing there.
+	if !regularFile(plan.db) {
+		moved, err := movedByTheNode(running, plan.db)
+		if err != nil {
+			return nodeRestartPlan{}, err
+		}
+		if moved == "" {
+			return nodeRestartPlan{}, fmt.Errorf(
+				"its database %s (from %s) is not there, so this app cannot tell it would come back on the same one",
+				plan.db, plan.dbFrom)
+		}
+		plan.db = moved
+		plan.dbFrom += " (moved there by the node from the pre-rename location)"
 	}
 	return plan, nil
+}
+
+// movedByTheNode is where the node moved db to, when db is the pre-rename
+// default database of the running node's environment (or of this app's,
+// standing in for it as planNodeRestart allows) and the current default is
+// there: the node translates that path to its own default and moves the
+// database there on start (internal/datadir Resolve and Migrate). Empty when
+// that is not the case, which leaves the missing database the refusal it
+// always was. An error when it is the case and the node started from here,
+// with this app's environment, would not translate the path.
+func movedByTheNode(running nodeProcess, db string) (string, error) {
+	var current nodePaths
+	var legacy string
+	var err error
+	switch {
+	case running.EnvErr == nil:
+		lookup := environmentLookup(runtime.GOOS, running.Env)
+		current, err = nodeDefaultPaths(runtime.GOOS, lookup)
+		if err == nil {
+			legacy, err = legacyDatabase(runtime.GOOS, lookup)
+		}
+	case nodeEnvironmentFallback && running.UserErr == nil:
+		current, err = appPaths()
+		if err == nil {
+			legacy, err = appLegacyDatabase()
+		}
+	default:
+		return "", nil
+	}
+	if err != nil || filepath.Clean(db) != filepath.Clean(legacy) || !regularFile(current.database) {
+		return "", nil
+	}
+	mine, err := appLegacyDatabase()
+	if err != nil {
+		mine = "not known (" + err.Error() + ")"
+	}
+	if filepath.Clean(mine) != filepath.Clean(db) {
+		return "", fmt.Errorf(
+			"its --db %s is the pre-rename default location, which the node moved to %s; the node this app "+
+				"starts would not move it, because in this app's environment the pre-rename default is %s, and "+
+				"would open %s as a new, empty database: start it with --db %s instead", db, current.database, mine, db, current.database)
+	}
+	return current.database, nil
+}
+
+// regularFile is whether path names a regular file.
+func regularFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
 }
 
 // defaultNodeListen is the -listen address of the node this app talks to:

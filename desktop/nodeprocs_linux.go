@@ -15,12 +15,20 @@ import (
 	"syscall"
 )
 
-// listNodeProcesses finds every agenthallway-node running as this user, the
-// arguments each was started with, and the environment it runs with.
+// kernelNameLength is how much of an executable's name Linux keeps as the
+// process's comm: TASK_COMM_LEN (16) less its NUL.
+const kernelNameLength = 15
+
+// listNodeProcesses finds every node running as this user — agenthallway-node,
+// and the pre-rename agenthub-node — the arguments each was started with, and
+// the environment it runs with.
 //
-// The same processes stopNodeProcesses' `pkill -x agenthallway-node` ends: pkill
-// matches /proc/<pid>/comm exactly. Only this user's, because those are the
-// only ones pkill run from this app can end. /proc/<pid>/cmdline and
+// /proc/<pid>/comm is where it starts, and only where it starts: comm keeps 15
+// bytes, and agenthallway-node is 17, so what matches it is any process whose
+// name begins agenthallway-no. Each one that does is confirmed by its argv[0],
+// whose last element has to be the whole name (confirmNode); one that is not a
+// node is left out. Only this user's, because those are the only ones this app
+// can stop. /proc/<pid>/cmdline and
 // /proc/<pid>/environ keep each entry whole, separated by NULs; both are
 // readable for a process of the same user. A zombie is not listed: it has
 // exited, holds nothing open, and has an empty command line — and a node this
@@ -41,9 +49,10 @@ func listNodeProcesses(context.Context) ([]nodeProcess, error) {
 // ESRCH. listNodesSettled asks again on that kind of error
 // (transientListError), as it does on macOS's EINVAL for the same process;
 // waitForProcessGone asks again whatever a listing fails with. Only once the
-// entry is known to be an agenthallway-node: before its comm is read it is any
-// process of this user's, and on a busy machine one of those is always on its
-// way out.
+// entry's comm is a node's: before that it is any process of this user's, and
+// on a busy machine one of those is always on its way out. (A process whose
+// comm is only a node's truncation, caught exiting before its argv[0] could
+// confirm it, is asked about again too: until then it may be a node.)
 //
 // Nor is a node caught exiting read as a shorter one. os.ReadFile reads a
 // /proc file in more than one read — the first is 512 bytes, and an
@@ -90,8 +99,9 @@ func listNodeProcessesIn(root string, readFile func(string) ([]byte, error)) ([]
 		if stat, ok := info.Sys().(*syscall.Stat_t); !ok || stat.Uid != uid {
 			continue
 		}
-		comm, err := readFile(filepath.Join(dir, "comm"))
-		if err != nil || strings.TrimSuffix(string(comm), "\n") != nodeExecutable {
+		raw, err := readFile(filepath.Join(dir, "comm"))
+		comm := strings.TrimSuffix(string(raw), "\n")
+		if err != nil || !nodeKernelName(comm, kernelNameLength) {
 			continue
 		}
 		state, err := processState(dir, readFile)
@@ -101,19 +111,24 @@ func listNodeProcessesIn(root string, readFile func(string) ([]byte, error)) ([]
 		if state == 'Z' || state == 'X' {
 			continue
 		}
-		raw, err := readFile(filepath.Join(dir, "cmdline"))
+		raw, err = readFile(filepath.Join(dir, "cmdline"))
 		if vanished(err) {
 			return nil, nodeExiting(pid, "its command line", err)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("read the command line of agenthallway-node (pid %d): %w", pid, err)
+			return nil, fmt.Errorf("read the command line of %s (pid %d): %w", comm, pid, err)
 		}
 		if len(raw) == 0 {
 			// A process that is exiting has an empty cmdline; one that is
 			// running has at least its own name.
 			return nil, nodeExiting(pid, "its command line", nil)
 		}
-		process := nodeProcess{PID: pid, Argv: nulSeparated(raw)}
+		argv := nulSeparated(raw)
+		legacy, ok := confirmNode(argv[0])
+		if !ok {
+			continue // someone else's program, whose name starts the same way
+		}
+		process := nodeProcess{PID: pid, Argv: argv, Legacy: legacy}
 		environ, envErr := readFile(filepath.Join(dir, "environ"))
 		if vanished(envErr) {
 			return nil, nodeExiting(pid, "its environment", envErr)
@@ -126,11 +141,11 @@ func listNodeProcessesIn(root string, readFile func(string) ([]byte, error)) ([]
 			return nil, nodeExiting(pid, "its command line again", err)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("read the command line of agenthallway-node (pid %d) again: %w", pid, err)
+			return nil, fmt.Errorf("read the command line of %s (pid %d) again: %w", process.name(), pid, err)
 		}
 		if !bytes.Equal(again, raw) { // raw is not empty, so neither is an again equal to it
-			return nil, fmt.Errorf("agenthallway-node (pid %d) is on its way out: its command line, read again, is empty or not what it was: %w",
-				pid, syscall.ESRCH)
+			return nil, fmt.Errorf("%s (pid %d) is on its way out: its command line, read again, is empty or not what it was: %w",
+				process.name(), pid, syscall.ESRCH)
 		}
 		switch {
 		case envErr != nil:
@@ -152,15 +167,15 @@ func vanished(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
 }
 
-// nodeExiting is the error for an agenthallway-node caught on its way out while
-// its `what` was read (listNodeProcessesIn). It wraps ESRCH whatever the read
-// answered, so that it is asked again rather than refused at once.
+// nodeExiting is the error for a node caught on its way out while its `what`
+// was read (listNodeProcessesIn). It wraps ESRCH whatever the read answered,
+// so that it is asked again rather than refused at once.
 func nodeExiting(pid int, what string, cause error) error {
 	if cause != nil {
-		return fmt.Errorf("agenthallway-node (pid %d) is on its way out: reading %s failed (%v): %w",
+		return fmt.Errorf("a node (pid %d) is on its way out: reading %s failed (%v): %w",
 			pid, what, cause, syscall.ESRCH)
 	}
-	return fmt.Errorf("agenthallway-node (pid %d) is on its way out: %s reads empty: %w", pid, what, syscall.ESRCH)
+	return fmt.Errorf("a node (pid %d) is on its way out: %s reads empty: %w", pid, what, syscall.ESRCH)
 }
 
 // nulSeparated splits the contents of a /proc file whose entries each end in

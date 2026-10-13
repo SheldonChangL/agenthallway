@@ -145,6 +145,13 @@ func appDefaultPaths() (nodePaths, error) {
 	return nodeDefaultPaths(runtime.GOOS, os.Getenv)
 }
 
+// appDefaultLegacyDatabase is legacyDatabase for this app's environment: the
+// path a node started from here takes for the pre-rename default, and so
+// moves to its own default rather than opening it as a database of its own.
+func appDefaultLegacyDatabase() (string, error) {
+	return legacyDatabase(runtime.GOOS, os.Getenv)
+}
+
 // nodeEnvironmentFallback is whether, when the running node's environment
 // cannot be read, this app's own may stand in for it. Only on Windows, and
 // only with the checks planNodeRestart makes: there the reading can fail on a

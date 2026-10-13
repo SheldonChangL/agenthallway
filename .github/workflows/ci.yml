@@ -188,6 +188,8 @@ jobs:
         run: |
           tests=(
             TestListNodeProcessesReadsARealProcess
+            TestListNodeProcessesIgnoresALookalikeName
+            TestStopNodeKillsBothImageNames
             TestProcessEnvironmentReadsAProcess
             TestParseNodeProcessList
             TestParseEnvironmentBlock
@@ -255,6 +257,7 @@ jobs:
         run: |
           tests=(
             TestListNodeProcessesReadsARealProcess
+            TestListNodeProcessesIgnoresALookalikeName
             TestParseProcargs2
             TestParseProcargs2ReadsEmptyEnvironments
             TestParseProcargs2RefusesWhatItCannotRead
