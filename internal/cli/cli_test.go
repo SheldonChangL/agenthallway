@@ -986,7 +986,7 @@ func TestOutboundWithAnIDStillAsksAboutThatMessage(t *testing.T) {
 	}
 }
 
-// `/agenthub-watch` deletes a message every tick, and until this existed the
+// `/agenthallway-watch` deletes a message every tick, and until this existed the
 // skill told the agent to run `curl -X DELETE`: the CLI could already do it,
 // under a name nobody looks for. The path is the thing to hold — a wrong one
 // deletes somebody else's message or nothing at all.

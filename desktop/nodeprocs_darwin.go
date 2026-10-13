@@ -12,10 +12,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// listNodeProcesses finds every agenthub-node running as this user, the
+// listNodeProcesses finds every agenthallway-node running as this user, the
 // arguments each was started with, and the environment it runs with.
 //
-// The same processes stopNodeProcesses' `pkill -x agenthub-node` ends: matched
+// The same processes stopNodeProcesses' `pkill -x agenthallway-node` ends: matched
 // by the kernel's process name, exactly. Only this user's, because those are
 // the only ones pkill run from this app can end. A zombie is not listed: it has
 // exited, holds nothing open, and has no arguments left to read — and a node
@@ -42,11 +42,11 @@ func listNodeProcesses(context.Context) ([]nodeProcess, error) {
 		pid := int(process.Proc.P_pid)
 		raw, err := unix.SysctlRaw("kern.procargs2", pid)
 		if err != nil {
-			return nil, fmt.Errorf("read the command line of agenthub-node (pid %d): %w", pid, err)
+			return nil, fmt.Errorf("read the command line of agenthallway-node (pid %d): %w", pid, err)
 		}
 		argv, env, err := parseProcargs2(raw)
 		if err != nil {
-			return nil, fmt.Errorf("read the command line of agenthub-node (pid %d): %w", pid, err)
+			return nil, fmt.Errorf("read the command line of agenthallway-node (pid %d): %w", pid, err)
 		}
 		found = append(found, nodeProcess{PID: pid, Argv: argv, Env: env})
 	}

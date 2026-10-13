@@ -10,7 +10,7 @@ import (
 )
 
 // The `.mcp.json` an agent needs is three facts the owner cannot see from one
-// place: where agenthub-mcp is, which session this row is, and whether this
+// place: where agenthallway-mcp is, which session this row is, and whether this
 // machine's node is somewhere other than the default. Assembled by hand it goes
 // wrong quietly — on 2026-09-10 an Ubuntu session id ended up in a config on a
 // mac, and the agent it produced spoke for a session on the other machine.
@@ -25,7 +25,7 @@ type MCPConfigResult struct {
 	// Text is the whole `.mcp.json`, ready to save as a file.
 	Text string `json:"text"`
 	// Command is the absolute path the snippet names, so the dialog can say
-	// which agenthub-mcp this config would start.
+	// which agenthallway-mcp this config would start.
 	Command string `json:"command"`
 }
 
@@ -55,19 +55,19 @@ func (a *App) CopyText(text string) error {
 	return setClipboard(a.ctx, text)
 }
 
-// MCPConfig builds the `.mcp.json` that binds one agenthub-mcp to one session.
+// MCPConfig builds the `.mcp.json` that binds one agenthallway-mcp to one session.
 func (a *App) MCPConfig(sessionID string) (MCPConfigResult, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return MCPConfigResult{}, fmt.Errorf("select a session first")
 	}
-	command, err := locateBinary("agenthub-mcp", "AGENTHUB_MCP")
+	command, err := locateBinary("agenthallway-mcp", "AGENTHALLWAY_MCP")
 	if err != nil {
 		return MCPConfigResult{}, err
 	}
 
-	// The URL is always written, the default included. `agenthub-mcp` reads
-	// AGENTHUB_URL before falling back to its own default, so leaving the flag
+	// The URL is always written, the default included. `agenthallway-mcp` reads
+	// AGENTHALLWAY_URL before falling back to its own default, so leaving the flag
 	// off does not mean "the default" — it means "whatever node the environment
 	// Claude Code inherited happens to name". The snippet has to pin the node
 	// this window is actually talking to, because that is the node holding the
@@ -76,7 +76,7 @@ func (a *App) MCPConfig(sessionID string) (MCPConfigResult, error) {
 	args := []string{"-as", sessionID, "-url", nodeURL}
 
 	encoded, err := json.MarshalIndent(mcpConfigFile{
-		Servers: map[string]mcpServer{"agenthub": {Command: command, Args: args}},
+		Servers: map[string]mcpServer{"agenthallway": {Command: command, Args: args}},
 	}, "", "  ")
 	if err != nil {
 		return MCPConfigResult{}, fmt.Errorf("build the MCP config: %w", err)

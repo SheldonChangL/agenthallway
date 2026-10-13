@@ -1558,7 +1558,7 @@ for binary in ah agenthub-node agenthub-mcp agenthub-desktop; do
 	printf '#!/bin/sh\necho "%s v0.1.0 (fake)"\n' "$binary" >"$skill_stage/$binary"
 	chmod +x "$skill_stage/$binary"
 done
-skill_md="$repository/.claude/skills/agenthub-watch/SKILL.md"
+skill_md="$repository/.claude/skills/agenthallway-watch/SKILL.md"
 cp "$skill_md" "$skill_stage/skills/agenthub-watch/"
 skilled="$work/skilled"
 mkdir -p "$skilled"

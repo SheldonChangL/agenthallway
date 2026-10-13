@@ -25,7 +25,7 @@ import (
 func streamingSurfaces(t *testing.T, extra ...Option) (*registry.Registry, http.Handler, http.Handler, *wake.ChannelDriver) {
 	t.Helper()
 	ctx := context.Background()
-	store, err := registry.Open(ctx, t.TempDir()+"/agenthub.db")
+	store, err := registry.Open(ctx, t.TempDir()+"/agenthallway.db")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +363,7 @@ func TestTheWakeStreamRefusesMoreThanItsShareOfSubscribers(t *testing.T) {
 // shutdown then reported a timeout and the peer listener was never closed.
 func TestDrainingEndsAHeldPoll(t *testing.T) {
 	ctx := context.Background()
-	store, err := registry.Open(ctx, t.TempDir()+"/agenthub.db")
+	store, err := registry.Open(ctx, t.TempDir()+"/agenthallway.db")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-// Command agenthub-mcp exposes one AgentHub session to the agent that launches
+// Command agenthallway-mcp exposes one Agent Hallway session to the agent that launches
 // it, over stdio.
 //
 // It is started by the agent as a child process, so it must be told which
@@ -19,17 +19,17 @@ import (
 func main() {
 	if err := run(); err != nil {
 		// stdout is the MCP transport; diagnostics must not go near it.
-		fmt.Fprintf(os.Stderr, "agenthub-mcp: %v\n", err)
+		fmt.Fprintf(os.Stderr, "agenthallway-mcp: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	defaultURL := os.Getenv("AGENTHUB_URL")
+	defaultURL := os.Getenv("AGENTHALLWAY_URL")
 	if defaultURL == "" {
 		defaultURL = "http://127.0.0.1:7462"
 	}
-	nodeURL := flag.String("url", defaultURL, "AgentHub node URL")
+	nodeURL := flag.String("url", defaultURL, "Agent Hallway node URL")
 	as := flag.String("as", "",
 		"the session this server acts for, as <provider>:<id> (required)")
 	channel := flag.Bool("channel", false,
@@ -56,7 +56,7 @@ func run() error {
 			return errors.New(
 				"-as is required: this server acts for exactly one session, and MCP does not\n" +
 					"say which session called it, so it cannot be inferred. Start it as\n" +
-					"  agenthub-mcp -as codex:<id>\n" +
+					"  agenthallway-mcp -as codex:<id>\n" +
 					"and run one server per session you want to expose")
 		}
 		return err

@@ -33,7 +33,7 @@ type ProcessState struct {
 // entry swapped for a link between the walk and the read cannot redirect the
 // read either. Symlinked entries are skipped outright: a provider writes its
 // metadata as plain files, and following a link is how a writer who only
-// controls the root turns AgentHub into a reader of somebody else's file.
+// controls the root turns Agent Hallway into a reader of somebody else's file.
 //
 // Only entries the walk itself rules out are skipped silently. Once an entry
 // looks like provider metadata, a refused open or a failed Stat aborts the

@@ -246,7 +246,7 @@ func TestAStoreFailureIsReported(t *testing.T) {
 // so the two halves are checked against each other rather than against a
 // hand-written fixture that could drift from both.
 func TestAnnouncementsSurviveTheWire(t *testing.T) {
-	packet, err := buildAnnouncement(pairedNode, "agenthub-test", 7463, []netip.Addr{
+	packet, err := buildAnnouncement(pairedNode, "agenthallway-test", 7463, []netip.Addr{
 		netip.MustParseAddr("192.0.2.10"),
 		netip.MustParseAddr("2001:db8::1"),
 	}, Offer{})
@@ -275,7 +275,7 @@ func TestAnnouncementsSurviveTheWire(t *testing.T) {
 // TestHostilePacketsProduceNothing feeds the parser the shapes an attacker
 // controls. None may panic, and none may yield an announcement.
 func TestHostilePacketsProduceNothing(t *testing.T) {
-	valid, err := buildAnnouncement(pairedNode, "agenthub-test", 7463,
+	valid, err := buildAnnouncement(pairedNode, "agenthallway-test", 7463,
 		[]netip.Addr{netip.MustParseAddr("192.0.2.10")}, Offer{})
 	if err != nil {
 		t.Fatal(err)
@@ -308,7 +308,7 @@ func TestHostilePacketsProduceNothing(t *testing.T) {
 // TestAPacketWithoutANodeIDYieldsNothing covers a well-formed service record
 // that simply does not identify itself: another protocol on the same group.
 func TestAPacketWithoutANodeIDYieldsNothing(t *testing.T) {
-	packet, err := buildAnnouncement("", "agenthub-test", 7463,
+	packet, err := buildAnnouncement("", "agenthallway-test", 7463,
 		[]netip.Addr{netip.MustParseAddr("192.0.2.10")}, Offer{})
 	if err != nil {
 		t.Fatal(err)
@@ -320,7 +320,7 @@ func TestAPacketWithoutANodeIDYieldsNothing(t *testing.T) {
 
 func TestBuildAnnouncementRefusesAnImpossiblePort(t *testing.T) {
 	for _, port := range []int{0, -1, 65536, 1 << 20} {
-		if _, err := buildAnnouncement(pairedNode, "agenthub-test", port, nil, Offer{}); err == nil {
+		if _, err := buildAnnouncement(pairedNode, "agenthallway-test", port, nil, Offer{}); err == nil {
 			t.Errorf("buildAnnouncement(port=%d, Offer{}) succeeded", port)
 		}
 	}
@@ -338,7 +338,7 @@ func bytesRepeat(value byte, count int) []byte {
 // real packet, because the alternative is a candidate list that is empty for a
 // reason nobody can see.
 func TestAnOfferSurvivesTheWire(t *testing.T) {
-	packet, err := buildAnnouncement("node_offering0000000", "agenthub-test", 7463,
+	packet, err := buildAnnouncement("node_offering0000000", "agenthallway-test", 7463,
 		[]netip.Addr{netip.MustParseAddr("192.168.1.42")},
 		Offer{
 			DisplayName: "sheldon's laptop",
@@ -377,7 +377,7 @@ func TestAnOfferCarriesNoPublicKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	encoded := identity.EncodePublicKey(public)
-	packet, err := buildAnnouncement("node_offering0000000", "agenthub-test", 7463,
+	packet, err := buildAnnouncement("node_offering0000000", "agenthallway-test", 7463,
 		[]netip.Addr{netip.MustParseAddr("192.168.1.42")},
 		Offer{DisplayName: "laptop", Platform: "darwin/arm64", Fingerprint: identity.Fingerprint(public)})
 	if err != nil {
@@ -418,7 +418,7 @@ func TestAHostileOfferCannotWriteToTheReader(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			packet, err := buildAnnouncement("node_hostile00000000", "agenthub-test", 7463,
+			packet, err := buildAnnouncement("node_hostile00000000", "agenthallway-test", 7463,
 				[]netip.Addr{netip.MustParseAddr("192.168.1.42")}, offer)
 			if err != nil {
 				t.Fatal(err)
@@ -487,7 +487,7 @@ func TestAnUnannounceableFingerprintIsRefusedNotDropped(t *testing.T) {
 		"invalid utf-8":        "\xff\xfe",
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := buildAnnouncement("node_offering0000000", "agenthub-test", 7463,
+			_, err := buildAnnouncement("node_offering0000000", "agenthallway-test", 7463,
 				[]netip.Addr{netip.MustParseAddr("192.168.1.42")},
 				Offer{DisplayName: "laptop", Platform: "linux/amd64", Fingerprint: fingerprint})
 			if err == nil {
@@ -673,11 +673,11 @@ func TestHostileFieldsAreDroppedOnParse(t *testing.T) {
 // will not do — the point is to be the sender this code does not control.
 func txtPacket(t *testing.T, txt []string) []byte {
 	t.Helper()
-	instanceName, err := dnsmessage.NewName("agenthub-hostile." + serviceName)
+	instanceName, err := dnsmessage.NewName("agenthallway-hostile." + serviceName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	hostName, err := dnsmessage.NewName("agenthub-hostile.local.")
+	hostName, err := dnsmessage.NewName("agenthallway-hostile.local.")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -707,7 +707,7 @@ func txtPacket(t *testing.T, txt []string) []byte {
 // A node not in pairing mode announces exactly what it announced before any of
 // this existed: its id, so peers that already know it can find its address.
 func TestANodeNotOfferingAnnouncesNothingExtra(t *testing.T) {
-	packet, err := buildAnnouncement("node_quiet0000000000", "agenthub-test", 7463,
+	packet, err := buildAnnouncement("node_quiet0000000000", "agenthallway-test", 7463,
 		[]netip.Addr{netip.MustParseAddr("192.168.1.42")}, Offer{})
 	if err != nil {
 		t.Fatal(err)

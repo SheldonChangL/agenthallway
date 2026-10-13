@@ -1,4 +1,4 @@
-/* AgentHub Desktop — stylesheet for the redesigned window.
+/* Agent Hallway Desktop — stylesheet for the redesigned window.
  *
  * Structure: one dark palette as tokens; a photo + rain layer behind
  * everything (switchable); panels sit on translucent cards so text always
@@ -852,7 +852,7 @@ tbody tr.sel td.col-actions { background: #16261d; }
 
 /* The working directory answers one question — which project is this session
    in — and the answer is at the END of the path. Clipped from the left so the
-   last segments survive: 「…/others/agenthub」 rather than 「/Us…」, which is
+   last segments survive: 「…/others/agenthallway」 rather than 「/Us…」, which is
    what a column this narrow showed before. `direction: rtl` moves the ellipsis
    to the start; the <bdi> inside keeps the path itself reading left to right,
    so the slashes do not migrate. */

@@ -41,7 +41,7 @@ import (
 )
 
 const (
-	// serviceName is the mDNS service AgentHub nodes announce themselves under.
+	// serviceName is the mDNS service Agent Hallway nodes announce themselves under.
 	serviceName = "_agenthub._tcp.local."
 
 	// multicastAddressV4 and multicastAddressV6 are the standard mDNS groups.

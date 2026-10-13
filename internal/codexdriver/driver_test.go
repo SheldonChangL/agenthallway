@@ -328,7 +328,7 @@ func TestDriveSendsTheBodyAsUntrustedContext(t *testing.T) {
 	}
 	if turn.TurnTrigger != TurnTrigger {
 		t.Errorf("turnTrigger = %q; an owner cannot find this turn in their own Codex "+
-			"history without trusting AgentHub's trail", turn.TurnTrigger)
+			"history without trusting Agent Hallway's trail", turn.TurnTrigger)
 	}
 }
 

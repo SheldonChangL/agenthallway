@@ -409,7 +409,7 @@ func TestFrontendMainListRefreshesAndSurvivesAFailedRead(t *testing.T) {
 // TestFrontendMCPConfigNamesItsOwnSession drives openMCPConfig and the dialog.
 //
 // The per-row button it used to be driven through is gone: `ah` covers all four
-// MCP tools, the agenthub-watch skill uses `ah`, and a control an owner needs
+// MCP tools, the agenthallway-watch skill uses `ah`, and a control an owner needs
 // once does not belong on every row. The check stayed, because what the snippet
 // binds is an agent to a session, and a wrong id in it is invisible afterwards:
 // the server starts, the four tools answer, and they answer for somebody else's

@@ -440,7 +440,7 @@ func TestWakesInTheSameMillisecondAreOrderedByWhatHappened(t *testing.T) {
 // reason to leave it.
 func TestAWakeTrailFromAnEarlierBuildGainsItsColumns(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 	store := openRegistryAt(t, path)
 	event := wakeEvent("node_peer0000000000000/codex:theirs", "claude:mine")
 	event.SourceNodeID = "node_peer0000000000000"
@@ -674,7 +674,7 @@ func TestAStoredMessageKeepsItsHopCount(t *testing.T) {
 // an upgraded database it was one layer.
 func TestTheMessageTablesGainTheirHopColumnAndItsConstraint(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 	store := openRegistryAt(t, path)
 	session := acceptingSession(t, store)
 	node := trustedPeer(t, store)

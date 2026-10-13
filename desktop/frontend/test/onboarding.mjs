@@ -69,7 +69,7 @@ const bindings = {
   ClosePairing: noop, Inbox: noop, ClearInbox: noop, MCPConfig: noop, CopyText: noop,
   Outbound: noop, Wakes: noop, PairRequests: async () => [],
   StartPairRequest: noop, ApprovePairRequest: noop, ConfirmPairRequest: noop, RejectPairRequest: noop,
-  ServiceStatus: async () => ({ tool: "/usr/local/bin/ah", supported: true, installed: true, running: true, pid: 9, unitPath: "/u", logHint: "/l", dbPath: "~/agenthub.db", dbPathKnown: true }),
+  ServiceStatus: async () => ({ tool: "/usr/local/bin/ah", supported: true, installed: true, running: true, pid: 9, unitPath: "/u", logHint: "/l", dbPath: "~/agenthallway.db", dbPathKnown: true }),
   InstallService: async () => { calls.InstallService += 1; return { command: "ah service install", output: "installed" }; },
   UninstallService: noop,
   NodeSettings: async () => JSON.parse(JSON.stringify(SETTINGS)),
@@ -297,10 +297,10 @@ app.state.pairing = pairingBefore;
   if (calls.Discover !== 1) {
     failures.push(`the scan ran again on a later read (${calls.Discover} in all); it is once per window`);
   }
-  // A scan that found nothing says where AgentHub looks, in the banner, which
+  // A scan that found nothing says where Agent Hallway looks, in the banner, which
   // is where the answer is. That sentence used to be the step's own body.
   if (!toast().textContent.includes(ZH["app.rescanNothingFound"].trim())) {
-    failures.push(`an empty scan did not explain where AgentHub looks: ${toast().textContent}`);
+    failures.push(`an empty scan did not explain where Agent Hallway looks: ${toast().textContent}`);
   }
 }
 

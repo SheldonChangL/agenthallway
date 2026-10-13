@@ -18,14 +18,14 @@ import (
 // TestNodeProcessHelper is not a test: it is the body of the process
 // TestListNodeProcessesReadsARealProcess starts under the node's name.
 func TestNodeProcessHelper(t *testing.T) {
-	if os.Getenv("AGENTHUB_NODE_PROCESS_HELPER") != "1" {
+	if os.Getenv("AGENTHALLWAY_NODE_PROCESS_HELPER") != "1" {
 		t.Skip("helper process")
 	}
 	time.Sleep(30 * time.Second)
 }
 
 // The fakes elsewhere say what the restart does with a command line; this asks
-// the real operating system for one. A process named agenthub-node is started
+// the real operating system for one. A process named agenthallway-node is started
 // with arguments that have spaces and quotes in them — the default database on
 // macOS lives under "Application Support", and on Windows the whole command
 // line is one string that has to be split back the way the node's own os.Args
@@ -52,7 +52,7 @@ func TestListNodeProcessesReadsARealProcess(t *testing.T) {
 	copyExecutable(t, self, binary)
 	home := filepath.Join(dir, "a home", `with "quotes"`)
 	config := filepath.Join(dir, "a config dir")
-	database := filepath.Join(dir, "Application Support", "not the default", "agenthub.db")
+	database := filepath.Join(dir, "Application Support", "not the default", "agenthallway.db")
 	helperArgs := []string{"-test.run=^TestNodeProcessHelper$", "--", "--db", database,
 		"--display-name", `say "hi" to me`, "", `trailing\`}
 	want := append([]string{binary}, helperArgs...)
@@ -67,9 +67,9 @@ func TestListNodeProcessesReadsARealProcess(t *testing.T) {
 		// #nosec G204 -- this test's own binary, copied under the node's name.
 		command := exec.Command(binary, helperArgs...)
 		// Last, so that its length is where the environment ends.
-		command.Env = append(os.Environ(), "AGENTHUB_NODE_PROCESS_HELPER=1",
+		command.Env = append(os.Environ(), "AGENTHALLWAY_NODE_PROCESS_HELPER=1",
 			"HOME="+home, "XDG_CONFIG_HOME="+config, "APPDATA="+config, "USERPROFILE="+home,
-			"AGENTHUB_TEST_FILL="+strings.Repeat("f", fill))
+			"AGENTHALLWAY_TEST_FILL="+strings.Repeat("f", fill))
 		if err := command.Start(); err != nil {
 			t.Fatal(err)
 		}
@@ -93,7 +93,7 @@ func TestListNodeProcessesReadsARealProcess(t *testing.T) {
 			t.Errorf("fill %d: a process this test started is not this user's: %v", len(fill), process.UserErr)
 		}
 		lookup := environmentLookup(runtime.GOOS, process.Env)
-		if got := lookup("AGENTHUB_TEST_FILL"); got != fill {
+		if got := lookup("AGENTHALLWAY_TEST_FILL"); got != fill {
 			t.Errorf("fill %d: the environment's last entry read back as %q", len(fill), got)
 		}
 		paths, err := nodeDefaultPaths(runtime.GOOS, lookup)
@@ -133,9 +133,9 @@ func TestListNodeProcessesReadsARealProcess(t *testing.T) {
 	}
 }
 
-// waitForListed lists agenthub-node processes until every pid in want is
+// waitForListed lists agenthallway-node processes until every pid in want is
 // among them. A listing that fails the way one fails on a process caught
-// exiting — another agenthub-node on this machine may be on its way out — is
+// exiting — another agenthallway-node on this machine may be on its way out — is
 // asked again until the deadline; any other failure is the test's. Asking
 // again on every error would hide a misread: the kernel's strings after a new
 // process's environment are wiped by the process itself moments after it
@@ -158,7 +158,7 @@ func waitForListed(t *testing.T, want map[int]string) []nodeProcess {
 			return found
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%d of %d processes named %s were listed among %d agenthub-node processes (last error: %v)",
+			t.Fatalf("%d of %d processes named %s were listed among %d agenthallway-node processes (last error: %v)",
 				len(found), len(want), nodeExecutable, len(processes), err)
 		}
 		time.Sleep(50 * time.Millisecond)

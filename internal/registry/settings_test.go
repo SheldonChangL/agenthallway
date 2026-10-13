@@ -92,7 +92,7 @@ func TestSaveNodeSettingsLeavesUnmentionedSettingsAlone(t *testing.T) {
 // behave the way that build did: everything absent, so the flag defaults apply.
 func TestOpeningADatabaseFromAnEarlierBuildAddsTheSettingsTable(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 	old, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)

@@ -135,9 +135,9 @@ jobs:
           fi
           suffix=""
           if [ "$GOOS" = "windows" ]; then suffix=".exe"; fi
-          bundle="agenthub_${TAG}_${GOOS}_${GOARCH}"
+          bundle="agenthallway_${TAG}_${GOOS}_${GOARCH}"
           mkdir -p "stage/${bundle}"
-          for command in agenthub-node ah agenthub-mcp; do
+          for command in agenthallway-node ah agenthallway-mcp; do
             # -X is what makes `ah --version` answer with the tag instead of a
             # revision. Everything else about the build matches CI's, so a
             # release binary differs from a CI one only in that string.
@@ -150,7 +150,7 @@ jobs:
           # the archive so SHA256SUMS covers it; install.sh copies it from
           # here and never downloads it on its own.
           mkdir -p "stage/${bundle}/skills"
-          cp -R .claude/skills/agenthub-watch "stage/${bundle}/skills/"
+          cp -R .claude/skills/agenthallway-watch "stage/${bundle}/skills/"
           echo "bundle=$bundle" >> "$GITHUB_ENV"
 
       # The tag has to be what the binary says, or the release is mislabelled in
@@ -356,8 +356,8 @@ jobs:
           go install "github.com/wailsapp/wails/v2/cmd/wails@${wails_version}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      # AGENTHUB_RELEASE is what actually stamps the tag: bundle-binaries.sh
-      # reads it and rebuilds ah, agenthub-node and agenthub-mcp with the same
+      # AGENTHALLWAY_RELEASE is what actually stamps the tag: bundle-binaries.sh
+      # reads it and rebuilds ah, agenthallway-node and agenthallway-mcp with the same
       # -X the standalone archives get, so the copies inside the bundle answer
       # `--version` with the tag rather than a revision.
       #
@@ -384,7 +384,7 @@ jobs:
       - name: wails build
         working-directory: desktop
         env:
-          AGENTHUB_RELEASE: ${{ steps.version.outputs.tag }}
+          AGENTHALLWAY_RELEASE: ${{ steps.version.outputs.tag }}
           TAG: ${{ steps.version.outputs.tag }}
           PLATFORM: ${{ matrix.platform }}
           WEBKIT: ${{ matrix.webkit }}
@@ -427,11 +427,11 @@ jobs:
             # `Can't open script` and `|| true` hid that.
             MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' makensis /VERSION || true
             echo
-            # -o names the executable agenthub-desktop.exe, which is what
+            # -o names the executable agenthallway-desktop.exe, which is what
             # project.nsi installs as ${PRODUCT_EXECUTABLE} and what its
             # taskkill lines name; the wails.json outputfilename is "desktop".
             wails build -clean -platform "$PLATFORM" -ldflags "$ldflags" \
-              -o agenthub-desktop.exe -nsis
+              -o agenthallway-desktop.exe -nsis
             ;;
           linux/*)
             # The tag is the whole difference between the two linux variants:
@@ -444,7 +444,7 @@ jobs:
             # Unquoted on purpose: empty must expand to no argument at all.
             # shellcheck disable=SC2086
             wails build -clean -platform "$PLATFORM" -ldflags "$ldflags" \
-              $webkit_tags -o agenthub-desktop
+              $webkit_tags -o agenthallway-desktop
             ;;
           esac
           ls -l build/bin
@@ -461,7 +461,7 @@ jobs:
         env:
           WEBKIT: ${{ matrix.webkit }}
         run: |
-          linked=$(ldd build/bin/agenthub-desktop)
+          linked=$(ldd build/bin/agenthallway-desktop)
           echo "$linked" | grep webkit || true
           case "$WEBKIT" in
           4.1) want="libwebkit2gtk-4.1.so.0"; unwanted="libwebkit2gtk-4.0.so.37" ;;
@@ -490,11 +490,11 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           case "$PLATFORM" in
-          darwin/*) beside=build/bin/agenthub-desktop.app/Contents/MacOS; suffix="" ;;
+          darwin/*) beside=build/bin/agenthallway-desktop.app/Contents/MacOS; suffix="" ;;
           windows/*) beside=build/bin; suffix=".exe" ;;
           *) beside=build/bin; suffix="" ;;
           esac
-          for binary in ah agenthub-node agenthub-mcp; do
+          for binary in ah agenthallway-node agenthallway-mcp; do
             if [ ! -f "${beside}/${binary}${suffix}" ]; then
               echo "the post-build hook did not bundle ${binary}${suffix} into ${beside}"
               ls -l "$beside"
@@ -531,7 +531,7 @@ jobs:
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          plist=build/bin/agenthub-desktop.app/Contents/Info.plist
+          plist=build/bin/agenthallway-desktop.app/Contents/Info.plist
           reported=$(defaults read "$PWD/$plist" CFBundleShortVersionString)
           echo "CFBundleShortVersionString = $reported"
           if [ "$reported" != "${TAG#v}" ]; then
@@ -555,7 +555,7 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           SLUG: ${{ matrix.slug }}
         run: |
-          app=build/bin/agenthub-desktop.app
+          app=build/bin/agenthallway-desktop.app
           codesign --verify --deep --strict --verbose=2 "$app"
           mkdir -p ../dist dmg-root
           cp -R "$app" dmg-root/
@@ -565,10 +565,10 @@ jobs:
           # the signature checked above. Hidden, so the drag-to-install window
           # still shows only the app and Applications.
           mkdir -p dmg-root/.skills
-          cp -R ../.claude/skills/agenthub-watch dmg-root/.skills/
-          hdiutil create -volname "AgentHub" -srcfolder dmg-root \
+          cp -R ../.claude/skills/agenthallway-watch dmg-root/.skills/
+          hdiutil create -volname "Agent Hallway" -srcfolder dmg-root \
             -fs HFS+ -format UDZO -ov \
-            "../dist/agenthub-desktop_${TAG}_${SLUG}.dmg"
+            "../dist/agenthallway-desktop_${TAG}_${SLUG}.dmg"
 
       # Two files, because they answer different questions. The installer is
       # for someone who wants the app installed, the node registered and a
@@ -585,15 +585,15 @@ jobs:
           # wails names it <project>-<arch>-installer.exe; matched by glob
           # rather than spelled out, because that name is wails' to change.
           installer=$(ls build/bin/*installer.exe)
-          cp "$installer" "../dist/agenthub-desktop_${TAG}_${SLUG}-installer.exe"
-          staging="agenthub-desktop_${TAG}_${SLUG}"
+          cp "$installer" "../dist/agenthallway-desktop_${TAG}_${SLUG}-installer.exe"
+          staging="agenthallway-desktop_${TAG}_${SLUG}"
           mkdir -p "build/zip/${staging}"
-          cp build/bin/agenthub-desktop.exe build/bin/ah.exe \
-            build/bin/agenthub-node.exe build/bin/agenthub-mcp.exe \
+          cp build/bin/agenthallway-desktop.exe build/bin/ah.exe \
+            build/bin/agenthallway-node.exe build/bin/agenthallway-mcp.exe \
             "build/zip/${staging}/"
           cp ../README.md ../LICENSE "build/zip/${staging}/"
           mkdir -p "build/zip/${staging}/skills"
-          cp -R ../.claude/skills/agenthub-watch "build/zip/${staging}/skills/"
+          cp -R ../.claude/skills/agenthallway-watch "build/zip/${staging}/skills/"
           (cd build/zip && 7z a -tzip -bso0 "../../../dist/${staging}.zip" "$staging")
 
       # No Linux desktop packaging format is produced: .deb and .AppImage each
@@ -611,16 +611,16 @@ jobs:
           WEBKIT: ${{ matrix.webkit }}
         run: |
           mkdir -p ../dist
-          staging="agenthub-desktop_${TAG}_${SLUG}"
+          staging="agenthallway-desktop_${TAG}_${SLUG}"
           mkdir -p "build/tar/${staging}"
-          cp build/bin/agenthub-desktop build/bin/ah \
-            build/bin/agenthub-node build/bin/agenthub-mcp \
+          cp build/bin/agenthallway-desktop build/bin/ah \
+            build/bin/agenthallway-node build/bin/agenthallway-mcp \
             "build/tar/${staging}/"
           cp ../README.md ../LICENSE "build/tar/${staging}/"
           # The Claude Code skill install.sh copies into ~/.claude/skills, in
           # the archive so SHA256SUMS covers it.
           mkdir -p "build/tar/${staging}/skills"
-          cp -R ../.claude/skills/agenthub-watch "build/tar/${staging}/skills/"
+          cp -R ../.claude/skills/agenthallway-watch "build/tar/${staging}/skills/"
           # The icon travels with the binaries because install.sh writes a
           # .desktop entry pointing Icon= at this file where it lands. Without
           # it the app installs and runs but has no entry in the applications
@@ -653,10 +653,10 @@ jobs:
           *) echo "matrix.webkit is \"$WEBKIT\"; want 4.0 or 4.1"; exit 1 ;;
           esac
           cat > "build/tar/${staging}/README.txt" <<EOF
-          AgentHub desktop ${TAG} — linux/amd64, WebKit2GTK ${WEBKIT}
+          Agent Hallway desktop ${TAG} — linux/amd64, WebKit2GTK ${WEBKIT}
 
-          Unpack anywhere and run ./agenthub-desktop. Keep ah, agenthub-node and
-          agenthub-mcp in the same directory: the app resolves them beside its own
+          Unpack anywhere and run ./agenthallway-desktop. Keep ah, agenthallway-node and
+          agenthallway-mcp in the same directory: the app resolves them beside its own
           executable and deliberately does not fall back to PATH.
 
           This build links the system WebKit at run time, so it needs the GTK and
@@ -736,13 +736,13 @@ jobs:
           # string. The directory is fresh per run today, so this is about not
           # depending on that.
           shopt -s nullglob
-          # agenthub_* is the command line archives, agenthub-desktop_* the app.
+          # agenthallway_* is the command line archives, agenthallway-desktop_* the app.
           # The two prefixes differ by the hyphen, so neither glob can pick up
           # the other's files.
           archives=(
-            agenthub_*.tar.gz agenthub_*.zip
-            agenthub-desktop_*.dmg agenthub-desktop_*.zip
-            agenthub-desktop_*.tar.gz agenthub-desktop_*-installer.exe
+            agenthallway_*.tar.gz agenthallway_*.zip
+            agenthallway-desktop_*.dmg agenthallway-desktop_*.zip
+            agenthallway-desktop_*.tar.gz agenthallway-desktop_*-installer.exe
           )
           if [ ${#archives[@]} -eq 0 ]; then
             echo "no archives were downloaded; nothing to publish"; exit 1
@@ -763,17 +763,17 @@ jobs:
           # instead of arriving as the string that was not matched.
           missing=()
           for expected in \
-            'agenthub-desktop_*_darwin_universal.dmg' \
-            'agenthub-desktop_*_windows_amd64-installer.exe' \
-            'agenthub-desktop_*_windows_amd64.zip' \
-            'agenthub-desktop_*_linux_amd64.tar.gz' \
-            'agenthub-desktop_*_linux_amd64_webkit40.tar.gz' \
-            'agenthub_*_linux_amd64.tar.gz' \
-            'agenthub_*_linux_arm64.tar.gz' \
-            'agenthub_*_darwin_amd64.tar.gz' \
-            'agenthub_*_darwin_arm64.tar.gz' \
-            'agenthub_*_windows_amd64.zip' \
-            'agenthub_*_windows_arm64.zip'; do
+            'agenthallway-desktop_*_darwin_universal.dmg' \
+            'agenthallway-desktop_*_windows_amd64-installer.exe' \
+            'agenthallway-desktop_*_windows_amd64.zip' \
+            'agenthallway-desktop_*_linux_amd64.tar.gz' \
+            'agenthallway-desktop_*_linux_amd64_webkit40.tar.gz' \
+            'agenthallway_*_linux_amd64.tar.gz' \
+            'agenthallway_*_linux_arm64.tar.gz' \
+            'agenthallway_*_darwin_amd64.tar.gz' \
+            'agenthallway_*_darwin_arm64.tar.gz' \
+            'agenthallway_*_windows_amd64.zip' \
+            'agenthallway_*_windows_arm64.zip'; do
             found=($expected)
             [ ${#found[@]} -gt 0 ] || missing+=("$expected")
           done
@@ -797,23 +797,23 @@ jobs:
             # and the command line archives are the thing you reach for after.
             echo "## The desktop app"
             echo
-            echo "One download, and it brings \`agenthub-node\`, \`ah\` and \`agenthub-mcp\` with it — the app runs them from beside its own executable, so there is nothing else to install and nothing to put on your PATH."
+            echo "One download, and it brings \`agenthallway-node\`, \`ah\` and \`agenthallway-mcp\` with it — the app runs them from beside its own executable, so there is nothing else to install and nothing to put on your PATH."
             echo
             echo "| Platform | Download | What to do with it |"
             echo "|---|---|---|"
-            echo "| macOS (Apple silicon and Intel) | \`agenthub-desktop_${TAG}_darwin_universal.dmg\` | Open it, drag \`agenthub-desktop.app\` to Applications. The first launch needs one extra step (see below). |"
-            echo "| Windows 10/11 (x64) | \`agenthub-desktop_${TAG}_windows_amd64-installer.exe\` | Run it. It installs the app, registers the background node and adds a Start menu entry. |"
-            echo "| Windows, no installer | \`agenthub-desktop_${TAG}_windows_amd64.zip\` | Unpack it and run \`agenthub-desktop.exe\`; keep the other three files beside it. |"
-            echo "| Linux (x64), WebKit2GTK 4.1 | \`agenthub-desktop_${TAG}_linux_amd64.tar.gz\` | Ubuntu 24.04+, Debian 13, Fedora 39+. Unpack it and run \`./agenthub-desktop\`. |"
-            echo "| Linux (x64), WebKit2GTK 4.0 | \`agenthub-desktop_${TAG}_linux_amd64_webkit40.tar.gz\` | Ubuntu 22.04 LTS, Debian 12, Mint, Pop!_OS. Same contents, linked against the older WebKit. |"
+            echo "| macOS (Apple silicon and Intel) | \`agenthallway-desktop_${TAG}_darwin_universal.dmg\` | Open it, drag \`agenthallway-desktop.app\` to Applications. The first launch needs one extra step (see below). |"
+            echo "| Windows 10/11 (x64) | \`agenthallway-desktop_${TAG}_windows_amd64-installer.exe\` | Run it. It installs the app, registers the background node and adds a Start menu entry. |"
+            echo "| Windows, no installer | \`agenthallway-desktop_${TAG}_windows_amd64.zip\` | Unpack it and run \`agenthallway-desktop.exe\`; keep the other three files beside it. |"
+            echo "| Linux (x64), WebKit2GTK 4.1 | \`agenthallway-desktop_${TAG}_linux_amd64.tar.gz\` | Ubuntu 24.04+, Debian 13, Fedora 39+. Unpack it and run \`./agenthallway-desktop\`. |"
+            echo "| Linux (x64), WebKit2GTK 4.0 | \`agenthallway-desktop_${TAG}_linux_amd64_webkit40.tar.gz\` | Ubuntu 22.04 LTS, Debian 12, Mint, Pop!_OS. Same contents, linked against the older WebKit. |"
             echo
             echo "The two Linux downloads are not interchangeable: each links one WebKit ABI and will not start where only the other is installed. Some distributions can install either, but that needs root — the matching download needs nothing. \`install.sh\` reads \`ldconfig\` and fetches the one your machine can already run."
             echo
             echo "## Command line only"
             echo
-            echo "\`agenthub_${TAG}_<os>_<arch>.{tar.gz,zip}\` holds the same three binaries without the app, for six platforms. Unpack one and put the binaries on your PATH."
+            echo "\`agenthallway_${TAG}_<os>_<arch>.{tar.gz,zip}\` holds the same three binaries without the app, for six platforms. Unpack one and put the binaries on your PATH."
             echo
-            echo "Every binary reports this tag: \`ah --version\` says \`ah ${TAG} …\`, the node logs it at startup, and \`agenthub-mcp\` sends it at initialize. That includes the copies inside the desktop bundle."
+            echo "Every binary reports this tag: \`ah --version\` says \`ah ${TAG} …\`, the node logs it at startup, and \`agenthallway-mcp\` sends it at initialize. That includes the copies inside the desktop bundle."
             echo
             echo "Verify a download against \`SHA256SUMS\`:"
             echo
@@ -833,11 +833,11 @@ jobs:
             # signature here, and a reader should meet both at once.
             echo "Nothing here is **code-signed or notarized** (issue #66), so every platform will say so before it lets you run anything. That is expected; check the hash above before you override any of it, because it is the only evidence you have that the download is what this workflow built."
             echo
-            echo "- **macOS.** The app is ad-hoc signed, which is enough to launch but not enough for Gatekeeper. On **macOS 15 Sequoia and later**, after dragging \`agenthub-desktop.app\` to Applications: double-click it, get the \"cannot be opened\" / \"Apple could not verify\" dialog, click **Done**, then open **System Settings → Privacy & Security**, scroll down to **Security**, click **Open Anyway** next to the app's name and confirm. Sequoia removed the old right-click → **Open** bypass; on macOS 14 and earlier that still works. Either way, the terminal route is \`xattr -dr com.apple.quarantine /Applications/agenthub-desktop.app\`. Loose command line binaries take the same Privacy & Security detour, or \`xattr -d com.apple.quarantine <file>\`."
+            echo "- **macOS.** The app is ad-hoc signed, which is enough to launch but not enough for Gatekeeper. On **macOS 15 Sequoia and later**, after dragging \`agenthallway-desktop.app\` to Applications: double-click it, get the \"cannot be opened\" / \"Apple could not verify\" dialog, click **Done**, then open **System Settings → Privacy & Security**, scroll down to **Security**, click **Open Anyway** next to the app's name and confirm. Sequoia removed the old right-click → **Open** bypass; on macOS 14 and earlier that still works. Either way, the terminal route is \`xattr -dr com.apple.quarantine /Applications/agenthallway-desktop.app\`. Loose command line binaries take the same Privacy & Security detour, or \`xattr -d com.apple.quarantine <file>\`."
             echo "- **Windows.** SmartScreen calls the publisher unknown: More info → Run anyway."
             echo "- **Linux.** No equivalent gate; \`chmod +x\` if the executable bit did not survive."
             echo
-            echo "\`agenthub-node\` serves the owner's API on loopback only. Sharing with another machine is the peer listener, with \`-allow-lan\` and \`-peer-listen\`; see the README."
+            echo "\`agenthallway-node\` serves the owner's API on loopback only. Sharing with another machine is the peer listener, with \`-allow-lan\` and \`-peer-listen\`; see the README."
           } > "$notes"
           echo "notes=$notes" >> "$GITHUB_ENV"
           echo "--- release notes ---"

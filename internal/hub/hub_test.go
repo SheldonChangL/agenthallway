@@ -23,7 +23,7 @@ func TestDiscoverUpsertsBothProvidersAsPrivate(t *testing.T) {
 	writeFixture(t, filepath.Join(claudeRoot, "projects", "p", "c.jsonl"), "{\"sessionId\":\"c1\",\"cwd\":\"/claude\"}\n")
 	writeFixture(t, filepath.Join(codexRoot, "sessions", "2026", "08", "28", "x.jsonl"), "{\"type\":\"session_meta\",\"payload\":{\"id\":\"x1\",\"cwd\":\"/codex\"}}\n")
 
-	store, err := registry.Open(ctx, filepath.Join(base, "agenthub.db"))
+	store, err := registry.Open(ctx, filepath.Join(base, "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

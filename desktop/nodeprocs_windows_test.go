@@ -23,11 +23,11 @@ func TestParseNodeProcessList(t *testing.T) {
 			t.Errorf("%q: found %v, err %v; want nothing", empty, found, err)
 		}
 	}
-	found, err := parseNodeProcessList(`[{"pid":12,"commandLine":"\"C:\\Program Files\\agenthub\\agenthub-node.exe\" --db \"C:\\Users\\me\\My Data\\agenthub.db\""}]`)
+	found, err := parseNodeProcessList(`[{"pid":12,"commandLine":"\"C:\\Program Files\\agenthallway\\agenthallway-node.exe\" --db \"C:\\Users\\me\\My Data\\agenthallway.db\""}]`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{`C:\Program Files\agenthub\agenthub-node.exe`, "--db", `C:\Users\me\My Data\agenthub.db`}
+	want := []string{`C:\Program Files\agenthallway\agenthallway-node.exe`, "--db", `C:\Users\me\My Data\agenthallway.db`}
 	if len(found) != 1 || found[0].PID != 12 || !slices.Equal(found[0].Argv, want) {
 		t.Errorf("found %+v, want pid 12 with argv %q", found, want)
 	}
@@ -42,11 +42,11 @@ func TestParseNodeProcessList(t *testing.T) {
 // the way out — and this app has to read the same thing back.
 func TestWindowsCommandLineRoundTrips(t *testing.T) {
 	for _, argv := range [][]string{
-		{`C:\Program Files\agenthub\agenthub-node.exe`, "--db", `C:\Users\me\My Data\agenthub.db`},
-		{`"C:\quoted"\agenthub-node.exe`, "--db", `C:\a b\x.db`},
-		{"agenthub-node.exe", "", "", "--display-name", ""},
-		{"agenthub-node.exe", `say "hi"`, `a\"b`, `trailing\`, `trailing space\ `, `\\server\share\x.db`},
-		{"agenthub-node.exe", "tab\there", `""`, `"`, `\"`, `a"b"c`, `C:\dir\\`},
+		{`C:\Program Files\agenthallway\agenthallway-node.exe`, "--db", `C:\Users\me\My Data\agenthallway.db`},
+		{`"C:\quoted"\agenthallway-node.exe`, "--db", `C:\a b\x.db`},
+		{"agenthallway-node.exe", "", "", "--display-name", ""},
+		{"agenthallway-node.exe", `say "hi"`, `a\"b`, `trailing\`, `trailing space\ `, `\\server\share\x.db`},
+		{"agenthallway-node.exe", "tab\there", `""`, `"`, `\"`, `a"b"c`, `C:\dir\\`},
 	} {
 		words := make([]string, 0, len(argv))
 		for _, word := range argv {

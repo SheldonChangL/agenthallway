@@ -13,12 +13,12 @@ import (
 )
 
 // nodeExecutable is what the running node is called in a process list.
-const nodeExecutable = "agenthub-node"
+const nodeExecutable = "agenthallway-node"
 
-// stopNodeProcesses ends every agenthub-node on this machine.
+// stopNodeProcesses ends every agenthallway-node on this machine.
 //
 // -x so the name has to match exactly: a pattern match would also catch
-// agenthub-node-something, and on a developer's machine the `go run` of one.
+// agenthallway-node-something, and on a developer's machine the `go run` of one.
 // This path is only reached when no service manager holds the node — a
 // registered launchd job or systemd unit is restarted through ah instead, so
 // nothing here races a KeepAlive that would start the node behind this.
@@ -64,10 +64,10 @@ func nodeLogDir() (string, error) {
 		return "", fmt.Errorf("find a place for the node log: %w", err)
 	}
 	if runtime.GOOS == "darwin" {
-		return filepath.Join(home, "Library", "Logs", "agenthub"), nil
+		return filepath.Join(home, "Library", "Logs", "agenthallway"), nil
 	}
 	if state := os.Getenv("XDG_STATE_HOME"); state != "" {
-		return filepath.Join(state, "agenthub"), nil
+		return filepath.Join(state, "agenthallway"), nil
 	}
-	return filepath.Join(home, ".local", "state", "agenthub"), nil
+	return filepath.Join(home, ".local", "state", "agenthallway"), nil
 }

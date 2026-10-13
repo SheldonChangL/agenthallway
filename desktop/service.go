@@ -117,24 +117,24 @@ var findTool = func() (string, error) {
 }
 
 func locateTool() (string, error) {
-	return locateBinary("ah", "AGENTHUB_AH")
+	return locateBinary("ah", "AGENTHALLWAY_AH")
 }
 
-// findNode locates the agenthub-node the installed service should run, the same
+// findNode locates the agenthallway-node the installed service should run, the same
 // way and in the same places as ah. A variable so tests can stand in for it.
 //
 // The install has to name it. Left to itself `ah service install` falls back to
-// exec.LookPath("agenthub-node") and writes whatever that finds into the
+// exec.LookPath("agenthallway-node") and writes whatever that finds into the
 // ExecStart of a launchd job or a systemd unit — started at boot, every boot.
 // Taking PATH out of this file only moved that decision one hop down; the GUI
-// already knows which agenthub-node it means, because the packaging step put it
+// already knows which agenthallway-node it means, because the packaging step put it
 // beside this executable, so it says so.
 var findNode = func() (string, error) {
-	return locateBinary("agenthub-node", "AGENTHUB_NODE")
+	return locateBinary("agenthallway-node", "AGENTHALLWAY_NODE")
 }
 
 // locateBinary is that search, with the binary's name and the environment
-// variable that overrides it as parameters: ah, agenthub-node and agenthub-mcp
+// variable that overrides it as parameters: ah, agenthallway-node and agenthallway-mcp
 // ship side by side and are found the same way, and a second copy of this list
 // would be a second thing to keep in step with how the app is packaged.
 //
@@ -171,8 +171,8 @@ func executableName(name string) string {
 // a text file, would otherwise be handed back as the tool and fail later with a
 // message about exec rather than about the path being wrong.
 func runnable(path string) bool {
-	// #nosec G703 -- the taint gosec follows is AGENTHUB_AH / AGENTHUB_NODE /
-	// AGENTHUB_MCP, set by the person this app runs as to name a binary they
+	// #nosec G703 -- the taint gosec follows is AGENTHALLWAY_AH / AGENTHALLWAY_NODE /
+	// AGENTHALLWAY_MCP, set by the person this app runs as to name a binary they
 	// want run instead of the bundled one; every other path here is built from
 	// this executable's own location. Nothing the window or the network
 	// supplies reaches it, and "traversal" into one's own account is not a

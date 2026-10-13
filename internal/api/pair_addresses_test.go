@@ -242,7 +242,7 @@ func TestOnlyBoundAddressesAreOffered(t *testing.T) {
 		t.Cleanup(func() { _ = set.Close() })
 		return []Option{
 			WithDeliveryPolicy(policy),
-			// The same wiring cmd/agenthub-node uses.
+			// The same wiring cmd/agenthallway-node uses.
 			WithPairExchange(pairing.NewRequests(), transport.NewPairDialer(transport.LoopbackOnly),
 				func() []string { return pairing.ReachableAddresses(policy, set.Bound()) }),
 		}

@@ -156,7 +156,7 @@ func (r runner) writeSettings(ctx context.Context, args []string) error {
 	if err != nil {
 		if _, several := body[nodeconfig.FieldPeerListens]; several && strings.Contains(err.Error(), olderNodeRefusal) {
 			return fmt.Errorf("this node is too old for more than one address: it does not know peerListens. "+
-				"Update agenthub-node, or pass one --peer-listen (%w)", err)
+				"Update agenthallway-node, or pass one --peer-listen (%w)", err)
 		}
 		return err
 	}

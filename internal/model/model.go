@@ -94,7 +94,7 @@ type Audience struct {
 	// another machine, which reaches its context through agent_inbox.
 	//
 	// Enforced by the node in POST /v1/messages: a message to another node must
-	// name a local session, and this flag on that session decides. agenthub-mcp
+	// name a local session, and this flag on that session decides. agenthallway-mcp
 	// checks it too, earlier and in words aimed at an agent, but the node's
 	// check is the boundary — any process here can reach the owner's API, and
 	// the node cannot tell the owner's CLI from an agent talked into calling it.

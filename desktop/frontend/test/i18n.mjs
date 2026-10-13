@@ -192,9 +192,9 @@ if (el("settings-lang").value !== "zh-Hant") {
 configure({
   ServiceStatus: async () => ({
     tool: "/usr/local/bin/ah", supported: true, installed: true, running: true,
-    pid: 41872, unitPath: "~/Library/LaunchAgents/local.agenthub.node.plist",
-    logHint: "~/Library/Logs/agenthub-node.log", nodeAnswering: true,
-    dbPath: "~/agenthub.db", dbPathKnown: true,
+    pid: 41872, unitPath: "~/Library/LaunchAgents/local.agenthallway.node.plist",
+    logHint: "~/Library/Logs/agenthallway-node.log", nodeAnswering: true,
+    dbPath: "~/agenthallway.db", dbPathKnown: true,
   }),
   NodeSettings: async () => ({
     settings: { peerListen: "192.168.50.10:7463", allowLan: true, discover: true, treatAsPrivate: [], autoWake: false },
@@ -224,7 +224,7 @@ for (const [lang, table, other] of [["en", EN, ZH], ["zh-Hant", ZH, EN], ["en", 
 
   const line = el("service-line").textContent;
   if (line !== table["service.lineRunning"].replace("{pid}", "41872")
-      .replace("{unit}", "~/Library/LaunchAgents/local.agenthub.node.plist")) {
+      .replace("{unit}", "~/Library/LaunchAgents/local.agenthallway.node.plist")) {
     failures.push(`${where} the service line is not the running one: ${line}`);
   }
   if (line === table["service.lineLoading"] || rawKey(line)) {
@@ -622,16 +622,16 @@ for (const [name, table] of [["en", EN], ["zh-Hant", ZH]]) {
 for (const [key, value] of Object.entries(EN)) {
   if (/[（）：，。「」]/.test(value)) failures.push(`en ${key} carries full-width punctuation: ${value}`);
 }
-if (setLanguage("en"), t("pair.nodeSaidWrap", { detail: "x" }) !== " (AgentHub reported: x)") {
+if (setLanguage("en"), t("pair.nodeSaidWrap", { detail: "x" }) !== " (Agent Hallway reported: x)") {
   failures.push(`en pair.nodeSaidWrap reads ${JSON.stringify(t("pair.nodeSaidWrap", { detail: "x" }))}`);
 }
 setLanguage("zh-Hant");
-if (t("pair.nodeSaidWrap", { detail: "x" }) !== "（AgentHub 回報：x）") failures.push(`zh pair.nodeSaidWrap reads ${t("pair.nodeSaidWrap", { detail: "x" })}`);
+if (t("pair.nodeSaidWrap", { detail: "x" }) !== "（Agent Hallway 回報：x）") failures.push(`zh pair.nodeSaidWrap reads ${t("pair.nodeSaidWrap", { detail: "x" })}`);
 
 // The settings page's discover switch says what it does, both halves (owner,
 // 2026-10-01): it searches the network for other computers, and while pairing
 // it lets them find this one. Its line under it says what each half sends,
-// as cmd/agenthub-node and internal/pairing/announcer.go do it: listening all
+// as cmd/agenthallway-node and internal/pairing/announcer.go do it: listening all
 // the time and sending nothing, broadcasting only while the window is open.
 {
   const discoverRow = markup.slice(markup.indexOf('id="node-discover"'), markup.indexOf('id="node-autowake"'));
@@ -660,7 +660,8 @@ if (t("pair.nodeSaidWrap", { detail: "x" }) !== "（AgentHub 回報：x）") fai
 // The glossary (docs/ui-contract.md §12): none of the retired words reach the
 // screen, outside commands and file names.
 {
-  const scrub = (value) => value.replace(/agenthub-node|ah nodes?\b|node\.key|node_\w*|\{node\}/g, "");
+  const scrub = (value) => value.replace(
+    /agenthallway-node|agenthub-node|local\.agenthallway\.node|local\.agenthub\.node|ah nodes?\b|node\.key|node_\w*|\{node\}/g, "");
   for (const [key, value] of Object.entries(ZH)) {
     const hit = /節點|電腦|公開|配對視窗|通告/.exec(scrub(value));
     if (hit) failures.push(`zh ${key} still says ${hit[0]}: ${value}`);
@@ -668,6 +669,18 @@ if (t("pair.nodeSaidWrap", { detail: "x" }) !== "（AgentHub 回報：x）") fai
   for (const [key, value] of Object.entries(EN)) {
     const hit = /\bnodes?\b|\bpublish\w*|\bcomputers?\b|\baudience\b|\bannounc\w*|pairing window/i.exec(scrub(value));
     if (hit) failures.push(`en ${key} still says ${hit[0]}: ${value}`);
+  }
+}
+
+// The product is called Agent Hallway. The old name is for the keys that name
+// what an older install left behind, and for nothing else on the screen.
+{
+  const mayNameTheOldProduct = new Set([]);
+  for (const [name, table] of [["en", EN], ["zh-Hant", ZH]]) {
+    for (const [key, value] of Object.entries(table)) {
+      if (mayNameTheOldProduct.has(key)) continue;
+      if (/\bAgentHub\b/.test(value)) failures.push(`${name} ${key} still says AgentHub: ${value}`);
+    }
   }
 }
 

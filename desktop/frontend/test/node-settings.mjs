@@ -155,7 +155,7 @@ if (!toast().textContent.includes("回應中")) {
 //     moment it is most likely to happen: the values just saved are what it
 //     reads at start-up, and a service set to restart on failure crash-loops on
 //     a combination it refuses.
-serviceStatus = { supported: true, installed: true, running: false, pid: 0, unitPath: "/u", logHint: "/var/log/agenthub-node.log" };
+serviceStatus = { supported: true, installed: true, running: false, pid: 0, unitPath: "/u", logHint: "/var/log/agenthallway-node.log" };
 app.state.service = serviceStatus;
 el("node-autowake").checked = true;
 const cameBackView = { settings: { peerListen: "127.0.0.1:7463", allowLan: false, autoWake: true }, sources: {}, saved: { peerListen: "127.0.0.1:7463", allowLan: false, autoWake: true }, restartRequired: true };
@@ -171,7 +171,7 @@ if (afterFailedRestart.includes("回應中")) {
 if (!afterFailedRestart.includes("沒有在執行")) {
   failures.push(`a stopped service was not reported: ${afterFailedRestart}`);
 }
-if (!afterFailedRestart.includes("/var/log/agenthub-node.log")) {
+if (!afterFailedRestart.includes("/var/log/agenthallway-node.log")) {
   failures.push("the log path was not offered when the node failed to come back");
 }
 if (toast().className.includes("ok")) {
@@ -222,7 +222,7 @@ restartCalls = 0;
 await app.saveNodeSettings();
 await tick();
 if (restartCalls !== 1) failures.push(`a node that is not a service was restarted ${restartCalls} times, want 1`);
-if (!toast().textContent.includes("AgentHub 已重新啟動並回應中")) {
+if (!toast().textContent.includes("Agent Hallway 已重新啟動並回應中")) {
   failures.push(`a node that came back was not confirmed: ${toast().textContent}`);
 }
 
@@ -782,7 +782,7 @@ if (app.coversAddress("not-a-range", "10.1.2.3:7463") !== false) failures.push("
 //      window must not call that a success.
 //
 //      The node writes what it was given on the command line back into its own
-//      store (cmd/agenthub-node/main.go), so after the restart the stored value
+//      store (cmd/agenthallway-node/main.go), so after the restart the stored value
 //      IS the unit's flag and `sources`/`saved`/`settings` all agree. Nothing
 //      in the answer says the owner's value was replaced — the only evidence is
 //      that what they asked for is not what is there.
@@ -875,7 +875,7 @@ if (restartFailed.includes("儲存連線設定失敗")) {
 if (!restartFailed.includes("設定已儲存")) {
   failures.push(`the owner was not told the save itself landed: ${restartFailed}`);
 }
-if (!restartFailed.includes("重新啟動 AgentHub 失敗") || !restartFailed.includes("背景服務區")) {
+if (!restartFailed.includes("重新啟動 Agent Hallway 失敗") || !restartFailed.includes("背景服務區")) {
   failures.push(`the owner was not told what to do about the node still running old settings: ${restartFailed}`);
 }
 if (saveCalls.length !== 1) failures.push(`the write was sent ${saveCalls.length} times`);

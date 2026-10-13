@@ -17,7 +17,7 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:     "AgentHub",
+		Title:     "Agent Hallway",
 		Width:     1280,
 		Height:    840,
 		MinWidth:  900,
@@ -30,7 +30,7 @@ func main() {
 		Mac: &mac.Options{
 			TitleBar: mac.TitleBarHiddenInset(),
 			About: &mac.AboutInfo{
-				Title:   "AgentHub",
+				Title:   "Agent Hallway",
 				Message: "Local-first session registry for coding agents.",
 			},
 		},

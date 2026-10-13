@@ -16,7 +16,7 @@ import (
 // packet can be well-formed DNS carrying a service record from something else
 // entirely, and dropping it is the caller's job, not the parser's.
 func FuzzParseAnnouncements(f *testing.F) {
-	valid, err := buildAnnouncement("node_paired000000000", "agenthub-seed", 7463,
+	valid, err := buildAnnouncement("node_paired000000000", "agenthallway-seed", 7463,
 		[]netip.Addr{netip.MustParseAddr("192.0.2.10"), netip.MustParseAddr("2001:db8::1")}, Offer{})
 	if err != nil {
 		f.Fatal(err)
@@ -24,7 +24,7 @@ func FuzzParseAnnouncements(f *testing.F) {
 	f.Add(valid)
 	// An offering seed as well: the fields a candidate carries are parsed by
 	// the same code path and are the ones an attacker chooses.
-	offeringSeed, err := buildAnnouncement("node_offering0000000", "agenthub-seed", 7463,
+	offeringSeed, err := buildAnnouncement("node_offering0000000", "agenthallway-seed", 7463,
 		[]netip.Addr{netip.MustParseAddr("192.168.1.42")},
 		Offer{DisplayName: "laptop", Platform: "linux/amd64", Fingerprint: "1223 03EA 5E96 543A 2DD8 BFEA"})
 	if err != nil {

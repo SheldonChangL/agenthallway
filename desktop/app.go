@@ -38,7 +38,7 @@ type App struct {
 }
 
 func NewApp() *App {
-	nodeURL := os.Getenv("AGENTHUB_URL")
+	nodeURL := os.Getenv("AGENTHALLWAY_URL")
 	if nodeURL == "" {
 		nodeURL = defaultNodeURL
 	}

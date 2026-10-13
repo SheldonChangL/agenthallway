@@ -24,7 +24,7 @@ import (
 // platform where a setting is most likely to need a restart, the only thing
 // left was Task Manager. That is not an instruction a window may hand out.
 //
-// So this file is the fallback: stop whatever agenthub-node is running on this
+// So this file is the fallback: stop whatever agenthallway-node is running on this
 // machine, start the one that shipped beside this app, and wait until it
 // answers. It is the app's own last resort, not a service: the node it starts
 // is registered with nothing and will not come back at the next login. Windows
@@ -58,7 +58,7 @@ func (a *App) RestartNode() (ServiceResult, error) {
 	return a.restartNodeProcess()
 }
 
-// restartNodeProcess stops every agenthub-node on this machine and starts the
+// restartNodeProcess stops every agenthallway-node on this machine and starts the
 // one beside this app, detached, with its output going to a file, on the
 // arguments the stopped one was started with.
 func (a *App) restartNodeProcess() (ServiceResult, error) {
@@ -149,7 +149,7 @@ func (a *App) restartNodeProcess() (ServiceResult, error) {
 	// database, so it waits for the process itself.
 	if running != nil {
 		if err := waitForProcessGone(ctx, running.PID); err != nil {
-			return result, fmt.Errorf("agenthub-node (pid %d) was asked to stop and has not exited (%v), so it was "+
+			return result, fmt.Errorf("agenthallway-node (pid %d) was asked to stop and has not exited (%v), so it was "+
 				"not restarted: a second node on the same database would fail to start and leave nothing running",
 				running.PID, err)
 		}
@@ -211,7 +211,7 @@ func (a *App) restartNodeProcess() (ServiceResult, error) {
 	return result, nil
 }
 
-// nodeProcess is one agenthub-node running on this machine and the command
+// nodeProcess is one agenthallway-node running on this machine and the command
 // line it was started with, argv[0] included.
 type nodeProcess struct {
 	PID  int
@@ -271,7 +271,7 @@ func planFromRunningNodes(ctx context.Context) (nodeRestartPlan, *nodeProcess, e
 			pids = append(pids, fmt.Sprint(process.PID))
 		}
 		return nodeRestartPlan{}, nil, refuse(fmt.Sprintf(
-			"%d agenthub-node processes are running (pids %s), and stopping by name stops all of them "+
+			"%d agenthallway-node processes are running (pids %s), and stopping by name stops all of them "+
 				"to bring back one", len(processes), strings.Join(pids, ", ")))
 	}
 	running := processes[0]
@@ -284,7 +284,7 @@ func planFromRunningNodes(ctx context.Context) (nodeRestartPlan, *nodeProcess, e
 }
 
 // listNodesSettled is listNodes, asked again a few times when it fails the
-// way a listing fails that caught an agenthub-node on its way out: macOS
+// way a listing fails that caught an agenthallway-node on its way out: macOS
 // answers kern.procargs2 for a process that is exiting and not yet a zombie
 // with EINVAL, and a process gone between being listed and being read is
 // ESRCH. That process is not taken for gone — nothing is known about it until
@@ -349,7 +349,7 @@ func openNodeLog(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 }
 
-// waitForProcessGone waits until no agenthub-node with this pid is listed,
+// waitForProcessGone waits until no agenthallway-node with this pid is listed,
 // for as long as a stop is given, and says why not when it is still there.
 // A listing that fails is asked again: a process on its way out can be caught
 // half-gone, which some platforms answer with an error.

@@ -30,7 +30,7 @@ func (listTestSigner) Sign([]byte) []byte { return make([]byte, ed25519.Signatur
 func realNode(t *testing.T) (*registry.Registry, *httptest.Server) {
 	t.Helper()
 	ctx := context.Background()
-	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestSettingsSaysADegradedNodeRetries(t *testing.T) {
 // which is what a zero announceableAddresses alone used to be read as.
 func TestPairingOnAgainstANodeWithoutDiscoverySaysDiscoveryIsOff(t *testing.T) {
 	ctx := context.Background()
-	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

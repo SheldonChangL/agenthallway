@@ -69,7 +69,7 @@ func newPairNodeWith(t *testing.T, name string, extra func(peerAddress string) [
 		ID: nodeID, DisplayName: name, Platform: "test",
 		PublicKey: identity.EncodePublicKey(keypair.Public), Fingerprint: keypair.Fingerprint(),
 	}
-	dbPath := filepath.Join(directory, "agenthub.db")
+	dbPath := filepath.Join(directory, "agenthallway.db")
 	store, err := registry.Open(ctx, dbPath)
 	if err != nil {
 		t.Fatal(err)
@@ -499,7 +499,7 @@ func TestPairingAgainstAnOlderNodeSaysSo(t *testing.T) {
 	}
 }
 
-// fakePeer is a TLS listener that is not an AgentHub node, presenting a key of
+// fakePeer is a TLS listener that is not an Agent Hallway node, presenting a key of
 // its own, and returns its address.
 func fakePeer(t *testing.T, handler http.HandlerFunc) string {
 	t.Helper()

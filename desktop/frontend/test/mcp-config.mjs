@@ -1,7 +1,7 @@
 // Drives openMCPConfig and the dialog it opens.
 //
 // The per-row "MCP 設定" button is gone on purpose: `ah` does everything the
-// four MCP tools do, the agenthub-watch skill goes through `ah`, and a button
+// four MCP tools do, the agenthallway-watch skill goes through `ah`, and a button
 // an owner needs once does not belong on all thousand rows. What it produced
 // still has to be right for anyone who restores it or calls it another way,
 // and getting the session wrong binds an agent to somebody else's session
@@ -33,8 +33,8 @@ globalThis.setInterval = () => 0;
 const noop = async () => ({});
 const calls = [];
 let answer = async (sessionId) => ({
-  text: `{\n  "mcpServers": {\n    "agenthub": {\n      "command": "/abs/bin/agenthub-mcp",\n      "args": ["-as", ${JSON.stringify(sessionId)}, "-url", "http://127.0.0.1:7462"]\n    }\n  }\n}\n`,
-  command: "/abs/bin/agenthub-mcp",
+  text: `{\n  "mcpServers": {\n    "agenthallway": {\n      "command": "/abs/bin/agenthallway-mcp",\n      "args": ["-as", ${JSON.stringify(sessionId)}, "-url", "http://127.0.0.1:7462"]\n    }\n  }\n}\n`,
+  command: "/abs/bin/agenthallway-mcp",
 });
 const mcpStub = async (sessionId) => {
   calls.push(sessionId);
@@ -107,7 +107,7 @@ const shown = el("mcp-text").serialize();
 if (!shown.includes("-as") || !shown.includes("claude:the-one-clicked")) {
   failures.push(`the snippet was not displayed: ${shown}`);
 }
-if (!shown.includes("/abs/bin/agenthub-mcp")) {
+if (!shown.includes("/abs/bin/agenthallway-mcp")) {
   failures.push("the absolute path the config names was not shown");
 }
 if (!el("mcp-title").textContent.includes("claude:the-one-clicked")) {
@@ -138,7 +138,7 @@ if (!hostile.includes("&lt;img")) {
 
 // 4. A clipboard that refused must say so. Reporting "已複製" here sends
 //    someone to paste whatever they had copied before into a config file.
-answer = async () => ({ text: "{}\n", command: "/abs/bin/agenthub-mcp" });
+answer = async () => ({ text: "{}\n", command: "/abs/bin/agenthallway-mcp" });
 copyFails = true;
 await openMCPConfig("claude:x");
 copyFails = false;
@@ -150,13 +150,13 @@ if (!refused.includes("無法寫入剪貼簿") || !refused.includes("手動複�
   failures.push(`a refused clipboard did not ask for a manual copy: ${refused}`);
 }
 
-// 5. A failed call is not an empty snippet. The likeliest one is agenthub-mcp
+// 5. A failed call is not an empty snippet. The likeliest one is agenthallway-mcp
 //    not being found, and the reason says where it looked — in the dialog,
 //    because the dialog covers the banner.
-answer = async () => { throw new Error("agenthub-mcp was not found (looked: $AGENTHUB_MCP=, PATH)"); };
+answer = async () => { throw new Error("agenthallway-mcp was not found (looked: $AGENTHALLWAY_MCP=, PATH)"); };
 await openMCPConfig("claude:x");
 const failed = el("mcp-status").serialize();
-if (!failed.includes("agenthub-mcp was not found")) {
+if (!failed.includes("agenthallway-mcp was not found")) {
   failures.push(`the reason the config could not be built was not shown: ${failed}`);
 }
 if (failed.includes("已複製到剪貼簿")) {
@@ -167,7 +167,7 @@ if (el("mcp-text").textContent !== "") {
 }
 
 // 6. Closing clears it, so the next row does not open onto the last one's.
-answer = async (sessionId) => ({ text: `{"as":"${sessionId}"}`, command: "/abs/bin/agenthub-mcp" });
+answer = async (sessionId) => ({ text: `{"as":"${sessionId}"}`, command: "/abs/bin/agenthallway-mcp" });
 await openMCPConfig("claude:first");
 closeMCPConfig();
 if (!el("mcp-modal").classList.contains("hidden")) {
@@ -186,9 +186,9 @@ let releaseFirst;
 answer = (sessionId) =>
   sessionId === "claude:slow"
     ? new Promise((resolve) => {
-        releaseFirst = () => resolve({ text: `{"as":"claude:slow"}`, command: "/abs/bin/agenthub-mcp" });
+        releaseFirst = () => resolve({ text: `{"as":"claude:slow"}`, command: "/abs/bin/agenthallway-mcp" });
       })
-    : Promise.resolve({ text: `{"as":"${sessionId}"}`, command: "/abs/bin/agenthub-mcp" });
+    : Promise.resolve({ text: `{"as":"${sessionId}"}`, command: "/abs/bin/agenthallway-mcp" });
 copied.length = 0;
 const slow = openMCPConfig("claude:slow");
 closeMCPConfig();
@@ -213,7 +213,7 @@ if (copied.length !== 1) {
 
 // 7. The warnings are in the markup. The snippet is correct and still
 //    misleading without them: an MCP config is per-project, so a second Claude
-//    Code started in the same directory launches a second agenthub-mcp under
+//    Code started in the same directory launches a second agenthallway-mcp under
 //    this same id (issue #104), and reading is all the config buys until the
 //    owner opens the session's outbound gate.
 //    The markup carries keys now, so the sentences are checked where they

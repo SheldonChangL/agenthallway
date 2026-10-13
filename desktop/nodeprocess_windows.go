@@ -12,9 +12,9 @@ import (
 )
 
 // nodeExecutable is what the running node is called in the task list.
-const nodeExecutable = "agenthub-node.exe"
+const nodeExecutable = "agenthallway-node.exe"
 
-// stopNodeProcesses ends every agenthub-node on this machine.
+// stopNodeProcesses ends every agenthallway-node on this machine.
 //
 // /F because the node has no window to close politely and no unflushed state
 // of its own: every write it makes is a committed SQLite transaction. This is
@@ -67,5 +67,5 @@ func nodeLogDir() (string, error) {
 		}
 		base = filepath.Join(home, "AppData", "Local")
 	}
-	return filepath.Join(base, "agenthub"), nil
+	return filepath.Join(base, "agenthallway"), nil
 }

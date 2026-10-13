@@ -29,7 +29,7 @@ func sequenceOf(t *testing.T, envelope protocol.Envelope) uint64 {
 // it has already seen would have to refuse the restarted sender forever.
 func TestHeartbeatSequenceSurvivesBuildersAndRestarts(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 	store, err := registry.Open(ctx, path)
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestHeartbeatSequenceIsSharedByEveryBuild(t *testing.T) {
 // against the ones it already holds.
 func TestHeartbeatIsNotBuiltWithoutASequence(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 	store, err := registry.Open(ctx, path)
 	if err != nil {
 		t.Fatal(err)

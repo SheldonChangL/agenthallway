@@ -294,7 +294,7 @@ func (d *Driver) holdUntilOver(threadID string, held *lane, client Conversation,
 // TurnTrigger marks a turn as one this node started.
 //
 // Recorded by Codex, so an owner reading their own Codex history can see which
-// turns came from here without having to take AgentHub's audit trail on trust.
+// turns came from here without having to take Agent Hallway's audit trail on trust.
 const TurnTrigger = "agenthub-wake"
 
 // ContextKey names the fragment carrying the peer's words.

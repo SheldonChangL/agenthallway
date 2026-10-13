@@ -61,7 +61,7 @@ type ContextEntry struct {
 // ContextUntrusted marks a fragment as written by somebody else.
 const ContextUntrusted = "untrusted"
 
-// StartTurnParams is what AgentHub sends to start one turn.
+// StartTurnParams is what Agent Hallway sends to start one turn.
 type StartTurnParams struct {
 	ThreadID          string                  `json:"threadId"`
 	Input             []TurnInput             `json:"input"`
@@ -124,7 +124,7 @@ func (c *Client) StartTurn(ctx context.Context, params StartTurnParams) (TurnRes
 // recognise is one nobody is present to answer.
 func RefuseUnattendedApprovals(reason string) RequestHandler {
 	if reason == "" {
-		reason = "this turn was started automatically by AgentHub and nobody is present to approve anything"
+		reason = "this turn was started automatically by Agent Hallway and nobody is present to approve anything"
 	}
 	return func(_ context.Context, method string, _ json.RawMessage) (any, error) {
 		switch method {

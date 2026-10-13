@@ -13,7 +13,7 @@ import (
 // Starting the node again the way it was started (#205).
 //
 // The node's identity is its database: the node id is a row in it and node.key
-// sits beside it (cmd/agenthub-node/main.go, identity.LoadOrCreate and
+// sits beside it (cmd/agenthallway-node/main.go, identity.LoadOrCreate and
 // LoadOrCreateKeypair(filepath.Dir(dbPath))). A restart that drops a --db the
 // node was started with brings up a different node — a new id, a new key, and
 // every paired machine no longer recognising this one — and nothing about that
@@ -25,9 +25,9 @@ import (
 // arguments the running node was started with, parsed against the node's flag
 // table, so the restart can hand the same ones to the node it starts.
 
-// nodeFlagTakesValue is every flag agenthub-node defines, and whether it
+// nodeFlagTakesValue is every flag agenthallway-node defines, and whether it
 // consumes a value (true) or is a boolean (false). A copy of
-// cmd/agenthub-node/main.go, because this module shares no code with the node;
+// cmd/agenthallway-node/main.go, because this module shares no code with the node;
 // TestNodeFlagTableMatchesTheNode reads the node's source so the two cannot
 // drift. A flag this table does not know is a command line this app cannot
 // read, and the restart refuses rather than guessing where its value ends.
@@ -189,7 +189,7 @@ func planNodeRestart(running nodeProcess, appPaths func() (nodePaths, error)) (n
 		kept = append(kept, argument.words...)
 	}
 
-	// The restart stops every agenthub-node by name and waits on this app's
+	// The restart stops every agenthallway-node by name and waits on this app's
 	// address; a node listening somewhere else is not the one this window
 	// talks to, and the one started in its place would not be either.
 	if want := defaultNodeListen(); listen != "" && listen != want {

@@ -27,7 +27,7 @@ var ErrSessionNotFound = errors.New("no such session on this node")
 // Client talks to the owner's local HTTP API.
 //
 // This server deliberately has no other way in. It does not open the SQLite
-// file, so agenthub-node stays the only writer, and it cannot read anything the
+// file, so agenthallway-node stays the only writer, and it cannot read anything the
 // owner's API would not already hand to the desktop app or the CLI. That also
 // means the audience filtering applied on the way out of the node applies here
 // too, rather than being a second implementation that could drift.

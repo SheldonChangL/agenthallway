@@ -12,8 +12,8 @@ import (
 func TestInstalledCommandRoundTripsWhatWasWritten(t *testing.T) {
 	// A path with a space in it, because that is the argument systemd quoting
 	// exists for and the one a naive split gets wrong.
-	database := "/home/a user/Library/Application Support/agenthub/agenthub.db"
-	binary := "/opt/agent hub/bin/agenthub-node"
+	database := "/home/a user/Library/Application Support/agenthallway/agenthallway.db"
+	binary := "/opt/agent hub/bin/agenthallway-node"
 	config := Config{
 		NodeBinary: binary,
 		Args:       []string{"--db", database},
@@ -66,14 +66,14 @@ func TestInstalledCommandOnAUnitWithNoDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	content, err := LaunchdPlist(Config{NodeBinary: "/bin/agenthub-node", LogPath: "/tmp/node.log"})
+	content, err := LaunchdPlist(Config{NodeBinary: "/bin/agenthallway-node", LogPath: "/tmp/node.log"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	writeUnitForTest(t, path, content)
 
 	program, args := manager.InstalledCommand()
-	if program != "/bin/agenthub-node" {
+	if program != "/bin/agenthallway-node" {
 		t.Errorf("program = %q", program)
 	}
 	if len(args) != 0 {
@@ -103,8 +103,8 @@ func TestInstalledCommandSeesFlagsAUnitStillCarries(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeUnitForTest(t, path, SystemdUnit(Config{
-		NodeBinary: "/bin/agenthub-node",
-		Args: []string{"--db", "/data/agenthub.db", "--peer-listen", "122.122.122.1:7463",
+		NodeBinary: "/bin/agenthallway-node",
+		Args: []string{"--db", "/data/agenthallway.db", "--peer-listen", "122.122.122.1:7463",
 			"--allow-lan", "--discover", "--treat-as-private", "122.122.0.0/16"},
 		LogPath: "/tmp/node.log",
 	}))
@@ -113,7 +113,7 @@ func TestInstalledCommandSeesFlagsAUnitStillCarries(t *testing.T) {
 	if got := ArgumentValue(args, "peer-listen"); got != "122.122.122.1:7463" {
 		t.Errorf("--peer-listen = %q, want the address burned into the unit", got)
 	}
-	if got := ArgumentValue(args, "db"); got != "/data/agenthub.db" {
+	if got := ArgumentValue(args, "db"); got != "/data/agenthallway.db" {
 		t.Errorf("--db = %q", got)
 	}
 }

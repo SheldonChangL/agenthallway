@@ -53,7 +53,7 @@ const settle = () => new Promise((resolve) => realSetTimeout(resolve, 0));
 const el = (id) => document.getElementById(id);
 
 const base = { status: "idle", management: "unmanaged", audience: { mode: "none" }, lastSeenAt: "2026-10-01T00:00:00Z" };
-const longPath = "/home/alex/projects/a-very-long-directory-name-that-the-column-clips/agenthub";
+const longPath = "/home/alex/projects/a-very-long-directory-name-that-the-column-clips/agenthallway";
 const claude = { ...base, provider: "claude", id: "claude:d30366c4-260c-453d-add2-de7fb3d8cdae",
   providerSessionId: "d30366c4-260c-453d-add2-de7fb3d8cdae", cwd: longPath };
 const codex = { ...base, provider: "codex", id: "codex:019a2b3c-thread", providerSessionId: "019a2b3c-thread", cwd: "/p/codex" };

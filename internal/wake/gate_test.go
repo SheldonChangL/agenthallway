@@ -40,7 +40,7 @@ func (d *recordingDriver) count() int {
 func gateFixture(t *testing.T, autoWake bool) (*registry.Registry, *recordingDriver, *Gate, model.Session) {
 	t.Helper()
 	ctx := context.Background()
-	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

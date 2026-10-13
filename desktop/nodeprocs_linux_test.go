@@ -85,7 +85,7 @@ func nulTerminated(entries []string) string {
 }
 
 var (
-	linuxNodeArgv = []string{"/usr/local/bin/agenthub-node", "--db", "/home/me/a b/agenthub.db"}
+	linuxNodeArgv = []string{"/usr/local/bin/agenthallway-node", "--db", "/home/me/a b/agenthallway.db"}
 	linuxNodeEnv  = []string{"HOME=/home/me", "XDG_CONFIG_HOME=/home/me/.config"}
 )
 
@@ -323,8 +323,8 @@ func TestLinuxListingAsksAgainANodeReadCutShort(t *testing.T) {
 	nodeListRetryInterval = time.Millisecond
 
 	const pid = 500
-	longArgv := []string{"/usr/local/bin/agenthub-node", "--display-name", strings.Repeat("n", 600),
-		"--db", "/home/me/a b/agenthub.db"}
+	longArgv := []string{"/usr/local/bin/agenthallway-node", "--display-name", strings.Repeat("n", 600),
+		"--db", "/home/me/a b/agenthallway.db"}
 	longEnv := []string{"HOME=/home/me", "FILLER=" + strings.Repeat("f", 600), "XDG_CONFIG_HOME=/home/me/.config"}
 	newProc := func(t *testing.T) *fakeProc {
 		proc := newFakeProc(t)

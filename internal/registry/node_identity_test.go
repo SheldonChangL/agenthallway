@@ -14,7 +14,7 @@ import (
 
 func identityStore(t *testing.T) *Registry {
 	t.Helper()
-	return openRegistryAt(t, filepath.Join(t.TempDir(), "agenthub.db"))
+	return openRegistryAt(t, filepath.Join(t.TempDir(), "agenthallway.db"))
 }
 
 func seedIdentity(t *testing.T, store *Registry, name string) model.NodeIdentity {
@@ -74,7 +74,7 @@ func TestRenamingANodeLeavesItsIdentityIntact(t *testing.T) {
 // follows the machine — undoing the owner's choice on the next restart.
 func TestWhetherTheNameWasPickedIsRemembered(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 	store := openRegistryAt(t, path)
 	seedIdentity(t, store, "read from the machine")
 
@@ -117,7 +117,7 @@ func TestWhetherTheNameWasPickedIsRemembered(t *testing.T) {
 // Reading them as chosen would pin the wrong names this change exists to fix.
 func TestAnOlderDatabaseGainsProvenanceAndReadsAsUnchosen(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 	store := openRegistryAt(t, path)
 	seedIdentity(t, store, "J-SomeoneElse.example.com.tw")
 	// Drop the column to stand in for a database written by the earlier build.

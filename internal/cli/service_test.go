@@ -45,7 +45,7 @@ func useFakeManager(t *testing.T, goos string) (home string, runner *recordingRu
 
 func fakeNodeBinary(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "agenthub-node")
+	path := filepath.Join(t.TempDir(), "agenthallway-node")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestServiceInstallCarriesTheNodesFlagsByTheNodesNames(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	args := []string{"--url", server.URL, "service", "install",
 		"--node-binary", node,
-		"--db", "data/agenthub.db", // relative on purpose
+		"--db", "data/agenthallway.db", // relative on purpose
 		"--peer-listen", "122.122.122.1:7463", "--peer-listen", "192.168.1.10:7463",
 		"--allow-lan", "--discover",
 		"--treat-as-private", "122.122.0.0/16", "--treat-as-private", "10.9.0.0/16",
@@ -86,7 +86,7 @@ func TestServiceInstallCarriesTheNodesFlagsByTheNodesNames(t *testing.T) {
 	wd, _ := os.Getwd()
 	wantArgs := []string{
 		node,
-		"--db", filepath.Join(wd, "data", "agenthub.db"),
+		"--db", filepath.Join(wd, "data", "agenthallway.db"),
 		"--peer-listen", "122.122.122.1:7463", "--peer-listen", "192.168.1.10:7463",
 		"--allow-lan=true", "--discover=true",
 		"--treat-as-private", "122.122.0.0/16", "--treat-as-private", "10.9.0.0/16",
@@ -309,7 +309,7 @@ func TestServiceUnknownSubcommandIsRefused(t *testing.T) {
 // this test rather than pass it.
 func TestServiceRunNodeStartsTheNodeAndReturns(t *testing.T) {
 	directory := t.TempDir()
-	node := filepath.Join(directory, "agenthub-node")
+	node := filepath.Join(directory, "agenthallway-node")
 	script := "#!/bin/sh\necho started with: \"$@\"\n"
 	if err := os.WriteFile(node, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -424,7 +424,7 @@ func TestServiceInstallSaysBakedInFlagsOverrideSavedSettings(t *testing.T) {
 	binary := fakeNodeBinary(t)
 	var stdout, stderr bytes.Buffer
 	code := Run(context.Background(), []string{"--url", node.URL, "service", "install",
-		"--db", filepath.Join(t.TempDir(), "agenthub.db"), "--node-binary", binary, "--discover"}, &stdout, &stderr)
+		"--db", filepath.Join(t.TempDir(), "agenthallway.db"), "--node-binary", binary, "--discover"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
 	}
@@ -439,7 +439,7 @@ func TestServiceInstallSaysBakedInFlagsOverrideSavedSettings(t *testing.T) {
 	// every install is a note nobody reads.
 	var plain, plainErr bytes.Buffer
 	if code := Run(context.Background(), []string{"--url", node.URL, "service", "install",
-		"--db", filepath.Join(t.TempDir(), "agenthub.db"), "--node-binary", binary}, &plain, &plainErr); code != 0 {
+		"--db", filepath.Join(t.TempDir(), "agenthallway.db"), "--node-binary", binary}, &plain, &plainErr); code != 0 {
 		t.Fatalf("exit = %d, stderr = %q", code, plainErr.String())
 	}
 	if strings.Contains(plain.String(), "overrides anything saved later") {

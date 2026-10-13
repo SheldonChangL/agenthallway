@@ -778,7 +778,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request) {
 		// Leaving this machine needs a session whose owner opened outbound.
 		//
 		// The gate is per session, and until now it was checked only in
-		// agenthub-mcp — a client of this node. Any process here could post to
+		// agenthallway-mcp — a client of this node. Any process here could post to
 		// this endpoint directly and bypass it, and this node cannot tell the
 		// owner's CLI from an agent that was talked into calling it: both are
 		// loopback. So the message has to be attributed to a local session,

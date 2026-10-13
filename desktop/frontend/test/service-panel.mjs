@@ -39,7 +39,7 @@ configure({
   RestartNode: async () => {
     restartCalls += 1;
     if (restartRefusal) throw restartRefusal;
-    return { command: "agenthub-node（停止後重新啟動）", output: "節點在 http://127.0.0.1:7462 回應了" };
+    return { command: "agenthallway-node（停止後重新啟動）", output: "節點在 http://127.0.0.1:7462 回應了" };
   },
 });
 const app = boot({ start: false });
@@ -57,7 +57,7 @@ app.renderService();
 if (hidden("service-restart")) {
   failures.push("no way to restart the node on a platform with no background service");
 }
-if (el("service-restart").textContent !== "重新啟動 AgentHub") {
+if (el("service-restart").textContent !== "重新啟動 Agent Hallway") {
   failures.push(`the button on a running node reads "${el("service-restart").textContent}"`);
 }
 if (!hidden("service-open") || !hidden("service-uninstall")) {
@@ -67,7 +67,7 @@ if (!hidden("service-open") || !hidden("service-uninstall")) {
 // 2. Same platform, node not running: the same button, named for what it does.
 app.state.nodeReachable = false;
 app.renderService();
-if (hidden("service-restart") || el("service-restart").textContent !== "啟動 AgentHub") {
+if (hidden("service-restart") || el("service-restart").textContent !== "啟動 Agent Hallway") {
   failures.push(`a stopped node was not offered a start: hidden=${hidden("service-restart")} text=${el("service-restart").textContent}`);
 }
 

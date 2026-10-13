@@ -24,19 +24,19 @@ func TestShellCommandLineQuotesForEachShell(t *testing.T) {
 		args    []string
 		want    string
 	}{
-		{"darwin", "/Applications/AgentHub.app/Contents/MacOS/agenthub-node",
-			[]string{"--db", "/Users/me/Library/Application Support/agenthub/agenthub.db"},
-			`/Applications/AgentHub.app/Contents/MacOS/agenthub-node --db '/Users/me/Library/Application Support/agenthub/agenthub.db'`},
-		{"linux", "/usr/bin/agenthub-node",
+		{"darwin", "/Applications/agenthallway-desktop.app/Contents/MacOS/agenthallway-node",
+			[]string{"--db", "/Users/me/Library/Application Support/agenthallway/agenthallway.db"},
+			`/Applications/agenthallway-desktop.app/Contents/MacOS/agenthallway-node --db '/Users/me/Library/Application Support/agenthallway/agenthallway.db'`},
+		{"linux", "/usr/bin/agenthallway-node",
 			[]string{"--db", "/srv/$HOME/`x`/it's/a.db", "", "=x", `back\slash`, "-listen", "127.0.0.1:7462"},
-			`/usr/bin/agenthub-node --db '/srv/$HOME/` + "`x`" + `/it'\''s/a.db' '' '=x' 'back\slash' -listen 127.0.0.1:7462`},
-		{"windows", `C:\Program Files\AgentHub\agenthub-node.exe`,
-			[]string{"--db", `C:\Users\me\My Data\agenthub.db`, "--display-name", "it's $me `now` \u2019q", "--", "-discover"},
-			`& 'C:\Program Files\AgentHub\agenthub-node.exe' --db 'C:\Users\me\My Data\agenthub.db' --display-name 'it''s $me ` +
+			`/usr/bin/agenthallway-node --db '/srv/$HOME/` + "`x`" + `/it'\''s/a.db' '' '=x' 'back\slash' -listen 127.0.0.1:7462`},
+		{"windows", `C:\Program Files\Agent Hallway\agenthallway-node.exe`,
+			[]string{"--db", `C:\Users\me\My Data\agenthallway.db`, "--display-name", "it's $me `now` \u2019q", "--", "-discover"},
+			`& 'C:\Program Files\Agent Hallway\agenthallway-node.exe' --db 'C:\Users\me\My Data\agenthallway.db' --display-name 'it''s $me ` +
 				"`now`" + ` ` + "\u2019\u2019" + `q' '--' -discover`},
-		{"windows", `C:\agenthub\agenthub-node.exe`,
+		{"windows", `C:\agenthallway\agenthallway-node.exe`,
 			[]string{"--db", `C:\a\x.db`, "--db=C:\\x", "--%", "-a.b", "1e5", "-listen", "127.0.0.1:7462", "", "---x", "-"},
-			`& 'C:\agenthub\agenthub-node.exe' --db 'C:\a\x.db' '--db=C:\x' '--%' '-a.b' '1e5' -listen '127.0.0.1:7462' '' '---x' '-'`},
+			`& 'C:\agenthallway\agenthallway-node.exe' --db 'C:\a\x.db' '--db=C:\x' '--%' '-a.b' '1e5' -listen '127.0.0.1:7462' '' '---x' '-'`},
 	} {
 		if got := shellCommandLine(tc.goos, tc.program, tc.args); got != tc.want {
 			t.Errorf("%s %q:\n  got  %s\n  want %s", tc.goos, tc.args, got, tc.want)
@@ -47,7 +47,7 @@ func TestShellCommandLineQuotesForEachShell(t *testing.T) {
 // TestPrintArgsHelper is not a test: it is the program the command lines in
 // TestCommandLineSurvivesTheShell run, and it prints the arguments it got.
 func TestPrintArgsHelper(t *testing.T) {
-	if os.Getenv("AGENTHUB_PRINT_ARGS_HELPER") != "1" {
+	if os.Getenv("AGENTHALLWAY_PRINT_ARGS_HELPER") != "1" {
 		t.Skip("helper process")
 	}
 	// Hex, so that no console code page between here and the test can
@@ -66,7 +66,7 @@ func TestCommandLineSurvivesTheShell(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := []string{"-test.run=^TestPrintArgsHelper$", "--",
-		"--db", filepath.Join("a dir", "Application Support", "agenthub.db"), "$HOME", "`whoami`", "it's",
+		"--db", filepath.Join("a dir", "Application Support", "agenthallway.db"), "$HOME", "`whoami`", "it's",
 		"\u2019curly\u2018", "%PATH%", "a;b", "(x)", "@y", "a&b", "a|b", "*", "~", "-a.b", "1e5", "-listen", "127.0.0.1:7462"}
 	var shells [][]string
 	if runtime.GOOS == "windows" {
@@ -99,7 +99,7 @@ func TestCommandLineSurvivesTheShell(t *testing.T) {
 		}
 		// #nosec G204 -- a shell at a fixed path, running this test's own binary.
 		command := exec.Command(shell[0], append(slices.Clone(shell[1:]), script)...)
-		command.Env = append(os.Environ(), "AGENTHUB_PRINT_ARGS_HELPER=1")
+		command.Env = append(os.Environ(), "AGENTHALLWAY_PRINT_ARGS_HELPER=1")
 		output, err := command.CombinedOutput()
 		if err != nil {
 			t.Fatalf("%s: %v\n%s\n%s", shell[0], err, line, output)

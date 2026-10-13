@@ -1,4 +1,4 @@
-// Package service installs agenthub-node as a per-user background service, so
+// Package service installs agenthallway-node as a per-user background service, so
 // the node outlives whichever terminal, agent or desktop window started it.
 //
 // The words a person meets are install, uninstall and status. launchd and
@@ -27,10 +27,10 @@ import (
 
 // Label names the service on both platforms. launchd sees it as the job
 // label; systemd sees it as the unit name (with .service appended).
-const Label = "local.agenthub.node"
+const Label = "local.agenthallway.node"
 
 // UnitName is the systemd unit, which follows its own naming convention.
-const UnitName = "agenthub-node"
+const UnitName = "agenthallway-node"
 
 // ErrUnsupported means this operating system has no service manager this
 // package knows how to drive.
@@ -38,7 +38,7 @@ var ErrUnsupported = errors.New("background service is supported on macOS (launc
 
 // Config is what the service will run.
 type Config struct {
-	// NodeBinary is the absolute path to agenthub-node. Absolute, because a
+	// NodeBinary is the absolute path to agenthallway-node. Absolute, because a
 	// service has no PATH worth relying on and no working directory of the
 	// owner's choosing.
 	NodeBinary string
@@ -136,7 +136,7 @@ func (m Manager) UnitPath() (string, error) {
 func (m Manager) DefaultLogPath() string {
 	switch m.GOOS {
 	case "darwin":
-		return filepath.Join(m.Home, "Library", "Logs", "agenthub", "node.log")
+		return filepath.Join(m.Home, "Library", "Logs", "agenthallway", "node.log")
 	case "windows":
 		return filepath.Join(m.windowsDataDir(), "node.log")
 	}
@@ -149,9 +149,9 @@ func (m Manager) DefaultLogPath() string {
 // without it.
 func (m Manager) windowsDataDir() string {
 	if base := os.Getenv("LOCALAPPDATA"); base != "" {
-		return filepath.Join(base, "agenthub")
+		return filepath.Join(base, "agenthallway")
 	}
-	return filepath.Join(m.Home, "AppData", "Local", "agenthub")
+	return filepath.Join(m.Home, "AppData", "Local", "agenthallway")
 }
 
 // Install writes the unit, registers it and starts it. An existing
@@ -334,8 +334,8 @@ func (m Manager) Uninstall(ctx context.Context) (Report, error) {
 		// The task starts the node and returns, so ending the task does not
 		// stop the node it started. Killing it by name is what actually stops
 		// the thing the owner asked to be rid of.
-		_, _ = m.Runner.Run(ctx, "taskkill", "/F", "/IM", "agenthub-node.exe")
-		report.Steps = append(report.Steps, "stopped agenthub-node")
+		_, _ = m.Runner.Run(ctx, "taskkill", "/F", "/IM", "agenthallway-node.exe")
+		report.Steps = append(report.Steps, "stopped agenthallway-node")
 	default:
 		return report, ErrUnsupported
 	}
@@ -401,8 +401,8 @@ func (m Manager) Restart(ctx context.Context) (Report, error) {
 		}
 		// Stopping the node, not the task: the task is the launcher, which
 		// exited seconds after it started the node. /End would end nothing.
-		_, _ = m.Runner.Run(ctx, "taskkill", "/F", "/IM", "agenthub-node.exe")
-		report.Steps = append(report.Steps, "stopped agenthub-node")
+		_, _ = m.Runner.Run(ctx, "taskkill", "/F", "/IM", "agenthallway-node.exe")
+		report.Steps = append(report.Steps, "stopped agenthallway-node")
 		if out, err := m.Runner.Run(ctx, "schtasks", "/Run", "/TN", TaskName); err != nil {
 			if taskAbsent(out, err) {
 				return report, fmt.Errorf("%s is not registered with Task Scheduler, so there is nothing to restart; "+
@@ -456,7 +456,7 @@ func (m Manager) Status(ctx context.Context) (Status, error) {
 		// the launcher: it is "Ready" a second after a successful start, and
 		// reporting that as not running would make every healthy node look
 		// stopped.
-		out, _ := m.Runner.Run(ctx, "tasklist", "/FI", "IMAGENAME eq agenthub-node.exe", "/FO", "CSV", "/NH")
+		out, _ := m.Runner.Run(ctx, "tasklist", "/FI", "IMAGENAME eq agenthallway-node.exe", "/FO", "CSV", "/NH")
 		status.Raw = strings.TrimSpace(out)
 		if match := tasklistPID.FindStringSubmatch(out); match != nil {
 			status.Running = true
@@ -469,16 +469,16 @@ func (m Manager) Status(ctx context.Context) (Status, error) {
 var (
 	launchdPID = regexp.MustCompile(`\bpid = (\d+)`)
 	systemdPID = regexp.MustCompile(`MainPID=(\d+)`)
-	// tasklist /FO CSV /NH answers `"agenthub-node.exe","1234","Console",...`.
+	// tasklist /FO CSV /NH answers `"agenthallway-node.exe","1234","Console",...`.
 	// A filter that matches nothing prints a sentence instead, which this does
 	// not match — deliberately, since that sentence is the node not running.
-	tasklistPID = regexp.MustCompile(`"agenthub-node\.exe","(\d+)"`)
+	tasklistPID = regexp.MustCompile(`"agenthallway-node\.exe","(\d+)"`)
 )
 
 // legacyStartupShortcuts are the names this product's own installers have put
 // in the Startup folder. Only these: a shortcut someone else made, or one an
 // owner wrote themselves, is not this package's to delete.
-var legacyStartupShortcuts = []string{"AgentHub Node.lnk", "agenthub-desktop Node.lnk"}
+var legacyStartupShortcuts = []string{"Agent Hallway Node.lnk", "agenthallway-desktop Node.lnk"}
 
 // removeLegacyStartupShortcuts deletes them and says which it removed.
 //
@@ -648,7 +648,7 @@ func SystemdUnit(config Config) []byte {
 		parts = append(parts, systemdQuote(argument))
 	}
 	return []byte(`[Unit]
-Description=AgentHub node (agenthub-node)
+Description=Agent Hallway node (agenthallway-node)
 After=network-online.target
 
 [Service]

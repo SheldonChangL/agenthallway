@@ -15,9 +15,9 @@ func TestSplitWindowsCommandLineReadsTheWayGoDoes(t *testing.T) {
 		line string
 		want []string
 	}{
-		{`"C:\Program Files\agenthub\agenthub-node.exe" --db "C:\Users\me\My Data\agenthub.db"`,
-			[]string{`C:\Program Files\agenthub\agenthub-node.exe`, "--db", `C:\Users\me\My Data\agenthub.db`}},
-		{`agenthub-node.exe --db C:\a\b.db`, []string{"agenthub-node.exe", "--db", `C:\a\b.db`}},
+		{`"C:\Program Files\agenthallway\agenthallway-node.exe" --db "C:\Users\me\My Data\agenthallway.db"`,
+			[]string{`C:\Program Files\agenthallway\agenthallway-node.exe`, "--db", `C:\Users\me\My Data\agenthallway.db`}},
+		{`agenthallway-node.exe --db C:\a\b.db`, []string{"agenthallway-node.exe", "--db", `C:\a\b.db`}},
 		{"a\tb  c", []string{"a", "b", "c"}},
 		{`x "a b c"  d  e`, []string{"x", "a b c", "d", "e"}},
 		{`x "ab\"c"  "\\"  d`, []string{"x", `ab"c`, `\`, "d"}},
@@ -32,7 +32,7 @@ func TestSplitWindowsCommandLineReadsTheWayGoDoes(t *testing.T) {
 		{`x """"Call Me Ishmael"" b c`, []string{"x", `"Call Me Ishmael"`, "b", "c"}},
 		// argv[0] is read by the same rules as the rest; CommandLineToArgvW
 		// reads it with no backslash escapes.
-		{`"C:\dir\\"agenthub-node.exe --db x`, []string{`C:\dir\agenthub-node.exe`, "--db", "x"}},
+		{`"C:\dir\\"agenthallway-node.exe --db x`, []string{`C:\dir\agenthallway-node.exe`, "--db", "x"}},
 		{`C:\a\"b c`, []string{`C:\a"b`, "c"}},
 		{`"" --db x`, []string{"", "--db", "x"}},
 	}

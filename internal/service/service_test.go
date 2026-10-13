@@ -40,7 +40,7 @@ func noSleep(time.Duration) {}
 
 func writeFakeNode(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "agenthub-node")
+	path := filepath.Join(t.TempDir(), "agenthallway-node")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -49,9 +49,9 @@ func writeFakeNode(t *testing.T) string {
 
 func TestLaunchdPlistCarriesEveryArgumentInOrderAndEscaped(t *testing.T) {
 	plist, err := LaunchdPlist(Config{
-		NodeBinary: "/opt/agenthub/agenthub-node",
-		Args:       []string{"--db", "/Users/me/data/agenthub.db", "--display-name", "desk & <lab>"},
-		LogPath:    "/Users/me/Library/Logs/agenthub/node.log",
+		NodeBinary: "/opt/agenthallway/agenthallway-node",
+		Args:       []string{"--db", "/Users/me/data/agenthallway.db", "--display-name", "desk & <lab>"},
+		LogPath:    "/Users/me/Library/Logs/agenthallway/node.log",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -59,14 +59,14 @@ func TestLaunchdPlistCarriesEveryArgumentInOrderAndEscaped(t *testing.T) {
 	text := string(plist)
 	wantInOrder := []string{
 		"<string>" + Label + "</string>",
-		"<string>/opt/agenthub/agenthub-node</string>",
+		"<string>/opt/agenthallway/agenthallway-node</string>",
 		"<string>--db</string>",
-		"<string>/Users/me/data/agenthub.db</string>",
+		"<string>/Users/me/data/agenthallway.db</string>",
 		"<string>--display-name</string>",
 		"<string>desk &amp; &lt;lab&gt;</string>",
 		"<key>RunAtLoad</key>",
 		"<key>KeepAlive</key>",
-		"<string>/Users/me/Library/Logs/agenthub/node.log</string>",
+		"<string>/Users/me/Library/Logs/agenthallway/node.log</string>",
 	}
 	position := 0
 	for _, want := range wantInOrder {
@@ -80,10 +80,10 @@ func TestLaunchdPlistCarriesEveryArgumentInOrderAndEscaped(t *testing.T) {
 
 func TestSystemdUnitQuotesWhatSystemdWouldMisread(t *testing.T) {
 	unit := string(SystemdUnit(Config{
-		NodeBinary: "/home/me/agenthub/bin/agenthub-node",
+		NodeBinary: "/home/me/agenthallway/bin/agenthallway-node",
 		Args:       []string{"--display-name", "the machine on my desk", "--treat-as-private", "122.122.0.0/16", "--db", "/home/me/100%/x.db"},
 	}))
-	want := `ExecStart=/home/me/agenthub/bin/agenthub-node --display-name "the machine on my desk" --treat-as-private 122.122.0.0/16 --db /home/me/100%%/x.db`
+	want := `ExecStart=/home/me/agenthallway/bin/agenthallway-node --display-name "the machine on my desk" --treat-as-private 122.122.0.0/16 --db /home/me/100%%/x.db`
 	if !strings.Contains(unit, want) {
 		t.Fatalf("unit ExecStart wrong:\n%s\nwant line:\n%s", unit, want)
 	}
@@ -116,7 +116,7 @@ func TestInstallOnDarwinWritesPlistThenBootstraps(t *testing.T) {
 	runner := &fakeRunner{}
 	manager := Manager{GOOS: "darwin", Home: home, UID: "501", Runner: runner, Sleep: noSleep}
 
-	report, err := manager.Install(context.Background(), Config{NodeBinary: node, Args: []string{"--db", "/x/agenthub.db", "--allow-lan"}})
+	report, err := manager.Install(context.Background(), Config{NodeBinary: node, Args: []string{"--db", "/x/agenthallway.db", "--allow-lan"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestInstallOnDarwinWritesPlistThenBootstraps(t *testing.T) {
 	if !strings.Contains(string(content), "<string>--allow-lan</string>") {
 		t.Errorf("plist lacks the node flag:\n%s", content)
 	}
-	logPath := filepath.Join(home, "Library", "Logs", "agenthub", "node.log")
+	logPath := filepath.Join(home, "Library", "Logs", "agenthallway", "node.log")
 	if !strings.Contains(string(content), logPath) {
 		t.Errorf("plist lacks the default log path %s", logPath)
 	}
@@ -207,10 +207,10 @@ func TestInstallOnLinuxWritesUnitReloadsThenEnables(t *testing.T) {
 
 func TestInstallRefusesARelativeOrMissingBinary(t *testing.T) {
 	manager := Manager{GOOS: "darwin", Home: t.TempDir(), UID: "501", Runner: &fakeRunner{}, Sleep: noSleep}
-	if _, err := manager.Install(context.Background(), Config{NodeBinary: "bin/agenthub-node"}); err == nil || !strings.Contains(err.Error(), "absolute") {
+	if _, err := manager.Install(context.Background(), Config{NodeBinary: "bin/agenthallway-node"}); err == nil || !strings.Contains(err.Error(), "absolute") {
 		t.Errorf("relative binary: err = %v", err)
 	}
-	if _, err := manager.Install(context.Background(), Config{NodeBinary: "/nowhere/agenthub-node"}); err == nil {
+	if _, err := manager.Install(context.Background(), Config{NodeBinary: "/nowhere/agenthallway-node"}); err == nil {
 		t.Error("missing binary was accepted")
 	}
 	entries, _ := os.ReadDir(manager.Home)
@@ -297,7 +297,7 @@ func TestStatusReadsTheManagersAnswer(t *testing.T) {
 		out string
 		err error
 	}{
-		"launchctl print gui/501/" + Label: {out: "gui/501/local.agenthub.node = {\n\tactive count = 1\n\tpath = /x\n\tstate = running\n\n\tprogram = /x/agenthub-node\n\tpid = 4242\n}"},
+		"launchctl print gui/501/" + Label: {out: "gui/501/local.agenthallway.node = {\n\tactive count = 1\n\tpath = /x\n\tstate = running\n\n\tprogram = /x/agenthallway-node\n\tpid = 4242\n}"},
 	}}
 	manager := Manager{GOOS: "darwin", Home: home, UID: "501", Runner: runner, Sleep: noSleep}
 	status, err := manager.Status(context.Background())
@@ -356,7 +356,7 @@ func TestWindowsInstallRegistersTheTaskAndStartsIt(t *testing.T) {
 	node := writeFakeNode(t)
 
 	report, err := manager.Install(context.Background(), Config{
-		NodeBinary: node, Args: []string{"--db", `C:\Users\me\agenthub.db`}, Launcher: `C:\Program Files\AgentHub\ah.exe`,
+		NodeBinary: node, Args: []string{"--db", `C:\Users\me\agenthallway.db`}, Launcher: `C:\Program Files\Agent Hallway\ah.exe`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -405,7 +405,7 @@ func TestWindowsInstallRemovesTheOldStartupShortcut(t *testing.T) {
 	if err := os.MkdirAll(startup, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	shortcut := filepath.Join(startup, "agenthub-desktop Node.lnk")
+	shortcut := filepath.Join(startup, "agenthallway-desktop Node.lnk")
 	if err := os.WriteFile(shortcut, []byte("old"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -436,10 +436,10 @@ func TestWindowsInstallRemovesTheOldStartupShortcut(t *testing.T) {
 // defaults are asserted on the document rather than assumed.
 func TestWindowsTaskXMLRunsAsTheOwnerAndNeverExpires(t *testing.T) {
 	definition, err := TaskXML(Config{
-		NodeBinary: `C:\Program Files\AgentHub\agenthub-node.exe`,
-		Args:       []string{"--db", `C:\Users\me & co\agenthub.db`},
-		LogPath:    `C:\Users\me\AppData\Local\agenthub\node.log`,
-		Launcher:   `C:\Program Files\AgentHub\ah.exe`,
+		NodeBinary: `C:\Program Files\Agent Hallway\agenthallway-node.exe`,
+		Args:       []string{"--db", `C:\Users\me & co\agenthallway.db`},
+		LogPath:    `C:\Users\me\AppData\Local\agenthallway\node.log`,
+		Launcher:   `C:\Program Files\Agent Hallway\ah.exe`,
 	}, `DESK\me`)
 	if err != nil {
 		t.Fatal(err)
@@ -460,7 +460,7 @@ func TestWindowsTaskXMLRunsAsTheOwnerAndNeverExpires(t *testing.T) {
 		"<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>",
 		"<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>",
 		// The action is the launcher, so the node gets no console window while
-		// agenthub-node.exe keeps its own console subsystem.
+		// agenthallway-node.exe keeps its own console subsystem.
 		"service run-node",
 	} {
 		if !strings.Contains(text, want) {
@@ -469,7 +469,7 @@ func TestWindowsTaskXMLRunsAsTheOwnerAndNeverExpires(t *testing.T) {
 	}
 	// Quoted, or Windows splits the path at the space and the task runs
 	// something that does not exist.
-	if !strings.Contains(text, `&#34;C:\Program Files\AgentHub\agenthub-node.exe&#34;`) {
+	if !strings.Contains(text, `&#34;C:\Program Files\Agent Hallway\agenthallway-node.exe&#34;`) {
 		t.Errorf("the node path was not quoted:\n%s", text)
 	}
 	// The node's own flags, after a -- that keeps them from being read as the
@@ -510,7 +510,7 @@ func TestWindowsRestartStopsTheNodeNotTheLauncher(t *testing.T) {
 	if _, err := manager.Restart(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"taskkill /F /IM agenthub-node.exe", "schtasks /Run /TN " + TaskName}
+	want := []string{"taskkill /F /IM agenthallway-node.exe", "schtasks /Run /TN " + TaskName}
 	if strings.Join(runner.calls, " | ") != strings.Join(want, " | ") {
 		t.Errorf("calls = %v, want %v", runner.calls, want)
 	}
@@ -551,7 +551,7 @@ func TestWindowsUninstallToleratesAnAbsentTask(t *testing.T) {
 	}
 	// The node the task started outlives the task, so removing the task is not
 	// removing the node.
-	if !strings.Contains(strings.Join(runner.calls, " | "), "taskkill /F /IM agenthub-node.exe") {
+	if !strings.Contains(strings.Join(runner.calls, " | "), "taskkill /F /IM agenthallway-node.exe") {
 		t.Errorf("the node was left running: %v", runner.calls)
 	}
 }
@@ -564,8 +564,8 @@ func TestWindowsStatusReportsTheNodeNotTheTask(t *testing.T) {
 		out string
 		err error
 	}{
-		`tasklist /FI IMAGENAME eq agenthub-node.exe /FO CSV /NH`: {
-			out: `"agenthub-node.exe","4242","Console","1","31,000 K"`,
+		`tasklist /FI IMAGENAME eq agenthallway-node.exe /FO CSV /NH`: {
+			out: `"agenthallway-node.exe","4242","Console","1","31,000 K"`,
 		},
 	}}
 	manager := windowsManager(t, runner)
@@ -595,7 +595,7 @@ func TestWindowsStatusReadsAnEmptyTasklistAsStopped(t *testing.T) {
 		out string
 		err error
 	}{
-		`tasklist /FI IMAGENAME eq agenthub-node.exe /FO CSV /NH`: {
+		`tasklist /FI IMAGENAME eq agenthallway-node.exe /FO CSV /NH`: {
 			out: "INFO: No tasks are running which match the specified criteria.",
 		},
 	}}
@@ -751,7 +751,7 @@ func TestInstallWritesPrivateFiles(t *testing.T) {
 	if info, _ := os.Stat(report.UnitPath); info.Mode().Perm() != 0o600 {
 		t.Errorf("unit mode = %o, want 600", info.Mode().Perm())
 	}
-	if info, _ := os.Stat(filepath.Join(home, "Library", "Logs", "agenthub")); info.Mode().Perm() != 0o700 {
+	if info, _ := os.Stat(filepath.Join(home, "Library", "Logs", "agenthallway")); info.Mode().Perm() != 0o700 {
 		t.Errorf("log dir mode = %o, want 700", info.Mode().Perm())
 	}
 }

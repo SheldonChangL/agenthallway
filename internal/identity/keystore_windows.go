@@ -28,7 +28,7 @@ import (
 const keyFileMode os.FileMode = 0o600
 
 // keyEntropy is mixed into DPAPI protection so a blob taken from this file
-// cannot be decrypted by a call that does not know it came from AgentHub. It is
+// cannot be decrypted by a call that does not know it came from Agent Hallway. It is
 // not a secret and carries no key material.
 //
 // Changing it makes every existing key file undecryptable, so a change must

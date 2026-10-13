@@ -156,7 +156,7 @@ func acceptingSession(t *testing.T, store *Registry) model.Session {
 
 func openTestRegistry(t *testing.T) *Registry {
 	t.Helper()
-	store, err := Open(context.Background(), filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := Open(context.Background(), filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
@@ -279,7 +279,7 @@ func TestAMessageWithoutADestinationIsRefused(t *testing.T) {
 // read them back with an empty destination rather than an invented one.
 func TestAnOlderDatabaseGainsTheDestinationColumn(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 	store := openRegistryAt(t, path)
 	session := acceptingSession(t, store)
 	if _, err := store.CreateMessage(ctx, model.Message{

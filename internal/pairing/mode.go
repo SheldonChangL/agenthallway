@@ -17,7 +17,7 @@ import (
 
 // MaxWindow is the longest pairing window this node will hold open.
 //
-// Announcing tells everyone on the network that this machine runs AgentHub, and
+// Announcing tells everyone on the network that this machine runs Agent Hallway, and
 // which key it holds. That is a trade the owner makes deliberately for as long
 // as it takes to pair, and a window left open by accident should not be a
 // permanent broadcast — a laptop that opened one in a cafe and closed the lid

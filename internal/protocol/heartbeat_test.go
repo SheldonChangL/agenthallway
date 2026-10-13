@@ -17,7 +17,7 @@ import (
 
 func TestHeartbeatContainsPublicSessionsOnly(t *testing.T) {
 	ctx := context.Background()
-	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

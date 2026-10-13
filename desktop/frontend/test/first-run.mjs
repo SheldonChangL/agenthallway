@@ -109,8 +109,8 @@ const serviceStatus = () => (machine.toolError
     : {
       tool: "/usr/local/bin/ah", supported: machine.supported, installed: machine.installed,
       running: machine.installed && machine.running, pid: machine.installed && machine.running ? 41 : 0,
-      nodeAnswering: machine.nodeUp, logHint: "~/agenthub.log", unitPath: "~/unit",
-      dbPath: machine.installed ? "~/agenthub.db" : "", dbPathKnown: machine.installed, pinnedSettings: [],
+      nodeAnswering: machine.nodeUp, logHint: "~/agenthallway.log", unitPath: "~/unit",
+      dbPath: machine.installed ? "~/agenthallway.db" : "", dbPathKnown: machine.installed, pinnedSettings: [],
     });
 
 const bindings = {
@@ -414,7 +414,7 @@ const ready = { nodeUp: true, installed: true, running: true };
   const sentence = [];
   walk(nodeRow, (node) => { if (node.tagName !== "p" && node._text) sentence.push(node._text); });
   if (sentence.join(" ").includes("dial tcp")) failures.push(`the dial error is on the node line itself: ${sentence.join(" ")}`);
-  if (!sentence.join(" ").includes(ZH["firstRun.node.down"])) failures.push(`the node line does not say AgentHub is not running: ${sentence.join(" ")}`);
+  if (!sentence.join(" ").includes(ZH["firstRun.node.down"])) failures.push(`the node line does not say Agent Hallway is not running: ${sentence.join(" ")}`);
   let inDetails = false;
   walk(nodeRow, (node) => { if (node.tagName === "details") walk(node, (child) => { if (String(child._text).includes("dial tcp")) inDetails = true; }); });
   if (!inDetails) failures.push("the dial error is not under 「說明」 either");

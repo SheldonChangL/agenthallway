@@ -35,7 +35,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		log.Printf("agenthub-node: %v", err)
+		log.Printf("agenthallway-node: %v", err)
 		os.Exit(1)
 	}
 }
@@ -43,7 +43,7 @@ func main() {
 func run() error {
 	// First line, before anything can fail: a log someone sends back has to say
 	// which build produced it.
-	log.Print(buildinfo.Line("agenthub-node"))
+	log.Print(buildinfo.Line("agenthallway-node"))
 	defaults, err := defaultPaths()
 	if err != nil {
 		return err
@@ -770,7 +770,7 @@ func rememberedRefusal(err error, sources map[string]string) error {
 	}
 	return fmt.Errorf("%w\n"+
 		"this node is remembering %s from an earlier start, so the refusal is about a value that "+
-		"is not on this command line. Run agenthub-node again with the flag that replaces the "+
+		"is not on this command line. Run agenthallway-node again with the flag that replaces the "+
 		"stored value — for example `-peer-listen %s` — and the new value is remembered in its "+
 		"place. (`ah settings` reads this node's own API, which only answers once the node starts, "+
 		"so it cannot undo a value that is stopping it.)",

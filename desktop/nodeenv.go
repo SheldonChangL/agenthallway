@@ -10,7 +10,7 @@ import (
 
 // Where a node puts what it was not told where to put (#205).
 //
-// A node started without --db opens the database cmd/agenthub-node/main.go
+// A node started without --db opens the database cmd/agenthallway-node/main.go
 // defaultPaths names: os.UserConfigDir()/agenthub/agenthub.db, with the Claude
 // and Codex roots under os.UserHomeDir(). Both read the node's own environment
 // — HOME on macOS; XDG_CONFIG_HOME, then HOME, on Linux; APPDATA and
@@ -43,7 +43,7 @@ func (p nodePaths) pathFor(flag string) string {
 	return ""
 }
 
-// nodeDefaultPaths is cmd/agenthub-node/main.go defaultPaths, evaluated
+// nodeDefaultPaths is cmd/agenthallway-node/main.go defaultPaths, evaluated
 // against an environment that need not be this process's: os.UserHomeDir and
 // os.UserConfigDir as the Go standard library spells them for goos, with
 // getenv in place of os.Getenv.

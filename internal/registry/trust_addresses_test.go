@@ -99,7 +99,7 @@ INSERT INTO trusted_nodes VALUES
 // Opening twice must not try to add the column a second time.
 func TestTheAlternatesMigrationRunsOnce(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 	for range 2 {
 		store, err := Open(ctx, path)
 		if err != nil {

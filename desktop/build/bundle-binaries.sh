@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Put ah, agenthub-node and agenthub-mcp inside the thing that gets shipped.
+# Put ah, agenthallway-node and agenthallway-mcp inside the thing that gets shipped.
 #
 # The desktop app does not install the service itself: it runs `ah service`
 # (#108), and it finds ah at a fixed offset from its own executable — beside it,
@@ -9,7 +9,7 @@
 # script the only thing standing between a released .app and "ah was not found":
 # whatever it fails to copy, the app cannot fall back to.
 #
-# agenthub-mcp is in that list for exactly the same reason: the MCP config
+# agenthallway-mcp is in that list for exactly the same reason: the MCP config
 # dialog resolves it through the same search (desktop/mcpconfig.go), so leaving
 # it out would reproduce the very message this script exists to prevent, one
 # binary over.
@@ -46,16 +46,16 @@
 # is unpacked into. Both are "beside this executable", which is the first place
 # the app looks.
 #
-# AGENTHUB_RELEASE, if set, is stamped into the binaries the way the release
+# AGENTHALLWAY_RELEASE, if set, is stamped into the binaries the way the release
 # workflow stamps the standalone ones, so `ah --version` inside the bundle
 # answers with the tag rather than a revision.
 #
 # Signing is ad-hoc by default, which is all a local build needs. Real signing
-# (#66) sets AGENTHUB_CODESIGN_IDENTITY to a Developer ID and
-# AGENTHUB_CODESIGN_FLAGS to the flags notarization requires, for example:
+# (#66) sets AGENTHALLWAY_CODESIGN_IDENTITY to a Developer ID and
+# AGENTHALLWAY_CODESIGN_FLAGS to the flags notarization requires, for example:
 #
-#     AGENTHUB_CODESIGN_IDENTITY="Developer ID Application: ..." \
-#     AGENTHUB_CODESIGN_FLAGS="--options runtime --timestamp" \
+#     AGENTHALLWAY_CODESIGN_IDENTITY="Developer ID Application: ..." \
+#     AGENTHALLWAY_CODESIGN_FLAGS="--options runtime --timestamp" \
 #         desktop/build/bundle-binaries.sh darwin/universal path/to/.../desktop
 set -euo pipefail
 
@@ -107,17 +107,17 @@ suffix=""
 if [ "$goos" = "windows" ]; then suffix=".exe"; fi
 
 ldflags=""
-if [ -n "${AGENTHUB_RELEASE:-}" ]; then
-	ldflags="-X agenthub.local/agenthub/internal/buildinfo.release=${AGENTHUB_RELEASE}"
+if [ -n "${AGENTHALLWAY_RELEASE:-}" ]; then
+	ldflags="-X agenthub.local/agenthub/internal/buildinfo.release=${AGENTHALLWAY_RELEASE}"
 fi
 
 staging=$(mktemp -d)
 trap 'rm -rf "$staging"' EXIT
 
 # Every command the app resolves through its own search: ah for the service
-# panel, agenthub-node because the install now pins it by path, agenthub-mcp for
+# panel, agenthallway-node because the install now pins it by path, agenthallway-mcp for
 # the config dialog.
-binaries=(ah agenthub-node agenthub-mcp)
+binaries=(ah agenthallway-node agenthallway-mcp)
 
 echo "bundling ${binaries[*]} for ${goos}/${goarch} into ${destination}"
 for binary in "${binaries[@]}"; do
@@ -158,11 +158,11 @@ done
 # the bundle has to run before the bundle is sealed. A signing step added later
 # goes after this script, not before it.
 if [ "$goos" = "darwin" ] && [ "$(uname -s)" = "Darwin" ]; then
-	identity=${AGENTHUB_CODESIGN_IDENTITY:--}
+	identity=${AGENTHALLWAY_CODESIGN_IDENTITY:--}
 	sign_flags=()
-	if [ -n "${AGENTHUB_CODESIGN_FLAGS:-}" ]; then
+	if [ -n "${AGENTHALLWAY_CODESIGN_FLAGS:-}" ]; then
 		# shellcheck disable=SC2206 # a flag list is meant to split on spaces
-		sign_flags=(${AGENTHUB_CODESIGN_FLAGS})
+		sign_flags=(${AGENTHALLWAY_CODESIGN_FLAGS})
 	fi
 	bundle=$destination
 	case "$bundle" in

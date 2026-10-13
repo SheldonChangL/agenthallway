@@ -62,7 +62,7 @@ func roundTrip(t *testing.T, value any) any {
 
 func newStore(t *testing.T) *registry.Registry {
 	t.Helper()
-	store, err := registry.Open(context.Background(), filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := registry.Open(context.Background(), filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatalf("open registry: %v", err)
 	}

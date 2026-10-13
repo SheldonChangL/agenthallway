@@ -90,21 +90,21 @@ Function .onInit
    !insertmacro wails.checkArchitecture
 FunctionEnd
 
-Section "AgentHub" SecCore
+Section "Agent Hallway" SecCore
     SectionIn RO
     !insertmacro wails.setShellContext
 
     !insertmacro wails.webview2runtime
 
-    # A running agenthub-node.exe holds its own file open, and Windows refuses
+    # A running agenthallway-node.exe holds its own file open, and Windows refuses
     # to overwrite a running executable — so on a reinstall or an upgrade the
     # copy below fails unless the old one is stopped first. /F because the node
     # has no window to close politely; it keeps no unflushed state of its own.
     # Both are expected to fail on a first install, where there is nothing to
     # stop, which is why neither result is checked.
-    nsExec::Exec 'taskkill /F /IM agenthub-node.exe'
+    nsExec::Exec 'taskkill /F /IM agenthallway-node.exe'
     Pop $0
-    nsExec::Exec 'taskkill /F /IM agenthub-desktop.exe'
+    nsExec::Exec 'taskkill /F /IM agenthallway-desktop.exe'
     Pop $0
 
     SetOutPath $INSTDIR
@@ -112,7 +112,7 @@ Section "AgentHub" SecCore
     !insertmacro wails.files
 
     # wails.files installs the app executable and nothing else, but the app
-    # resolves ah, agenthub-node and agenthub-mcp beside its own executable and
+    # resolves ah, agenthallway-node and agenthallway-mcp beside its own executable and
     # deliberately does not fall back to PATH (desktop/build/bundle-binaries.sh
     # says why). Without these three the installed app comes up and every
     # service and MCP action answers "ah was not found".
@@ -120,15 +120,15 @@ Section "AgentHub" SecCore
     # They are taken from build/bin, where the postBuildHook has just put them,
     # so `wails build -platform windows/amd64 -nsis` is still one command.
     File "/oname=ah.exe" "..\..\bin\ah.exe"
-    File "/oname=agenthub-node.exe" "..\..\bin\agenthub-node.exe"
-    File "/oname=agenthub-mcp.exe" "..\..\bin\agenthub-mcp.exe"
+    File "/oname=agenthallway-node.exe" "..\..\bin\agenthallway-node.exe"
+    File "/oname=agenthallway-mcp.exe" "..\..\bin\agenthallway-mcp.exe"
 
-    # The agenthub-watch skill, kept beside the app rather than installed into
+    # The agenthallway-watch skill, kept beside the app rather than installed into
     # Claude's configuration: this location belongs to this application, so
     # writing it needs nobody's permission. Copying it into ~/.claude is the
     # optional section below, because that directory is the user's.
-    SetOutPath "$INSTDIR\skills\agenthub-watch"
-    File "..\..\..\..\.claude\skills\agenthub-watch\SKILL.md"
+    SetOutPath "$INSTDIR\skills\agenthallway-watch"
+    File "..\..\..\..\.claude\skills\agenthallway-watch\SKILL.md"
     SetOutPath $INSTDIR
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -137,7 +137,7 @@ Section "AgentHub" SecCore
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
 
-    # agenthub-node is the part that has to keep running; the desktop app is
+    # agenthallway-node is the part that has to keep running; the desktop app is
     # only its front end. `ah service install` is what registers it — on
     # Windows a Task Scheduler job that runs at logon as this user (#65) — and
     # it also starts the node, so there is nothing to launch separately here.
@@ -161,17 +161,17 @@ Section "AgentHub" SecCore
         # it. SetShellVarContext current pins $SMSTARTUP to this user's own
         # Startup folder even when the install scope is machine-wide.
         #
-        # Minimised rather than hidden: agenthub-node is a console program, and
+        # Minimised rather than hidden: agenthallway-node is a console program, and
         # hiding it would need the binary built with -H windowsgui, which also
         # takes away the only place a Windows owner can see why it will not
         # start. `ah service install` avoids the window a different way — the
         # task runs `ah service run-node`, which starts the node detached and
         # returns — but that route is exactly what has just failed.
         SetShellVarContext current
-        CreateShortCut "$SMSTARTUP\${INFO_PRODUCTNAME} Node.lnk" "$INSTDIR\agenthub-node.exe" "" "" 0 SW_SHOWMINIMIZED
+        CreateShortCut "$SMSTARTUP\${INFO_PRODUCTNAME} Node.lnk" "$INSTDIR\agenthallway-node.exe" "" "" 0 SW_SHOWMINIMIZED
         !insertmacro wails.setShellContext
-        Exec '"$INSTDIR\agenthub-node.exe"'
-        MessageBox MB_ICONEXCLAMATION|MB_OK "AgentHub is installed and will run.$\r$\n$\r$\nRegistering the node with Task Scheduler did not succeed, so it has been set to start from your Startup folder instead. The app's background-service panel will not be able to restart it or report its status.$\r$\n$\r$\nWhat the command said:$\r$\n$1"
+        Exec '"$INSTDIR\agenthallway-node.exe"'
+        MessageBox MB_ICONEXCLAMATION|MB_OK "Agent Hallway is installed and will run.$\r$\n$\r$\nRegistering the node with Task Scheduler did not succeed, so it has been set to start from your Startup folder instead. The app's background-service panel will not be able to restart it or report its status.$\r$\n$\r$\nWhat the command said:$\r$\n$1"
     ${EndIf}
 
     !insertmacro wails.writeUninstaller
@@ -181,21 +181,21 @@ SectionEnd
 # and an installer that adds to it without being asked is indistinguishable from
 # one that overwrites something they wrote. The marker file is what lets the
 # uninstaller tell its own copy from theirs.
-Section /o "agenthub-watch skill for Claude Code" SecSkill
+Section /o "agenthallway-watch skill for Claude Code" SecSkill
     SetShellVarContext current
-    SetOutPath "$PROFILE\.claude\skills\agenthub-watch"
-    File "..\..\..\..\.claude\skills\agenthub-watch\SKILL.md"
-    FileOpen $0 "$PROFILE\.claude\skills\agenthub-watch\.installed-by-agenthub" w
-    FileWrite $0 "Written by the AgentHub installer. Delete this file to keep the skill$\r$\n"
-    FileWrite $0 "when AgentHub is uninstalled.$\r$\n"
+    SetOutPath "$PROFILE\.claude\skills\agenthallway-watch"
+    File "..\..\..\..\.claude\skills\agenthallway-watch\SKILL.md"
+    FileOpen $0 "$PROFILE\.claude\skills\agenthallway-watch\.installed-by-agenthallway" w
+    FileWrite $0 "Written by the Agent Hallway installer. Delete this file to keep the skill$\r$\n"
+    FileWrite $0 "when Agent Hallway is uninstalled.$\r$\n"
     FileClose $0
     SetOutPath $INSTDIR
     !insertmacro wails.setShellContext
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-    !insertmacro MUI_DESCRIPTION_TEXT ${SecCore} "The AgentHub desktop app, the node that keeps running, and the ah and agenthub-mcp command line tools."
-    !insertmacro MUI_DESCRIPTION_TEXT ${SecSkill} "Copies the agenthub-watch skill into $PROFILE\.claude\skills so Claude Code can use it anywhere on this machine. Leave this unticked to keep your own .claude directory untouched; a copy is always installed beside the app either way."
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecCore} "The Agent Hallway desktop app, the node that keeps running, and the ah and agenthallway-mcp command line tools."
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecSkill} "Copies the agenthallway-watch skill into $PROFILE\.claude\skills so Claude Code can use it anywhere on this machine. Leave this unticked to keep your own .claude directory untouched; a copy is always installed beside the app either way."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 Section "uninstall"
@@ -214,9 +214,9 @@ Section "uninstall"
     Pop $1
     DetailPrint "ah service uninstall: $1"
 
-    nsExec::Exec 'taskkill /F /IM agenthub-node.exe'
+    nsExec::Exec 'taskkill /F /IM agenthallway-node.exe'
     Pop $0
-    nsExec::Exec 'taskkill /F /IM agenthub-desktop.exe'
+    nsExec::Exec 'taskkill /F /IM agenthallway-desktop.exe'
     Pop $0
 
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
@@ -230,8 +230,8 @@ Section "uninstall"
     # skill directory without the marker is the user's own — possibly a newer
     # one they cloned or edited — and removing it would be deleting their work
     # to tidy up after ours.
-    IfFileExists "$PROFILE\.claude\skills\agenthub-watch\.installed-by-agenthub" 0 +2
-        RMDir /r "$PROFILE\.claude\skills\agenthub-watch"
+    IfFileExists "$PROFILE\.claude\skills\agenthallway-watch\.installed-by-agenthallway" 0 +2
+        RMDir /r "$PROFILE\.claude\skills\agenthallway-watch"
 
     # Either this installer's fallback wrote it, or an installer from before
     # the Task Scheduler registration existed did. `ah service install` removes
@@ -239,7 +239,7 @@ Section "uninstall"
     # what leaves two nodes starting at logon.
     SetShellVarContext current
     Delete "$SMSTARTUP\${INFO_PRODUCTNAME} Node.lnk"
-    Delete "$SMSTARTUP\AgentHub Node.lnk"
+    Delete "$SMSTARTUP\Agent Hallway Node.lnk"
     !insertmacro wails.setShellContext
 
     !insertmacro wails.unassociateFiles

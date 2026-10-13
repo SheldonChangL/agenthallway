@@ -478,8 +478,8 @@ func (s *Server) handlePairReplyStatus(w http.ResponseWriter, address string, re
 		// typo in an address that is correct.
 		writeError(w, http.StatusConflict, "PEER_TOO_OLD",
 			fmt.Sprintf("%s answered, but does not know how to pair this way: it is running a build "+
-				"from before the pairing exchange existed. Upgrade AgentHub on that machine, or pair "+
-				"by hand on both with `ah pair`", address))
+				"from before the pairing exchange existed. Upgrade that machine to the current Agent Hallway "+
+				"(formerly AgentHub), or pair by hand on both with `ah pair`", address))
 	case http.StatusForbidden:
 		writeError(w, http.StatusConflict, "PEER_PAIRING_CLOSED",
 			fmt.Sprintf("%s is not in pairing mode. Run `ah pairing on` there, then try again", address))

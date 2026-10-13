@@ -17,7 +17,7 @@ import (
 // someone else's address, which is the cheap version of that attack.
 func TestThePacketsSourceAddressReachesEveryHandler(t *testing.T) {
 	from := netip.MustParseAddrPort("192.168.4.7:5353")
-	packet, err := buildAnnouncement("node_sourcecheck0000", "agenthub-test", 7463,
+	packet, err := buildAnnouncement("node_sourcecheck0000", "agenthallway-test", 7463,
 		[]netip.Addr{netip.MustParseAddr("192.168.4.7")}, Offer{})
 	if err != nil {
 		t.Fatal(err)
