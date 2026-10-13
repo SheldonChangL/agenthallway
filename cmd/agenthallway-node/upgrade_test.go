@@ -153,6 +153,16 @@ type runningNode struct {
 	output  *syncBuffer
 	exited  chan error
 	url     string
+	client  *http.Client
+}
+
+// testClient opens a connection per request and closes it after. A shared
+// keep-alive client can dial a spare connection it never sends on, and
+// http.Server.Shutdown waits up to five seconds for such a connection — the
+// node's whole shutdown budget — so a stop would fail for a reason that is
+// the test's own.
+func testClient() *http.Client {
+	return &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
 }
 
 // start starts a node and returns once its owner API answers.
@@ -164,7 +174,10 @@ func (m *machine) start(t *testing.T, extra ...string) *runningNode {
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
-	node := &runningNode{command: command, output: output, exited: make(chan error, 1), url: "http://" + m.listen}
+	node := &runningNode{
+		command: command, output: output, exited: make(chan error, 1),
+		url: "http://" + m.listen, client: testClient(),
+	}
 	go func() { node.exited <- command.Wait() }()
 	t.Cleanup(func() {
 		if command.ProcessState == nil {
@@ -181,7 +194,7 @@ func (m *machine) start(t *testing.T, extra ...string) *runningNode {
 			t.Fatalf("the node exited before it served (%v):\n%s", err, output.String())
 		default:
 		}
-		response, err := http.Get(node.url + "/v1/node") // #nosec G107 -- loopback test node
+		response, err := node.client.Get(node.url + "/v1/node")
 		if err == nil {
 			_ = response.Body.Close()
 			if response.StatusCode == http.StatusOK {
@@ -243,7 +256,7 @@ func (n *runningNode) stop(t *testing.T) {
 
 func (n *runningNode) get(t *testing.T, path string, into any) {
 	t.Helper()
-	response, err := http.Get(n.url + path) // #nosec G107 -- loopback test node
+	response, err := n.client.Get(n.url + path)
 	if err != nil {
 		t.Fatal(err)
 	}
