@@ -793,6 +793,37 @@ jobs:
           {
             echo "Built from \`${GITHUB_SHA}\` by [run ${GITHUB_RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}). MIT licensed; the LICENSE file travels inside every archive."
             echo
+            # Agent Hallway was called AgentHub up to v0.1.11. Every v0.2.*
+            # release says, first, what an upgrade from then does on its own
+            # and what it leaves to the owner: the MCP entries above all,
+            # which nothing rewrites (an entry cannot be told from another
+            # product's by its key, and ~/.claude.json is rewritten by every
+            # running Claude Code).
+            case "$TAG" in
+            v0.2.*)
+              echo "## Upgrading from AgentHub (v0.1.x)"
+              echo
+              echo "- AgentHub is now **Agent Hallway**. Paired machines keep working across versions: the wire protocol, signatures and discovery name are unchanged, so machines can be upgraded one at a time."
+              echo "- **Automatic.** On its first start the node moves its identity and database from \`…/agenthub/\` to \`…/agenthallway/\` (only its own files; the node id stays the same). \`install.sh\` and the Windows installer replace the background service (\`local.agenthub.node\` / \`agenthub-node\` / \"AgentHub Node\") and remove the old app, files, links and the skill they installed."
+              echo "- If the node refuses to start with \"pre-rename background service is still registered\": run \`ah service install\` (it keeps the database)."
+              echo "- **Manual: MCP entries.** Remove the \`agenthub\` entry (\`claude mcp remove agenthub -s <scope>\`, Codex \`[mcp_servers.agenthub]\`, each project's \`.mcp.json\`) and add the one the app's MCP config button gives. The tools are now \`mcp__agenthallway__agent_*\`, so update permission allowlists in \`.claude/settings*.json\` too. \`install.sh\` names the user-level configurations that still start \`agenthub-mcp\`; it never writes them."
+              echo "- **Manual: the skill.** It is \`/agenthallway-watch\` now. An \`agenthub-watch\` you linked or copied yourself is left where it is; rename or remove it by hand if you want. \`AGENTHUB_*\` environment variables are still read; prefer \`AGENTHALLWAY_*\`."
+              echo "- The desktop app's window preferences (filters, sort, language override, background) reset once, and the setup checklist shows again."
+              echo "- Logs now go to \`~/Library/Logs/agenthallway/\`, \`journalctl --user -u agenthallway-node\` and \`%LOCALAPPDATA%\\agenthallway\\\`; old logs stay where they were."
+              echo "- **macOS.** If peers show offline after the upgrade, check System Settings → Privacy & Security → Local Network for \`agenthallway-node\`."
+              echo "- **Windows.** The installer first runs the AgentHub uninstaller silently; it removes the old program files, shortcuts and scheduled task and leaves \`%APPDATA%\\agenthub\`, which the node then moves. If an \`agenthub-desktop\` entry is still listed in Installed apps afterwards, uninstall it there."
+              echo "- **Rolling back one machine** to v0.1.11 — the new \`ah\` removes both registrations, and the data stays where it is:"
+              echo
+              echo '```sh'
+              echo 'ah service uninstall'
+              echo 'curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --version v0.1.11 --no-service'
+              echo '"<the v0.1.11 ah>" service install --db "<config>/agenthallway/agenthallway.db"   # the old node on the moved files: the same identity'
+              echo '```'
+              echo
+              echo "  Never move the files back by hand while any node runs. Upgrading again later carries that \`--db\` and needs no move."
+              echo
+              ;;
+            esac
             # The desktop app first, because it is what most people came for
             # and the command line archives are the thing you reach for after.
             echo "## The desktop app"
