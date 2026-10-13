@@ -189,7 +189,7 @@ func planNodeRestart(running nodeProcess, appPaths func() (nodePaths, error)) (n
 		kept = append(kept, argument.words...)
 	}
 
-	// The restart stops every agenthallway-node by name and waits on this app's
+	// The restart stops every node on this machine and waits on this app's
 	// address; a node listening somewhere else is not the one this window
 	// talks to, and the one started in its place would not be either.
 	if want := defaultNodeListen(); listen != "" && listen != want {

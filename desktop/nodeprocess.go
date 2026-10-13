@@ -66,12 +66,13 @@ func (a *App) RestartNode() (ServiceResult, error) {
 	return a.restartNodeProcess()
 }
 
-// restartNodeProcess stops every agenthallway-node on this machine and starts the
-// one beside this app, detached, with its output going to a file, on the
-// arguments the stopped one was started with.
+// restartNodeProcess stops every node on this machine — agenthallway-node,
+// and the pre-rename agenthub-node — and starts the agenthallway-node beside
+// this app, detached, with its output going to a file, on the arguments the
+// stopped one was started with.
 func (a *App) restartNodeProcess() (ServiceResult, error) {
 	nodeClient, nodeURL := a.current()
-	// Killing by executable name cannot tell one node from another, and what
+	// Stopping every node this machine runs cannot tell one from another, and what
 	// starts afterwards takes the node's own defaults — which is the node the
 	// installer runs and the node this app points at out of the box. An owner
 	// who has pointed this window at some other node on this machine is running
