@@ -115,6 +115,12 @@ func (m *migration) run(ctx context.Context) error {
 	l := m.layout
 	marker := filepath.Join(l.New, markerName)
 
+	// One directory under both names, through a link someone made: it holds
+	// the old database, and the node would open a new one beside it.
+	if err := requireTwoDirectories(l.Old, l.New); err != nil {
+		return err
+	}
+
 	// A. A marker means a move began and did not finish. It is resumed before
 	// anything else is looked at: with a marker, the new directory holding a
 	// database says nothing about where the key is.
@@ -196,6 +202,10 @@ func (m *migration) run(ctx context.Context) error {
 
 // resume finishes the move a marker describes.
 func (m *migration) resume(ctx context.Context, p plan) error {
+	// Moving node.key from a directory onto itself would remove its only name.
+	if err := requireTwoDirectories(p.old, m.layout.New); err != nil {
+		return err
+	}
 	pending := false
 	for _, file := range m.transfers(p) {
 		inOld, err := present(file.src)
@@ -293,6 +303,17 @@ func (m *migration) preconditions(ctx context.Context, old string) error {
 		}
 	}
 	return nil
+}
+
+// requireTwoDirectories refuses an old and a new directory that are one
+// directory under two names.
+func requireTwoDirectories(old, current string) error {
+	if !sameDirectory(old, current) {
+		return nil
+	}
+	return fmt.Errorf("%s and %s are the same directory (one is a link to the other), so this node's identity "+
+		"cannot be moved from one to the other, and the node would start a new database beside the old one; "+
+		"nothing was changed. Remove the link, then start this again", old, current)
 }
 
 // requireOneFilesystem refuses a move that cannot be one hard link.

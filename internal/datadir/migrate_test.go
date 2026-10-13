@@ -672,6 +672,45 @@ func TestMigrateHandlesAwkwardDirectoryNames(t *testing.T) {
 	m.requireMoved(t)
 }
 
+// One directory under both names would look like two directories that both
+// hold a node; left at that, the node would open a new agenthallway.db beside
+// the old database and become a new node.
+func TestMigrateRefusesOneDirectoryUnderBothNames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on Windows")
+	}
+	t.Run("the new name links to the old directory", func(t *testing.T) {
+		m := newLegacyMachine(t, false, false)
+		l := m.layout
+		if err := os.Symlink(l.Old, l.New); err != nil {
+			t.Fatal(err)
+		}
+		before := datadirtest.Tree(t, l.Old, false)
+		err := migrate(l, &logBuffer{}, nil)
+		if err == nil || !strings.Contains(err.Error(), "same directory") {
+			t.Fatalf("Migrate = %v", err)
+		}
+		datadirtest.RequireSameTree(t, l.Old, before, datadirtest.Tree(t, l.Old, false))
+	})
+	t.Run("a marker naming the new directory as the old one", func(t *testing.T) {
+		m := newLegacyMachine(t, false, false)
+		l := m.layout
+		if err := os.Rename(l.Old, l.New); err != nil {
+			t.Fatal(err)
+		}
+		if err := writeMarker(l.New, plan{old: l.New, key: true}); err != nil {
+			t.Fatal(err)
+		}
+		err := migrate(l, &logBuffer{}, nil)
+		if err == nil || !strings.Contains(err.Error(), "same directory") {
+			t.Fatalf("Migrate = %v", err)
+		}
+		if !bytes.Equal(readFile(t, filepath.Join(l.New, keyName)), m.key) {
+			t.Error("node.key is gone or changed")
+		}
+	})
+}
+
 // An old directory that is a symlink is the owner's arrangement: the files
 // move out of it, and the link stays.
 func TestMigrateLeavesASymlinkedOldDirectoryInPlace(t *testing.T) {
