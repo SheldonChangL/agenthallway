@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 # Exercise install.sh without a network and without touching this machine.
 #
+# install.sh installs two eras: a tag up to v0.1.11 under the names the
+# product had then (AgentHub: agenthub-desktop, agenthub-node, ...), any later
+# one under the current names (Agent Hallway: agenthallway-*), after which it
+# retires the pre-rename install. The cases built on v0.1.0 below are the
+# pre-rename era's coverage; the ones built on v0.2.0 the current era's; the
+# upgrade, uninstall and purge cases near the end mix the two.
+#
+# Every run of install.sh goes through sandboxed(), and the suite ends with a
+# tripwire comparing this machine's own install with what it was when the
+# suite started (see both below).
+#
 # Two kinds of check:
 #
 #   1. --dry-run under a faked `uname`, so the darwin path can be read on Linux
@@ -24,16 +35,292 @@ installer="$repository/install.sh"
 	exit 2
 }
 
-work=$(mktemp -d "${TMPDIR:-/tmp}/agenthub-install-test.XXXXXX")
+# ---- the tripwire: this machine's own install, before anything runs --------
+#
+# install.sh deletes things, and some of what it deletes is named by absolute
+# path or reached through the real user's launchd or systemd, whatever HOME
+# says. On 2026-09-24 a case here ran a real uninstall with uname faked to
+# Linux and deleted the developer's /Applications/agenthub-desktop.app. Every
+# case below is confined by construction (sandboxed), and this is the check
+# that the confinement held: the real install's app bundles, service units,
+# trees, links, skills, data and log directories and startup files are
+# recorded now and compared when the suite ends, however it ends. Identity is
+# the inode (a deleted and recreated file is a different one) plus, for a
+# startup file, its checksum, and for a link its target; a running node
+# writing to its own database changes none of these.
+developer_home="$HOME"
+developer_claude="${CLAUDE_CONFIG_DIR:-$developer_home/.claude}"
+developer_config="${XDG_CONFIG_HOME:-$developer_home/.config}"
+developer_state="${XDG_STATE_HOME:-$developer_home/.local/state}"
+developer_data="${XDG_DATA_HOME:-$developer_home/.local/share}"
+developer_zdot="${ZDOTDIR:-$developer_home}"
+tripwire_paths() {
+	local slug
+	for slug in agenthub agenthallway; do
+		printf '%s\n' \
+			"/Applications/$slug-desktop.app" \
+			"$developer_home/Applications/$slug-desktop.app" \
+			"$developer_home/Library/LaunchAgents/local.$slug.node.plist" \
+			"$developer_config/systemd/user/$slug-node.service" \
+			"$developer_home/.local/share/$slug" \
+			"$developer_home/.local/bin/$slug-node" \
+			"$developer_home/.local/bin/$slug-mcp" \
+			"$developer_home/.local/bin/$slug-desktop" \
+			"$developer_claude/skills/$slug-watch" \
+			"$developer_home/.claude/skills/$slug-watch" \
+			"$developer_home/Library/Application Support/$slug" \
+			"$developer_home/Library/Application Support/$slug/node.key" \
+			"$developer_config/$slug" \
+			"$developer_config/$slug/node.key" \
+			"$developer_home/Library/Logs/$slug" \
+			"$developer_state/$slug" \
+			"$developer_data/applications/$slug.desktop" \
+			"$developer_config/fish/conf.d/$slug.fish" \
+			"$developer_home/Library/Caches/com.wails.$slug-desktop" \
+			"$developer_home/Library/WebKit/com.wails.$slug-desktop"
+	done
+	printf '%s\n' "$developer_home/.local/bin/ah" "$developer_zdot/.zshrc" "$developer_home/.bashrc" \
+		"$developer_home/.bash_profile" "$developer_home/.bash_login" "$developer_home/.profile"
+}
+# inode_of prints a path's own inode number, not following a symlink.
+inode_of() { # inode_of <path>
+	perl -e '@s = lstat($ARGV[0]); print $s[1]' "$1"
+}
+tripwire_snapshot() {
+	local path kind
+	while IFS= read -r path; do
+		if [ -L "$path" ]; then
+			kind="link $(inode_of "$path") -> $(readlink "$path")"
+		elif [ -d "$path" ]; then
+			kind="dir $(inode_of "$path")"
+		elif [ -f "$path" ]; then
+			kind="file $(inode_of "$path") $(cksum <"$path" 2>/dev/null || echo unreadable)"
+		elif [ -e "$path" ]; then
+			kind="other $(inode_of "$path")"
+		else
+			kind="absent"
+		fi
+		printf '%s\t%s\n' "$path" "$kind"
+	done < <(tripwire_paths)
+	# The services themselves: a bootout or a disable through the real
+	# launchctl or systemctl changes the pid, or makes it disappear.
+	if command -v launchctl >/dev/null 2>&1; then
+		local label
+		for label in local.agenthub.node local.agenthallway.node; do
+			printf 'launchd %s\t%s\n' "$label" \
+				"$(launchctl print "gui/$(id -u)/$label" 2>/dev/null | grep -E '^[[:space:]]*(pid|state) = ' | head -n 2 | tr -s ' \t\n' ' ')"
+		done
+	fi
+	if command -v systemctl >/dev/null 2>&1; then
+		printf 'systemd\t%s\n' "$(systemctl --user show -p MainPID -p ActiveState agenthub-node.service agenthallway-node.service 2>/dev/null | tr '\n' ' ')"
+	fi
+}
+tripwire_before=$(tripwire_snapshot)
+tripwire_checked=0
+# tripwire_check compares the machine with what it was when the suite started.
+# Run at the end, and from the EXIT trap when the suite ends early.
+tripwire_check() {
+	tripwire_checked=1
+	local after
+	after=$(tripwire_snapshot)
+	if [ "$after" != "$tripwire_before" ]; then
+		echo "  FAIL: TRIPWIRE: this machine's own install changed while the suite ran:" >&2
+		diff <(printf '%s\n' "$tripwire_before") <(printf '%s\n' "$after") >&2 || true
+		return 1
+	fi
+	return 0
+}
+
+# Nothing the developer's shell happens to export reaches a run: each of these
+# names a directory or a release on its own, and install.sh reads them all.
+# sandboxed() clears them again for every run; clearing them here as well keeps
+# the harness's own reads (and any run that slipped past sandboxed) honest.
+unset XDG_CONFIG_HOME XDG_STATE_HOME XDG_DATA_HOME XDG_CACHE_HOME ZDOTDIR CODEX_HOME CLAUDE_CONFIG_DIR \
+	AGENTHALLWAY_HOME AGENTHUB_HOME AGENTHALLWAY_VERSION AGENTHUB_VERSION \
+	AGENTHALLWAY_APPLICATIONS AGENTHUB_APPLICATIONS AGENTHALLWAY_OS_RELEASE AGENTHALLWAY_LDCONFIG_PATHS
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/agenthallway-install-test.XXXXXX")
+# Resolved, because the sandbox compares paths against it and a TMPDIR behind
+# a symlink (/var -> /private/var on macOS) would otherwise be two spellings.
+work=$(cd -P "$work" && pwd -P)
 # u+w first: a case below makes a directory read-only, and a harness that
-# fails before undoing it would otherwise leave it behind in TMPDIR.
-trap 'chmod -R u+w "$work" 2>/dev/null; rm -rf "$work"' EXIT
+# fails before undoing it would otherwise leave it behind in TMPDIR. The
+# tripwire runs here too when the suite ends early, so a case that escaped is
+# reported however the suite stops.
+on_exit() {
+	local status=$?
+	if [ "$tripwire_checked" -eq 0 ] && ! tripwire_check; then
+		status=1
+	fi
+	chmod -R u+w "$work" 2>/dev/null
+	rm -rf "$work"
+	exit "$status"
+}
+trap on_exit EXIT
 
 # install.sh puts a Claude Code skill under ${CLAUDE_CONFIG_DIR:-$HOME/.claude},
 # and several runs below install for real without a HOME of their own. Pointed
 # here for the whole suite, so no run can write into the developer's own
 # ~/.claude; the skill cases set their own.
 export CLAUDE_CONFIG_DIR="$work/claude"
+export CODEX_HOME="$work/codex"
+
+# ---- sandboxed: the only way a case runs install.sh ------------------------
+#
+# A fake HOME is not enough, and each row here is a way out of one:
+#
+#   /Applications/...app        absolute; a faked uname does not fake the disk.
+#                               AGENTHALLWAY_APPLICATIONS and the pre-rename
+#                               AGENTHUB_APPLICATIONS both point into $work,
+#                               because install.sh falls back from one to the
+#                               other and then to the real /Applications.
+#   launchctl, systemctl        uid-scoped: the real user's launchd domain and
+#                               user manager, whatever HOME says.
+#   osascript                   quits a running app by name, at any path.
+#   pgrep, pkill                real processes; their patterns are paths.
+#   open, hdiutil, ditto,       real system tools.
+#   xattr, update-desktop-database
+#   schtasks, taskkill          not called by install.sh, shimmed anyway.
+#   curl, wget                  the network: real runs install with --from or
+#                               from SB_SERVE, a directory standing in for the
+#                               release page; anything else fails.
+#   XDG_*, ZDOTDIR              each names a directory on its own.
+#   AGENTHALLWAY_HOME/VERSION,  inherited from the developer's shell; a case
+#   AGENTHUB_HOME/VERSION       that wants one passes it through `env`.
+#   CLAUDE_CONFIG_DIR,          the skill and the MCP configurations; both
+#   CODEX_HOME                  exported into $work above, and checked here.
+#   an ah on PATH               PATH is the case's shims, then the system
+#                               shims, then /usr/bin:/bin:/usr/sbin:/sbin only.
+#   TMPDIR                      install.sh's temp directory goes in $work too.
+system_shims="$work/system-shims"
+mkdir -p "$system_shims" "$work/tmp"
+for shimmed in launchctl systemctl osascript open pkill hdiutil xattr update-desktop-database schtasks taskkill; do
+	cat >"$system_shims/$shimmed" <<EOF
+#!/bin/sh
+echo "$shimmed \$*" >>"$work/system-shims.log"
+case "$shimmed \$1" in
+# Nothing is active: a run asks before it stops anything.
+"systemctl --user")
+	case "\$*" in *is-active*) exit 3 ;; esac
+	;;
+# A bundle the case puts at SB_DMG_SOURCE is what the image "contains".
+"hdiutil attach")
+	while [ "\$#" -gt 1 ]; do
+		[ "\$1" = -mountpoint ] && mount_point=\$2
+		shift
+	done
+	mkdir -p "\$mount_point"
+	if [ -n "\${SB_DMG_SOURCE:-}" ]; then
+		cp -R "\$SB_DMG_SOURCE"/. "\$mount_point"/
+	fi
+	;;
+esac
+exit 0
+EOF
+done
+# pgrep says "not running" unless the case names a pattern that is, once:
+# SB_RUNNING_ONCE is a pattern pgrep answers yes to on its first call only.
+cat >"$system_shims/pgrep" <<EOF
+#!/bin/sh
+echo "pgrep \$*" >>"$work/system-shims.log"
+if [ -n "\${SB_RUNNING_ONCE:-}" ] && [ "\$*" = "-f \$SB_RUNNING_ONCE" ] && [ ! -e "\$SB_RUNNING_ONCE_SEEN" ]; then
+	: >"\$SB_RUNNING_ONCE_SEEN"
+	exit 0
+fi
+exit 1
+EOF
+# ditto writes only into the work directory; anywhere else is a test that has
+# escaped, and it says so instead of writing.
+cat >"$system_shims/ditto" <<EOF
+#!/bin/sh
+echo "ditto \$*" >>"$work/system-shims.log"
+case "\$2" in
+"$work"/*) cp -R "\$1" "\$2" ;;
+*) echo "ditto shim: refusing to write \$2 outside $work" >&2; exit 1 ;;
+esac
+EOF
+# curl and wget serve from SB_SERVE, the release page of a case that downloads
+# for real, and fail otherwise.
+for fetcher in curl wget; do
+	cat >"$system_shims/$fetcher" <<EOF
+#!/bin/sh
+echo "$fetcher \$*" >>"$work/system-shims.log"
+destination=""
+url=""
+while [ "\$#" -gt 0 ]; do
+	case "\$1" in
+	-o | -O) destination=\$2; shift 2 ;;
+	-*) shift ;;
+	*) url=\$1; shift ;;
+	esac
+done
+served="\${SB_SERVE:-}/\${url##*/}"
+if [ -n "\${SB_SERVE:-}" ] && [ -f "\$served" ] && [ -n "\$destination" ]; then
+	cp "\$served" "\$destination"
+	exit 0
+fi
+echo "$fetcher shim: no network in these tests (\$url)" >&2
+exit 22
+EOF
+done
+chmod +x "$system_shims"/*
+bare_path="$system_shims:/usr/bin:/bin:/usr/sbin:/sbin"
+
+# An /Applications of the tests' own, holding an app a Linux uninstall must not
+# touch: a .app is a macOS install, whatever directory it is in.
+fake_applications="$work/Applications"
+mkdir -p "$fake_applications/agenthub-desktop.app/Contents/MacOS"
+printf '#!/bin/sh\necho "$*" >>"%s"\n' "$work/fake-app-ah.log" >"$fake_applications/agenthub-desktop.app/Contents/MacOS/ah"
+chmod +x "$fake_applications/agenthub-desktop.app/Contents/MacOS/ah"
+
+# sb_set holds NAME=value pairs a case wants in the run's environment on top
+# of what sandboxed sets (AGENTHUB_HOME, say); it is emptied after each use.
+sb_set=()
+
+sandboxed_abort() {
+	echo "sandboxed: $*; stopping the suite before install.sh runs outside it" >&2
+	exit 2
+}
+
+# sandboxed <home> <command...> runs a command — install.sh, or `env ... sh
+# install.sh` — with HOME=<home> and the rest of the confinement above. PATH
+# is the caller's (case shims, a faked uname, then $bare_path), checked first:
+# every entry is in $work or a system bin directory, and every tool install.sh
+# can reach the machine through resolves inside $work.
+sandboxed() {
+	local home=$1
+	shift
+	local entry tool resolved
+	while IFS= read -r entry; do
+		case "$entry" in
+		"$work"/* | /usr/bin | /bin | /usr/sbin | /sbin) ;;
+		*) sandboxed_abort "PATH holds \"$entry\"" ;;
+		esac
+	done < <(printf '%s\n' "$PATH" | tr ':' '\n')
+	hash -r
+	for tool in launchctl systemctl osascript open pgrep pkill hdiutil ditto xattr update-desktop-database curl wget schtasks taskkill; do
+		resolved=$(command -v "$tool" 2>/dev/null || true)
+		case "$resolved" in
+		"$work"/*) ;;
+		*) sandboxed_abort "$tool resolves to \"$resolved\", not to a shim" ;;
+		esac
+	done
+	case "$home" in
+	"$work"/*) ;;
+	*) sandboxed_abort "HOME would be $home" ;;
+	esac
+	case "${CLAUDE_CONFIG_DIR:-}:${CODEX_HOME:-}" in
+	"$work"/*:"$work"/*) ;;
+	*) sandboxed_abort "CLAUDE_CONFIG_DIR or CODEX_HOME is outside the work directory" ;;
+	esac
+	env -u XDG_CONFIG_HOME -u XDG_STATE_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME -u ZDOTDIR \
+		-u AGENTHALLWAY_HOME -u AGENTHUB_HOME -u AGENTHALLWAY_VERSION -u AGENTHUB_VERSION \
+		HOME="$home" TMPDIR="$work/tmp" \
+		AGENTHALLWAY_APPLICATIONS="${SB_APPLICATIONS:-$fake_applications}" \
+		AGENTHUB_APPLICATIONS="${SB_APPLICATIONS:-$fake_applications}" \
+		${sb_set[@]+"${sb_set[@]}"} "$@"
+}
+
 
 failures=0
 checks=0
@@ -178,11 +465,12 @@ no_service_ah=$(fake_ah none)
 dry_run() { # dry_run <system> <machine> <output file> [args...]
 	local system=$1 machine=$2 out=$3
 	shift 3
-	local shim
+	local shim home=${DRY_HOME:-$work/dry-home}
 	shim=$(fake_uname "$system" "$machine")
+	mkdir -p "$home"
 	# LDCONFIG_SHIM goes first so it wins over a real ldconfig in /sbin.
 	#
-	# AGENTHUB_OS_RELEASE defaults to a path that does not exist, so a run that
+	# AGENTHALLWAY_OS_RELEASE defaults to a path that does not exist, so a run that
 	# does not care which distribution it is on gets the same generic advice
 	# everywhere. Without it these tests would read the os-release of whatever
 	# machine runs them and assert different text on a laptop than in CI.
@@ -191,9 +479,14 @@ dry_run() { # dry_run <system> <machine> <output file> [args...]
 	# cannot express "no ldconfig anywhere", because the probe also tries
 	# /sbin/ldconfig and /usr/sbin/ldconfig by absolute path and a Linux runner
 	# has one there; the cases that pin those two branches set this instead.
-	PATH="${LDCONFIG_SHIM:+$LDCONFIG_SHIM:}${AH_SHIM:-$no_service_ah}:$shim:$PATH" \
-		AGENTHUB_OS_RELEASE="${OS_RELEASE_FILE:-$work/no-such-os-release}" \
-		AGENTHUB_LDCONFIG_PATHS="${LDCONFIG_PATHS:-}" \
+	#
+	# A HOME of the suite's own (DRY_HOME): a dry run reads the registered unit,
+	# the startup files and the MCP configurations it would act on, and the
+	# transcript must not depend on the machine running it.
+	PATH="${LDCONFIG_SHIM:+$LDCONFIG_SHIM:}${AH_SHIM:-$no_service_ah}:$shim:$bare_path" \
+		sandboxed "$home" env \
+		AGENTHALLWAY_OS_RELEASE="${OS_RELEASE_FILE:-$work/no-such-os-release}" \
+		AGENTHALLWAY_LDCONFIG_PATHS="${LDCONFIG_PATHS:-}" \
 		sh "$installer" --dry-run "$@" >"$out" 2>&1
 }
 
@@ -384,7 +677,7 @@ contains webkit-noldconfig "$work/wknold.txt" "apt install libgtk-3-0 libwebkit2
 # so none of them would notice the list shrinking back to PATH alone — which is
 # the whole defect: a Debian 12 shell has no /sbin on PATH. Assert the literal.
 # shellcheck disable=SC2016 # the literal default, not an expansion
-contains webkit-paths "$installer" '${AGENTHUB_LDCONFIG_PATHS:-ldconfig /sbin/ldconfig /usr/sbin/ldconfig}'
+contains webkit-paths "$installer" '${AGENTHALLWAY_LDCONFIG_PATHS:-ldconfig /sbin/ldconfig /usr/sbin/ldconfig}'
 lacks webkit-noldconfig "$work/wknold.txt" "no WebKit2GTK runtime was found"
 
 echo "== --cli-only never probes for a window it is not installing =="
@@ -461,6 +754,12 @@ tar -C "$work/stage" -czf "$good/agenthub-desktop_v0.1.0_linux_amd64.tar.gz" \
 
 shim=$(fake_uname Linux x86_64)
 target="$work/real"
+# Each of these is a real install, so each runs sandboxed, with a HOME of its
+# own: --prefix keeps what it installs inside the prefix, and the retirement
+# of a pre-rename install makes "touches nothing outside it" something to
+# prove rather than assume.
+real_runs_home="$work/real-runs-home"
+mkdir -p "$real_runs_home"
 # XDG_DATA_HOME is redirected into the work directory for every real install
 # below. Without it these runs — faked into being Linux — write a real
 # ~/.local/share/applications/agenthub.desktop on the machine running the
@@ -469,7 +768,7 @@ target="$work/real"
 # makes the entry readable here, which is the only way its body gets asserted
 # at all.
 xdg="$work/xdg"
-PATH="$shim:$PATH" XDG_DATA_HOME="$xdg" sh "$installer" \
+PATH="$shim:$bare_path" sandboxed "$real_runs_home" env XDG_DATA_HOME="$xdg" sh "$installer" \
 	--from "$good/agenthub-desktop_v0.1.0_linux_amd64.tar.gz" \
 	--prefix "$target" --no-service --no-open >"$work/real.txt" 2>&1
 contains real "$work/real.txt" "verified agenthub-desktop_v0.1.0_linux_amd64.tar.gz against SHA256SUMS"
@@ -528,7 +827,7 @@ tar -C "$work/stage-icon" -czf "$iconed/agenthub-desktop_v0.1.0_linux_amd64.tar.
 	agenthub-desktop_v0.1.0_linux_amd64
 spaced_target="$work/a prefix with spaces"
 spaced_xdg="$work/xdg spaced"
-PATH="$shim:$PATH" XDG_DATA_HOME="$spaced_xdg" sh "$installer" \
+PATH="$shim:$bare_path" sandboxed "$real_runs_home" env XDG_DATA_HOME="$spaced_xdg" sh "$installer" \
 	--from "$iconed/agenthub-desktop_v0.1.0_linux_amd64.tar.gz" \
 	--prefix "$spaced_target" --no-service --no-open >"$work/real-icon.txt" 2>&1
 spaced_entry="$spaced_xdg/applications/agenthub.desktop"
@@ -541,7 +840,7 @@ checks=$((checks + 1))
 	fail "icon: the install under a path with spaces left no desktop binary"
 
 # Re-running upgrades in place rather than failing on what is already there.
-PATH="$shim:$PATH" XDG_DATA_HOME="$xdg" sh "$installer" \
+PATH="$shim:$bare_path" sandboxed "$real_runs_home" env XDG_DATA_HOME="$xdg" sh "$installer" \
 	--from "$good/agenthub-desktop_v0.1.0_linux_amd64.tar.gz" \
 	--prefix "$target" --no-service --no-open >"$work/real2.txt" 2>&1
 contains rerun "$work/real2.txt" "verified agenthub-desktop_v0.1.0_linux_amd64.tar.gz against SHA256SUMS"
@@ -558,7 +857,7 @@ printf '%s  %s\n' \
 	"agenthub-desktop_v0.1.0_linux_amd64.tar.gz" >"$bad/SHA256SUMS"
 refused="$work/refused"
 checks=$((checks + 1))
-if PATH="$shim:$PATH" XDG_DATA_HOME="$xdg" sh "$installer" \
+if PATH="$shim:$bare_path" sandboxed "$real_runs_home" env XDG_DATA_HOME="$xdg" sh "$installer" \
 	--from "$bad/agenthub-desktop_v0.1.0_linux_amd64.tar.gz" \
 	--prefix "$refused" --no-service --no-open >"$work/bad-sums.txt" 2>&1; then
 	fail "a corrupted SHA256SUMS was accepted"
@@ -577,7 +876,7 @@ printf '%s  %s\n' \
 	"0000000000000000000000000000000000000000000000000000000000000000" \
 	"something-else.tar.gz" >"$missing/SHA256SUMS"
 checks=$((checks + 1))
-if PATH="$shim:$PATH" XDG_DATA_HOME="$xdg" sh "$installer" \
+if PATH="$shim:$bare_path" sandboxed "$real_runs_home" env XDG_DATA_HOME="$xdg" sh "$installer" \
 	--from "$missing/agenthub-desktop_v0.1.0_linux_amd64.tar.gz" \
 	--prefix "$work/nope" --no-service --no-open >"$work/missing-sums.txt" 2>&1; then
 	fail "a SHA256SUMS with no line for the file was accepted"
@@ -635,9 +934,10 @@ truncate_at 90pct $((installer_bytes * 90 / 100))
 sed -n "1,$((installer_lines - 5))p" "$installer" >"$work/trunc-tail.sh"
 
 uname_shim=$(fake_uname Darwin arm64)
+mkdir -p "$work/dry-home"
 for cut in 60pct 90pct tail; do
 	trunc_prefix="$work/trunc-prefix-$cut"
-	PATH="$no_service_ah:$uname_shim:$PATH" sh "$work/trunc-$cut.sh" \
+	PATH="$no_service_ah:$uname_shim:$bare_path" sandboxed "$work/dry-home" sh "$work/trunc-$cut.sh" \
 		--dry-run --version v0.1.0 --prefix "$trunc_prefix" \
 		>"$work/trunc-$cut.txt" 2>&1 || true
 	commands_only "$work/trunc-$cut.txt" "$work/trunc-$cut.cmds"
@@ -664,32 +964,34 @@ guard() { # guard <label> <message> [installer args...]
 	contains "$label" "$work/guard-$label.txt" "$message"
 	lacks "$label" "$work/guard-$label.cmds" "rm"
 }
+# A dry run's HOME is the suite's own (dry_run), so that is the home these
+# point at.
 guard root "this script installs into a directory of its own" --prefix /
-guard home "is your home directory" --prefix "$HOME"
-guard above-home "contains your home directory" --prefix "$(dirname "$HOME")"
+guard home "is your home directory" --prefix "$work/dry-home"
+guard above-home "contains your home directory" --prefix "$work"
 
 notours="$work/notours"
 mkdir -p "$notours"
 echo "someone else's file" >"$notours/thesis.txt"
-guard foreign "holds no AgentHub install" --prefix "$notours"
+guard foreign "holds no Agent Hallway install" --prefix "$notours"
 checks=$((checks + 1))
 [ -f "$notours/thesis.txt" ] || fail "the refused prefix lost a file"
 
 echo "== AGENTHUB_HOME pointing somewhere else is refused =="
 checks=$((checks + 1))
-export AGENTHUB_HOME="$notours"
+sb_set=(AGENTHUB_HOME="$notours")
 if dry_run Linux x86_64 "$work/guard-agenthub-home.txt" \
 	--version v0.1.0 --prefix "$work/pfx-ah"; then
 	fail "AGENTHUB_HOME pointing at a foreign directory was accepted"
 fi
-unset AGENTHUB_HOME
+sb_set=()
 commands_only "$work/guard-agenthub-home.txt" "$work/guard-agenthub-home.cmds"
 contains agenthub-home "$work/guard-agenthub-home.txt" "holds no AgentHub install"
 lacks agenthub-home "$work/guard-agenthub-home.cmds" "+ rm "
 
 echo "== HOME unset is a message, not an unbound variable =="
 checks=$((checks + 1))
-if env -u HOME PATH="$no_service_ah:$uname_shim:$PATH" sh "$installer" \
+if env -u HOME PATH="$no_service_ah:$uname_shim:$bare_path" sh "$installer" \
 	--dry-run --version v0.1.0 >"$work/no-home.txt" 2>&1; then
 	fail "an unset HOME was accepted"
 fi
@@ -715,7 +1017,7 @@ EOF
 chmod +x "$trap_shim/mktemp" "$trap_shim/rm"
 : >"$work/rm.log"
 checks=$((checks + 1))
-if PATH="$trap_shim:$no_service_ah:$uname_shim:$PATH" sh "$installer" \
+if PATH="$trap_shim:$no_service_ah:$uname_shim:$bare_path" sandboxed "$work/dry-home" sh "$installer" \
 	--from "$work/no-such-archive.tar.gz" --prefix "$work/pfx-trap" --no-service \
 	>"$work/trap.txt" 2>&1; then
 	fail "a --from that is not a file was accepted"
@@ -732,16 +1034,10 @@ checks=$((checks + 1))
 # appends to is the owner's real one otherwise — and a PATH that cannot already
 # hold that HOME's bin directory.
 echo "== a default install puts ~/.local/bin on PATH =="
-# systemctl and launchctl are shims on every PATH built from this: an
-# uninstall that finds a unit with no ah left takes it down with them, and the
-# machine running these tests has a real user manager of its own.
-svc_shim="$work/svc-shim"
-mkdir -p "$svc_shim"
-for manager in systemctl launchctl; do
-	printf '#!/bin/sh\necho "%s $*" >>"%s"\n' "$manager" "$work/svc-shim.log" >"$svc_shim/$manager"
-	chmod +x "$svc_shim/$manager"
-done
-bare_path="$svc_shim:/usr/bin:/bin:/usr/sbin:/sbin"
+# bare_path (defined with the system shims above) puts launchctl, systemctl
+# and the rest on every PATH built from it: an uninstall that finds a unit
+# with no ah left takes it down with them, and the machine running these
+# tests has a real user manager of its own.
 path_home="$work/path-home"
 mkdir -p "$path_home"
 # shellcheck disable=SC2016 # the literal line the installer writes
@@ -750,8 +1046,8 @@ export_line='export PATH="$HOME/.local/bin:$PATH"'
 path_dry() { # path_dry <output file> <shell> [args...]
 	local out=$1 shell=$2
 	shift 2
-	PATH="$no_service_ah:$(fake_uname Darwin arm64):$bare_path" HOME="$path_home" SHELL="$shell" \
-		sh "$installer" --dry-run --version v0.1.0 "$@" >"$out" 2>&1
+	PATH="$no_service_ah:$(fake_uname Darwin arm64):$bare_path" SHELL="$shell" \
+		sandboxed "$path_home" sh "$installer" --dry-run --version v0.1.0 "$@" >"$out" 2>&1
 }
 path_dry "$work/path-zsh.txt" /bin/zsh --no-service --no-open
 contains path-zsh "$work/path-zsh.txt" "+ append to $path_home/.zshrc: $export_line"
@@ -775,12 +1071,12 @@ lacks path-tcsh "$work/path-tcsh.txt" "append to"
 profile_home="$work/profile-home"
 mkdir -p "$profile_home"
 echo 'export FROM_PROFILE=1' >"$profile_home/.profile"
-PATH="$no_service_ah:$(fake_uname Darwin arm64):$bare_path" HOME="$profile_home" SHELL=/bin/bash \
-	sh "$installer" --dry-run --version v0.1.0 --no-service --no-open >"$work/path-profile.txt" 2>&1
+PATH="$no_service_ah:$(fake_uname Darwin arm64):$bare_path" SHELL=/bin/bash \
+	sandboxed "$profile_home" sh "$installer" --dry-run --version v0.1.0 --no-service --no-open >"$work/path-profile.txt" 2>&1
 contains path-profile "$work/path-profile.txt" "+ append to $profile_home/.profile: "
 lacks path-profile "$work/path-profile.txt" ".bash_profile"
-PATH="$no_service_ah:$(fake_uname Darwin arm64):$path_home/.local/bin:$bare_path" HOME="$path_home" SHELL=/bin/zsh \
-	sh "$installer" --dry-run --version v0.1.0 --no-service --no-open >"$work/path-already.txt" 2>&1
+PATH="$no_service_ah:$(fake_uname Darwin arm64):$path_home/.local/bin:$bare_path" SHELL=/bin/zsh \
+	sandboxed "$path_home" sh "$installer" --dry-run --version v0.1.0 --no-service --no-open >"$work/path-already.txt" 2>&1
 lacks path-already "$work/path-already.txt" "append to"
 lacks path-already "$work/path-already.txt" "is not on your PATH"
 contains path-already "$work/path-already.txt" "PATH: on PATH"
@@ -793,8 +1089,8 @@ linux_shim=$(fake_uname Linux x86_64)
 path_real() { # path_real <output file> <shell> [args...]
 	local out=$1 shell=$2
 	shift 2
-	PATH="$linux_shim:$bare_path" HOME="$path_home" SHELL="$shell" XDG_DATA_HOME="$work/path-xdg" \
-		sh "$installer" --from "$good/agenthub-desktop_v0.1.0_linux_amd64.tar.gz" \
+	PATH="$linux_shim:$bare_path" SHELL="$shell" \
+		sandboxed "$path_home" env XDG_DATA_HOME="$work/path-xdg" ${path_real_env[@]+"${path_real_env[@]}"} sh "$installer" --from "$good/agenthub-desktop_v0.1.0_linux_amd64.tar.gz" \
 		--no-service "$@" >"$out" 2>&1
 }
 checks=$((checks + 1))
@@ -814,7 +1110,9 @@ if command -v zsh >/dev/null 2>&1; then
 	zdot="$work/path-zdot"
 	mkdir -p "$zdot"
 	checks=$((checks + 1))
-	ZDOTDIR="$zdot" path_real "$work/path-real-zsh.txt" /bin/zsh || fail "path-real-zsh: the install failed"
+	path_real_env=(ZDOTDIR="$zdot")
+	path_real "$work/path-real-zsh.txt" /bin/zsh || fail "path-real-zsh: the install failed"
+	path_real_env=()
 	contains path-real-zsh "$work/path-real-zsh.txt" "to PATH in $zdot/.zshrc"
 	checks=$((checks + 1))
 	found=$(env -i HOME="$path_home" ZDOTDIR="$zdot" PATH="$bare_path" zsh -i -c 'command -v ah' 2>/dev/null || true)
@@ -830,8 +1128,8 @@ if [ "$(id -u)" -ne 0 ]; then
 	chmod 444 "$work/ro-bashrc"
 	ln -s "$work/ro-bashrc" "$ro_home/.bashrc"
 	checks=$((checks + 1))
-	PATH="$linux_shim:$bare_path" HOME="$ro_home" SHELL=/bin/bash XDG_DATA_HOME="$work/ro-xdg" \
-		sh "$installer" --from "$good/agenthub-desktop_v0.1.0_linux_amd64.tar.gz" \
+	PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
+		sandboxed "$ro_home" env XDG_DATA_HOME="$work/ro-xdg" sh "$installer" --from "$good/agenthub-desktop_v0.1.0_linux_amd64.tar.gz" \
 		--no-service >"$work/path-ro.txt" 2>&1 || fail "path-ro: a read-only .bashrc stopped the install: $(cat "$work/path-ro.txt")"
 	contains path-ro "$work/path-ro.txt" "warning: could not write $ro_home/.bashrc"
 	contains path-ro "$work/path-ro.txt" "PATH: not on PATH"
@@ -846,25 +1144,12 @@ checks=$((checks + 1))
 
 # ---- --uninstall -------------------------------------------------------------
 
-# Every uninstall below runs with a HOME of its own: it deletes things under
-# HOME, and the one running these tests is the developer's. HOME is not the
-# only way out, either: XDG_CONFIG_HOME, XDG_STATE_HOME, XDG_DATA_HOME and
-# ZDOTDIR name directories on their own, so each run clears them, and a
-# faked uname does not fake the disk — a Linux-shaped run on a mac still sees
-# the real /Applications. That is not hypothetical: an earlier draft of these
-# tests deleted the developer's /Applications/agenthub-desktop.app.
-isolated() { # isolated <home> <command...>
-	local home=$1
-	shift
-	env -u XDG_CONFIG_HOME -u XDG_STATE_HOME -u XDG_DATA_HOME -u ZDOTDIR HOME="$home" \
-		AGENTHUB_APPLICATIONS="$fake_applications" "$@"
-}
-# An /Applications of the tests' own, holding an app a Linux uninstall must not
-# touch: a .app is a macOS install, whatever directory it is in.
-fake_applications="$work/Applications"
-mkdir -p "$fake_applications/agenthub-desktop.app/Contents/MacOS"
-printf '#!/bin/sh\necho "$*" >>"%s"\n' "$work/fake-app-ah.log" >"$fake_applications/agenthub-desktop.app/Contents/MacOS/ah"
-chmod +x "$fake_applications/agenthub-desktop.app/Contents/MacOS/ah"
+# Every uninstall below runs sandboxed, with a HOME of its own: it deletes
+# things under HOME, and the one running these tests is the developer's. HOME
+# is not the only way out, either (see sandboxed): an earlier draft of these
+# tests deleted the developer's /Applications/agenthub-desktop.app. The
+# fake /Applications set up with the sandbox holds a pre-rename app that a
+# Linux uninstall must not touch.
 
 # uninstall_ah_script writes an ah that records what it was asked and answers
 # `--json service status` with a registered unit using <db>. <status> is the
@@ -912,7 +1197,7 @@ un_run() { # un_run <output file> [args...]
 	local out=$1
 	shift
 	PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
-		isolated "$un_home" sh "$installer" "$@" >"$out" 2>&1
+		sandboxed "$un_home" sh "$installer" "$@" >"$out" 2>&1
 }
 checks=$((checks + 1))
 un_run "$work/un-install.txt" --from "$good/agenthub-desktop_v0.1.0_linux_amd64.tar.gz" --no-service ||
@@ -985,7 +1270,7 @@ tree_at "$purge_home/.local/share/agenthub" "$work/purge-ah.log" "$checkout/agen
 make_unit "$purge_home" linux "$purge_home/.local/share/agenthub/agenthub-node" "$checkout/agenthub.db"
 checks=$((checks + 1))
 PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
-	isolated "$purge_home" sh "$installer" --uninstall --purge >"$work/purge.txt" 2>&1 || fail "purge: failed: $(cat "$work/purge.txt")"
+	sandboxed "$purge_home" sh "$installer" --uninstall --purge >"$work/purge.txt" 2>&1 || fail "purge: failed: $(cat "$work/purge.txt")"
 for gone in node.key agenthub.db agenthub.db-wal; do
 	checks=$((checks + 1))
 	[ ! -e "$checkout/$gone" ] || fail "purge: $gone is still there"
@@ -1004,7 +1289,7 @@ mkdir -p "$foreign_home/.config/agenthub"
 echo key >"$foreign_home/.config/agenthub/node.key"
 checks=$((checks + 1))
 PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
-	isolated "$foreign_home" sh "$installer" --uninstall --purge >"$work/foreign.txt" 2>&1 || fail "foreign: failed: $(cat "$work/foreign.txt")"
+	sandboxed "$foreign_home" sh "$installer" --uninstall --purge >"$work/foreign.txt" 2>&1 || fail "foreign: failed: $(cat "$work/foreign.txt")"
 : >>"$work/foreign-ah.log"
 lacks foreign "$work/foreign-ah.log" "service uninstall"
 contains foreign "$work/foreign.txt" "left the registered background service alone"
@@ -1024,7 +1309,7 @@ uninstall_ah_script "$work/path-ah-shim/ah" "$work/path-ah.log" "" 0
 make_unit "$path_ah_home" linux "$work/src/agenthub/bin/agenthub-node"
 checks=$((checks + 1))
 PATH="$work/path-ah-shim:$linux_shim:$bare_path" SHELL=/bin/bash \
-	isolated "$path_ah_home" sh "$installer" --uninstall >"$work/path-ah.txt" 2>&1 || fail "path-ah: failed: $(cat "$work/path-ah.txt")"
+	sandboxed "$path_ah_home" sh "$installer" --uninstall >"$work/path-ah.txt" 2>&1 || fail "path-ah: failed: $(cat "$work/path-ah.txt")"
 checks=$((checks + 1))
 [ ! -e "$work/path-ah.log" ] || fail "path-ah: the ah on PATH was run: $(cat "$work/path-ah.log")"
 
@@ -1035,8 +1320,8 @@ mkdir -p "$not_tree/bin" "$work/not-tree-home"
 echo src >"$not_tree/bin/ah"
 echo mine >"$not_tree/go.mod"
 checks=$((checks + 1))
-PATH="$linux_shim:$bare_path" SHELL=/bin/bash AGENTHUB_HOME="$not_tree" \
-	isolated "$work/not-tree-home" sh "$installer" --uninstall >"$work/not-tree.txt" 2>&1 || fail "not-tree: failed: $(cat "$work/not-tree.txt")"
+PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
+	sandboxed "$work/not-tree-home" env AGENTHUB_HOME="$not_tree" sh "$installer" --uninstall >"$work/not-tree.txt" 2>&1 || fail "not-tree: failed: $(cat "$work/not-tree.txt")"
 contains not-tree "$work/not-tree.txt" "left $not_tree alone"
 checks=$((checks + 1))
 [ -f "$not_tree/go.mod" ] || fail "not-tree: the checkout was removed"
@@ -1055,7 +1340,7 @@ chmod +x "$work/orphan-shim/systemctl"
 uninstall_ah_script "$work/orphan-shim/ah" "$work/orphan-path-ah.log" "" 0
 checks=$((checks + 1))
 PATH="$work/orphan-shim:$linux_shim:$bare_path" SHELL=/bin/bash \
-	isolated "$orphan_home" sh "$installer" --uninstall >"$work/orphan.txt" 2>&1 || fail "orphan: failed: $(cat "$work/orphan.txt")"
+	sandboxed "$orphan_home" sh "$installer" --uninstall >"$work/orphan.txt" 2>&1 || fail "orphan: failed: $(cat "$work/orphan.txt")"
 contains orphan "$work/orphan-systemctl.log" "systemctl --user disable --now agenthub-node.service"
 checks=$((checks + 1))
 ! exists_path "$orphan_home/.config/systemd/user/agenthub-node.service" || fail "orphan: the unit is still there"
@@ -1073,8 +1358,8 @@ mkdir -p "$spelled_home"
 ln -s "$spelled_real" "$work/spelled-link"
 make_unit "$spelled_home" linux "$(cd -P "$spelled_real" && pwd -P)/agenthub-node"
 checks=$((checks + 1))
-PATH="$linux_shim:$bare_path" SHELL=/bin/bash AGENTHUB_HOME="$work/spelled-link/" \
-	isolated "$spelled_home" sh "$installer" --uninstall >"$work/spelled.txt" 2>&1 || fail "spelled: failed: $(cat "$work/spelled.txt")"
+PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
+	sandboxed "$spelled_home" env AGENTHUB_HOME="$work/spelled-link/" sh "$installer" --uninstall >"$work/spelled.txt" 2>&1 || fail "spelled: failed: $(cat "$work/spelled.txt")"
 contains spelled "$work/spelled-ah.log" "service uninstall"
 lacks spelled "$work/spelled.txt" "left the registered background service alone"
 
@@ -1090,7 +1375,7 @@ printf '<plist>\n\t<array>\n\t\t<string>%s</string>\n\t</array>\n</plist>\n' \
 	>"$xml_home/Library/LaunchAgents/local.agenthub.node.plist"
 checks=$((checks + 1))
 PATH="$(fake_uname Darwin arm64):$bare_path" SHELL=/bin/zsh \
-	isolated "$xml_home" sh "$installer" --uninstall --prefix "$xml_pfx" >"$work/xml.txt" 2>&1 || fail "xml: failed: $(cat "$work/xml.txt")"
+	sandboxed "$xml_home" sh "$installer" --uninstall --prefix "$xml_pfx" >"$work/xml.txt" 2>&1 || fail "xml: failed: $(cat "$work/xml.txt")"
 contains xml "$work/xml-ah.log" "service uninstall"
 # The same escaped path, but not as the program: unit_mentions_install must
 # still see it and stop before the app a live service runs from is deleted.
@@ -1104,7 +1389,7 @@ printf '<plist>\n\t<array>\n\t\t<string>%s --verbose</string>\n\t</array>\n</pli
 	>"$xml2_home/Library/LaunchAgents/local.agenthub.node.plist"
 checks=$((checks + 1))
 if PATH="$(fake_uname Darwin arm64):$bare_path" SHELL=/bin/zsh \
-	isolated "$xml2_home" sh "$installer" --uninstall --prefix "$xml_pfx" >"$work/xml2.txt" 2>&1; then
+	sandboxed "$xml2_home" sh "$installer" --uninstall --prefix "$xml_pfx" >"$work/xml2.txt" 2>&1; then
 	fail "xml2: an escaped unit naming this install was carried past"
 fi
 contains xml2 "$work/xml2.txt" "nothing was removed"
@@ -1117,8 +1402,8 @@ mkdir -p "$sd_home/.config/systemd/user"
 printf '[Service]\nExecStart="%s/agenthub-node" --db x\n' "$(printf '%s' "$sd_tree" | sed 's/%/%%/g; s/\$/$$/g')" \
 	>"$sd_home/.config/systemd/user/agenthub-node.service"
 checks=$((checks + 1))
-PATH="$linux_shim:$bare_path" SHELL=/bin/bash AGENTHUB_HOME="$sd_tree" \
-	isolated "$sd_home" sh "$installer" --uninstall >"$work/sd.txt" 2>&1 || fail "sd: failed: $(cat "$work/sd.txt")"
+PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
+	sandboxed "$sd_home" env AGENTHUB_HOME="$sd_tree" sh "$installer" --uninstall >"$work/sd.txt" 2>&1 || fail "sd: failed: $(cat "$work/sd.txt")"
 contains sd "$work/sd-ah.log" "service uninstall"
 checks=$((checks + 1))
 ! exists_path "$sd_tree" || fail "sd: the tree is still there"
@@ -1131,7 +1416,7 @@ printf '[Service]\nExecStart=/usr/bin/env %s\n' "$unread_home/.local/share/agent
 	>"$unread_home/.config/systemd/user/agenthub-node.service"
 checks=$((checks + 1))
 if PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
-	isolated "$unread_home" sh "$installer" --uninstall >"$work/unread.txt" 2>&1; then
+	sandboxed "$unread_home" sh "$installer" --uninstall >"$work/unread.txt" 2>&1; then
 	fail "unread: an unreadable unit naming this install was carried past"
 fi
 contains unread "$work/unread.txt" "nothing was removed"
@@ -1144,8 +1429,8 @@ tree_at "$built" "$work/built-ah.log" "" 0
 echo "module x" >"$built/go.mod"
 mkdir -p "$work/built-home"
 checks=$((checks + 1))
-PATH="$linux_shim:$bare_path" SHELL=/bin/bash AGENTHUB_HOME="$built" \
-	isolated "$work/built-home" sh "$installer" --uninstall >"$work/built.txt" 2>&1 || fail "built: failed: $(cat "$work/built.txt")"
+PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
+	sandboxed "$work/built-home" env AGENTHUB_HOME="$built" sh "$installer" --uninstall >"$work/built.txt" 2>&1 || fail "built: failed: $(cat "$work/built.txt")"
 checks=$((checks + 1))
 [ -f "$built/go.mod" ] || fail "built: the checkout was removed"
 
@@ -1153,7 +1438,8 @@ git_checkout="$work/git-checkout"
 tree_at "$git_checkout" "$work/git-ah.log" "" 0
 mkdir -p "$git_checkout/.git"
 checks=$((checks + 1))
-PATH="$linux_shim:$bare_path" SHELL=/bin/bash AGENTHUB_HOME="$git_checkout" 	isolated "$work/built-home" sh "$installer" --uninstall >"$work/git-built.txt" 2>&1 || fail "git-built: failed: $(cat "$work/git-built.txt")"
+PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
+	sandboxed "$work/built-home" env AGENTHUB_HOME="$git_checkout" sh "$installer" --uninstall >"$work/git-built.txt" 2>&1 || fail "git-built: failed: $(cat "$work/git-built.txt")"
 checks=$((checks + 1))
 [ -d "$git_checkout/.git" ] || fail "git-built: the checkout was removed"
 
@@ -1168,11 +1454,11 @@ if [ "$(id -u)" -ne 0 ]; then
 	mkdir -p "$ro_apps_home"
 	chmod 555 "$ro_apps"
 	checks=$((checks + 1))
-	PATH="$(fake_uname Darwin arm64):$bare_path" SHELL=/bin/zsh 		isolated "$ro_apps_home" env AGENTHUB_APPLICATIONS="$ro_apps" sh "$installer" --uninstall >"$work/ro-apps.txt" 2>&1 ||
+	PATH="$(fake_uname Darwin arm64):$bare_path" SHELL=/bin/zsh 		sandboxed "$ro_apps_home" env AGENTHALLWAY_APPLICATIONS="$ro_apps" sh "$installer" --uninstall >"$work/ro-apps.txt" 2>&1 ||
 		fail "ro-apps: a directory it cannot write ended the uninstall: $(cat "$work/ro-apps.txt")"
 	contains ro-apps "$work/ro-apps.txt" "could not remove $ro_apps/agenthub-desktop.app"
 	contains ro-apps "$work/ro-apps.txt" "done, except for what could not be removed"
-	lacks ro-apps "$work/ro-apps.txt" "done. AgentHub is uninstalled."
+	lacks ro-apps "$work/ro-apps.txt" "done. Agent Hallway is uninstalled."
 	chmod 755 "$ro_apps"
 fi
 
@@ -1184,7 +1470,7 @@ printf '[Desktop Entry]\nExec=%s\nStartupWMClass=agenthub-desktop\n' "$old_entry
 	>"$old_entry_home/.local/share/applications/agenthub.desktop"
 checks=$((checks + 1))
 PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
-	isolated "$old_entry_home" sh "$installer" --uninstall >"$work/old-entry.txt" 2>&1 || fail "old-entry: failed: $(cat "$work/old-entry.txt")"
+	sandboxed "$old_entry_home" sh "$installer" --uninstall >"$work/old-entry.txt" 2>&1 || fail "old-entry: failed: $(cat "$work/old-entry.txt")"
 checks=$((checks + 1))
 ! exists_path "$old_entry_home/.local/share/applications/agenthub.desktop" || fail "old-entry: the unquoted entry was left"
 
@@ -1198,10 +1484,10 @@ for odd_mode in --dry-run ""; do
 	checks=$((checks + 1))
 	# shellcheck disable=SC2086 # the empty mode is meant to vanish
 	PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
-		isolated "$odd_home" sh "$installer" --uninstall $odd_mode >"$work/odd.txt" 2>&1 || fail "odd: failed: $(cat "$work/odd.txt")"
+		sandboxed "$odd_home" sh "$installer" --uninstall $odd_mode >"$work/odd.txt" 2>&1 || fail "odd: failed: $(cat "$work/odd.txt")"
 	contains "odd$odd_mode" "$work/odd.txt" "not as the line this script writes; left it as it is"
-	lacks "odd$odd_mode" "$work/odd.txt" "remove the AgentHub PATH lines"
-	lacks "odd$odd_mode" "$work/odd.txt" "removed the AgentHub PATH lines"
+	lacks "odd$odd_mode" "$work/odd.txt" "remove the Agent Hallway PATH lines"
+	lacks "odd$odd_mode" "$work/odd.txt" "removed the Agent Hallway PATH lines"
 	checks=$((checks + 1))
 	cmp -s "$odd_home/.bashrc" "$work/odd-bashrc.before" || fail "odd$odd_mode: .bashrc was rewritten"
 done
@@ -1212,7 +1498,7 @@ tree_at "$refuse_home/.local/share/agenthub" "$work/refuse-ah.log" "" 1
 make_unit "$refuse_home" linux "$refuse_home/.local/share/agenthub/agenthub-node"
 checks=$((checks + 1))
 if PATH="$linux_shim:$bare_path" SHELL=/bin/bash \
-	isolated "$refuse_home" sh "$installer" --uninstall >"$work/refuse.txt" 2>&1; then
+	sandboxed "$refuse_home" sh "$installer" --uninstall >"$work/refuse.txt" 2>&1; then
 	fail "refuse: a failed service uninstall was carried past"
 fi
 contains refuse "$work/refuse.txt" "nothing else was removed"
@@ -1238,7 +1524,7 @@ mac_un() { # mac_un <output file> [args...]
 	local out=$1
 	shift
 	PATH="$(fake_uname Darwin arm64):$bare_path" SHELL=/bin/zsh \
-		isolated "$mac_home" env AGENTHUB_APPLICATIONS="$mac_apps" sh "$installer" --uninstall "$@" >"$out" 2>&1
+		sandboxed "$mac_home" env AGENTHALLWAY_APPLICATIONS="$mac_apps" sh "$installer" --uninstall "$@" >"$out" 2>&1
 }
 checks=$((checks + 1))
 mac_un "$work/mac-dry.txt" --dry-run || fail "mac-dry: failed: $(cat "$work/mac-dry.txt")"
@@ -1248,10 +1534,10 @@ contains mac-dry "$work/mac-dry.cmds" "rm -rf $mac_apps/agenthub-desktop.app"
 contains mac-dry "$work/mac-dry.cmds" "rm -rf $mac_home/Applications/agenthub-desktop.app"
 contains mac-dry "$work/mac-dry.cmds" "rm -f $mac_home/.local/bin/ah"
 contains mac-dry "$work/mac-dry.cmds" "rm -rf $mac_home/Library/Caches/com.wails.agenthub-desktop"
-contains mac-dry "$work/mac-dry.txt" "+ remove the AgentHub PATH lines from $mac_home/.zshrc"
+contains mac-dry "$work/mac-dry.txt" "+ remove the Agent Hallway PATH lines from $mac_home/.zshrc"
 contains mac-dry "$work/mac-dry.txt" "nothing was removed"
 lacks mac-dry "$work/mac-dry.txt" "removed $mac_home"
-lacks mac-dry "$work/mac-dry.txt" "done. AgentHub is uninstalled."
+lacks mac-dry "$work/mac-dry.txt" "done. Agent Hallway is uninstalled."
 lacks mac-dry "$work/mac-dry.cmds" "sudo"
 for kept in "$mac_apps/agenthub-desktop.app" "$mac_home/.local/bin/ah" "$mac_home/Library/Caches/com.wails.agenthub-desktop"; do
 	checks=$((checks + 1))
@@ -1290,7 +1576,7 @@ cp "$work/mac-zshrc.before" "$real_home/.zshrc"
 uninstall_ah_script "$work/real-shim/ah" "$work/real-path-ah.log" "" 0
 checks=$((checks + 1))
 PATH="$work/real-shim:$(fake_uname Darwin arm64):$bare_path" SHELL=/bin/zsh \
-	isolated "$real_home" sh "$installer" --uninstall --purge --prefix "$real_pfx" >"$work/real-pfx.txt" 2>&1 ||
+	sandboxed "$real_home" sh "$installer" --uninstall --purge --prefix "$real_pfx" >"$work/real-pfx.txt" 2>&1 ||
 	fail "real-pfx: failed: $(cat "$work/real-pfx.txt")"
 for gone in "$real_pfx/agenthub-desktop.app" "$real_pfx/bin/ah" "$real_pfx/.agenthub-install"; do
 	checks=$((checks + 1))
@@ -1338,7 +1624,7 @@ cat >"$quit_shim/pgrep" <<'EOF'
 #!/bin/sh
 echo "$*" >>"$QUIT_LOG.pgrep"
 case "$*" in
-*"$QUIT_PREFIX/agenthub-desktop.app/Contents/MacOS/desktop"*) ;;
+*"$QUIT_PREFIX/${QUIT_APP:-agenthub-desktop}.app/Contents/MacOS/desktop"*) ;;
 *) exit 1 ;;
 esac
 calls=$(($(cat "$QUIT_LOG.count" 2>/dev/null || echo 0) + 1))
@@ -1366,10 +1652,11 @@ while [ "$#" -gt 1 ]; do
 	[ "$1" = -mountpoint ] && mount_point=$2
 	shift
 done
-mkdir -p "$mount_point/agenthub-desktop.app/Contents/MacOS"
-echo new >"$mount_point/agenthub-desktop.app/Contents/MacOS/desktop"
-printf '#!/bin/sh\necho "ah (fake, new)"\n' >"$mount_point/agenthub-desktop.app/Contents/MacOS/ah"
-chmod +x "$mount_point/agenthub-desktop.app/Contents/MacOS/ah"
+app=${QUIT_APP:-agenthub-desktop}
+mkdir -p "$mount_point/$app.app/Contents/MacOS"
+echo new >"$mount_point/$app.app/Contents/MacOS/desktop"
+printf '#!/bin/sh\necho "ah (fake, new)"\n' >"$mount_point/$app.app/Contents/MacOS/ah"
+chmod +x "$mount_point/$app.app/Contents/MacOS/ah"
 EOF
 # ditto writes only into the prefix; anywhere else is a test that has escaped.
 cat >"$quit_shim/ditto" <<'EOF'
@@ -1387,32 +1674,40 @@ chmod +x "$quit_shim"/*
 quit_dmg_dir="$work/quit-dmg"
 mkdir -p "$quit_dmg_dir"
 echo "not really a disk image" >"$quit_dmg_dir/agenthub-desktop_v0.1.0_darwin_universal.dmg"
+echo "not really a disk image either" >"$quit_dmg_dir/agenthallway-desktop_v0.2.0_darwin_universal.dmg"
 (
 	cd "$quit_dmg_dir"
 	if command -v sha256sum >/dev/null 2>&1; then
-		sha256sum agenthub-desktop_v0.1.0_darwin_universal.dmg >SHA256SUMS
+		sha256sum agenthub-desktop_v0.1.0_darwin_universal.dmg agenthallway-desktop_v0.2.0_darwin_universal.dmg >SHA256SUMS
 	else
-		shasum -a 256 agenthub-desktop_v0.1.0_darwin_universal.dmg >SHA256SUMS
+		shasum -a 256 agenthub-desktop_v0.1.0_darwin_universal.dmg agenthallway-desktop_v0.2.0_darwin_universal.dmg >SHA256SUMS
 	fi
 )
 quit_darwin=$(fake_uname Darwin arm64)
 
 # quit_case puts the previous version's bundle, marked old, in a fresh prefix
-# and runs a real upgrade over it. Its status is the installer's.
+# and runs a real upgrade over it. Its status is the installer's. QUIT_APP
+# names the app (the pre-rename one, from the v0.1.0 image, unless a case
+# says agenthallway-desktop, from the v0.2.0 one).
 quit_case() { # quit_case <name> <ok|refuse> <turns still running|forever> [args...]
-	local name=$1 osascript_mode=$2 running_for=$3
+	local name=$1 osascript_mode=$2 running_for=$3 app=${QUIT_APP:-agenthub-desktop} image
 	shift 3
+	if [ "$app" = agenthub-desktop ]; then
+		image=agenthub-desktop_v0.1.0_darwin_universal.dmg
+	else
+		image=agenthallway-desktop_v0.2.0_darwin_universal.dmg
+	fi
 	QUIT_PFX="$work/quit-$name"
 	QUIT_OUT="$work/quit-$name.txt"
-	mkdir -p "$QUIT_PFX/agenthub-desktop.app/Contents/MacOS" "$work/quit-$name-home"
+	mkdir -p "$QUIT_PFX/$app.app/Contents/MacOS" "$work/quit-$name-home"
 	touch "$QUIT_PFX/.agenthub-install"
-	echo old >"$QUIT_PFX/agenthub-desktop.app/Contents/MacOS/desktop"
+	echo old >"$QUIT_PFX/$app.app/Contents/MacOS/desktop"
 	rm -f "$work/quit-$name.log".*
 	PATH="$quit_shim:$quit_darwin:$bare_path" SHELL=/bin/zsh \
-		QUIT_LOG="$work/quit-$name.log" QUIT_PREFIX="$QUIT_PFX" \
+		QUIT_LOG="$work/quit-$name.log" QUIT_PREFIX="$QUIT_PFX" QUIT_APP="$app" \
 		QUIT_OSASCRIPT="$osascript_mode" QUIT_RUNNING_FOR="$running_for" \
-		isolated "$work/quit-$name-home" sh "$installer" \
-		--from "$quit_dmg_dir/agenthub-desktop_v0.1.0_darwin_universal.dmg" \
+		sandboxed "$work/quit-$name-home" sh "$installer" \
+		--from "$quit_dmg_dir/$image" \
 		--prefix "$QUIT_PFX" --no-service --no-open --no-modify-path --no-skill "$@" >"$QUIT_OUT" 2>&1
 }
 
@@ -1492,6 +1787,18 @@ if [ "$quit_safe" -eq 1 ]; then
 	contains quit-stray "$QUIT_OUT" "agenthub-desktop quit"
 	contains quit-stray "$work/quit-stray.log.osascript" "-e quit app \"agenthub-desktop\""
 
+	echo "== the current app: a quit macOS calls cancelled, then the app quits =="
+	checks=$((checks + 1))
+	QUIT_APP=agenthallway-desktop quit_case current refuse 2 || fail "quit-current: the upgrade failed: $(cat "$QUIT_OUT")"
+	contains quit-current "$QUIT_OUT" "agenthallway-desktop is running; asking it to quit"
+	contains quit-current "$QUIT_OUT" "agenthallway-desktop quit"
+	contains quit-current "$QUIT_OUT" "installed $QUIT_PFX/agenthallway-desktop.app"
+	contains quit-current "$QUIT_OUT" "done. Agent Hallway"
+	contains quit-current "$QUIT_PFX/agenthallway-desktop.app/Contents/MacOS/desktop" "new"
+	contains quit-current "$work/quit-current.log.osascript" "-e quit app \"agenthallway-desktop\""
+	checks=$((checks + 1))
+	[ ! -e "$QUIT_PFX/.agenthub-install" ] || fail "quit-current: the prefix's pre-rename marker was not retired"
+
 	echo "== a quit macOS accepts but the app stays: our message, no reply to quote =="
 	checks=$((checks + 1))
 	if quit_case stays ok forever; then
@@ -1518,7 +1825,7 @@ echo "== a dry run prints the skill install and writes nothing =="
 skill_dry_home="$work/skill-dry-home"
 mkdir -p "$skill_dry_home"
 LDCONFIG_SHIM=$(fake_ldconfig 4.1)
-HOME="$skill_dry_home" dry_run Linux x86_64 "$work/skill-dry-linux.txt" --version v0.1.0 --no-service
+DRY_HOME="$skill_dry_home" dry_run Linux x86_64 "$work/skill-dry-linux.txt" --version v0.1.0 --no-service
 unset LDCONFIG_SHIM
 commands_only "$work/skill-dry-linux.txt" "$work/skill-dry-linux.cmds"
 contains skill-dry "$work/skill-dry-linux.cmds" "cp -R $skill_dry_home/.local/share/agenthub/skills/agenthub-watch"
@@ -1526,7 +1833,7 @@ contains skill-dry "$work/skill-dry-linux.cmds" "mv "
 contains skill-dry "$work/skill-dry-linux.cmds" "$CLAUDE_CONFIG_DIR/skills/agenthub-watch"
 contains skill-dry "$work/skill-dry-linux.txt" "installed the Claude Code skill $CLAUDE_CONFIG_DIR/skills/agenthub-watch"
 contains skill-dry "$work/skill-dry-linux.txt" "skill: $CLAUDE_CONFIG_DIR/skills/agenthub-watch (Claude Code sessions started from now on load it"
-HOME="$skill_dry_home" dry_run Darwin arm64 "$work/skill-dry-mac.txt" --version v0.1.0 --no-service --no-open
+DRY_HOME="$skill_dry_home" dry_run Darwin arm64 "$work/skill-dry-mac.txt" --version v0.1.0 --no-service --no-open
 commands_only "$work/skill-dry-mac.txt" "$work/skill-dry-mac.cmds"
 contains skill-dry "$work/skill-dry-mac.cmds" "/mnt/.skills/agenthub-watch"
 contains skill-dry "$work/skill-dry-mac.cmds" "$CLAUDE_CONFIG_DIR/skills/agenthub-watch"
@@ -1542,7 +1849,7 @@ lacks skill-dry "$work/skill-dry-linux.txt" "raw.githubusercontent.com/SheldonCh
 lacks skill-dry "$work/skill-dry-mac.txt" "raw.githubusercontent.com/SheldonChangL/agenthub/main/.claude"
 checks=$((checks + 1))
 ! exists_path "$CLAUDE_CONFIG_DIR/skills/agenthub-watch" || fail "skill-dry: a dry run installed the skill"
-HOME="$skill_dry_home" dry_run Darwin arm64 "$work/skill-dry-no.txt" --version v0.1.0 --no-service --no-open --no-skill
+DRY_HOME="$skill_dry_home" dry_run Darwin arm64 "$work/skill-dry-no.txt" --version v0.1.0 --no-service --no-open --no-skill
 commands_only "$work/skill-dry-no.txt" "$work/skill-dry-no.cmds"
 lacks skill-dry-no "$work/skill-dry-no.cmds" "skills/agenthub-watch"
 contains skill-dry-no "$work/skill-dry-no.txt" "skipped the Claude Code skill (--no-skill)"
@@ -1578,7 +1885,7 @@ skill_run() { # skill_run <output file> <claude config dir> [args...]
 	local out=$1 cfg=$2
 	shift 2
 	PATH="$linux_shim:$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="$cfg" \
-		isolated "$skill_home" sh "$installer" "$@" >"$out" 2>&1
+		sandboxed "$skill_home" sh "$installer" "$@" >"$out" 2>&1
 }
 skill_install() { # skill_install <output file> <claude config dir> [archive] [args...]
 	local out=$1 cfg=$2 archive=${3:-$skilled/agenthub-desktop_v0.1.0_linux_amd64.tar.gz}
@@ -1680,6 +1987,920 @@ skill_run "$work/skill-un-copied.txt" "$copied" --uninstall || fail "skill-un-co
 checks=$((checks + 1))
 [ -f "$copied/skills/agenthub-watch/SKILL.md" ] || fail "skill-un-copied: --uninstall removed the owner's copy"
 
+# ---- the current era, and upgrades from the pre-rename one -----------------
+#
+# Everything above runs a pre-rename tag (v0.1.0) or an uninstall. From here
+# on: what v0.2.0 installs, what an upgrade from v0.1.11 leaves behind and
+# removes, and the two eras' installs side by side. Every case that removes
+# anything first runs the same command with --dry-run and requires each
+# absolute path it would touch to be inside the work directory; the real run is
+# skipped when it is not.
+
+# without_work prints a transcript with the work directory's path replaced:
+# that path holds "agenthallway" (it is a mktemp of agenthallway-install-test),
+# which would otherwise be found by every "no current name here" check.
+without_work() { # without_work <transcript> <destination>
+	sed "s|$work|WORK|g" "$1" >"$2"
+}
+
+# assert_confined fails when a dry run's commands name an absolute path
+# outside the work directory: that is what the real run of the same case
+# would touch.
+assert_confined() { # assert_confined <label> <transcript>
+	local bad
+	bad=$(grep '^+ ' "$2" | tr ' ' '\n' | tr -d "'\"" | grep '^/' | grep -v -e "^$work/" || true)
+	checks=$((checks + 1))
+	if [ -n "$bad" ]; then
+		fail "$1: the dry run names paths outside the work directory, so the real run was not made: $bad"
+		return 1
+	fi
+	return 0
+}
+
+# quote_for_test spells an argument the way install.sh's quote() prints it in
+# a dry-run transcript: bare when it is an ordinary word, single-quoted
+# otherwise (a path with a space in it, as under Application Support).
+quote_for_test() { # quote_for_test <argument>
+	case "$1" in
+	"" | *[!A-Za-z0-9._/:=@+-]*) printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")" ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+
+# path_state prints a path (and everything under it) with type, mode, mtime
+# and, for a file, its checksum: the same output before and after means the
+# run did not touch it.
+path_state() { # path_state <path>...
+	local top path
+	for top in "$@"; do
+		if ! exists_path "$top"; then
+			echo "absent $top"
+			continue
+		fi
+		find "$top" -print | LC_ALL=C sort | while IFS= read -r path; do
+			printf '%s %s' "$path" "$(perl -e '@s = lstat($ARGV[0]); printf "%o %d", $s[2], $s[9]' "$path")"
+			if [ -f "$path" ] && [ ! -L "$path" ]; then
+				printf ' %s' "$(cksum <"$path")"
+			fi
+			printf '\n'
+		done
+	done
+}
+
+# sums_beside appends an archive's line to the SHA256SUMS beside it.
+sums_beside() { # sums_beside <archive>
+	(
+		cd "$(dirname "$1")"
+		if command -v sha256sum >/dev/null 2>&1; then
+			sha256sum "$(basename "$1")"
+		else
+			shasum -a 256 "$(basename "$1")"
+		fi >>SHA256SUMS
+	)
+}
+
+# current_ah_script writes the ah of a current-era release, as far as
+# install.sh and these cases need one. It records what it is asked in
+# FAKE_AH_LOG; answers `--json service status` from the unit files under HOME
+# the way internal/service Status does (the current registration, else the
+# pre-rename one marked Legacy); and changes those files the way the real
+# commands do: `service install` retires the pre-rename unit first and then
+# writes the current one, starting the node beside this ah, and `service
+# uninstall` removes both.
+current_ah_script() { # current_ah_script <file>
+	cat >"$1" <<'EOF'
+#!/bin/sh
+here=$(cd "$(dirname "$0")" && pwd)
+echo "$*" >>"${FAKE_AH_LOG:-/dev/null}"
+if [ "$(uname -s)" = Darwin ]; then
+	current="$HOME/Library/LaunchAgents/local.agenthallway.node.plist"
+	legacy="$HOME/Library/LaunchAgents/local.agenthub.node.plist"
+else
+	current="$HOME/.config/systemd/user/agenthallway-node.service"
+	legacy="$HOME/.config/systemd/user/agenthub-node.service"
+fi
+unit_args() {
+	case "$1" in
+	*.plist) sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p' "$1" | sed 1d ;;
+	*) sed -n 's/^ExecStart=//p' "$1" | head -n 1 | tr ' ' '\n' | sed 1d ;;
+	esac | sed 's/.*/"&"/' | paste -sd, -
+}
+case "$*" in
+*"--json service status"*)
+	if [ -f "$current" ]; then
+		also=""
+		[ ! -f "$legacy" ] || also=',"LegacyAlsoInstalled":true'
+		printf '{"service":{"Installed":true,"Supported":true%s,"Arguments":[%s]}}\n' "$also" "$(unit_args "$current")"
+	elif [ -f "$legacy" ]; then
+		printf '{"service":{"Installed":true,"Legacy":true,"Supported":true,"Arguments":[%s]}}\n' "$(unit_args "$legacy")"
+	else
+		printf '{"service":{"Installed":false,"Supported":true}}\n'
+	fi
+	;;
+*"service install"*)
+	db=""
+	[ "${3:-}" != --db ] || db=$4
+	if [ -f "$legacy" ]; then
+		rm -f "$legacy"
+		echo "stopped and removed the pre-rename service (fake)"
+	fi
+	mkdir -p "$(dirname "$current")"
+	if [ "$(uname -s)" = Darwin ]; then
+		{
+			printf '<plist version="1.0">\n<dict>\n\t<key>ProgramArguments</key>\n\t<array>\n'
+			printf '\t\t<string>%s</string>\n' "$here/agenthallway-node"
+			[ -z "$db" ] || printf '\t\t<string>--db</string>\n\t\t<string>%s</string>\n' "$db"
+			printf '\t</array>\n</dict>\n</plist>\n'
+		} >"$current"
+	else
+		printf '[Service]\nExecStart=%s%s\n' "$here/agenthallway-node" "${db:+ --db $db}" >"$current"
+	fi
+	;;
+*"service uninstall"*) rm -f "$current" "$legacy" ;;
+*"service status"*) echo "background service: registered (fake)" ;;
+*) echo "ah (fake, current)" ;;
+esac
+EOF
+	chmod +x "$1"
+}
+
+# make_current_unit writes the registration a current ah writes, starting
+# <node binary>: the current label or unit name.
+make_current_unit() { # make_current_unit <home> <darwin|linux> <node binary> [db]
+	local home=$1 os=$2 node=$3 db=${4:-}
+	if [ "$os" = darwin ]; then
+		mkdir -p "$home/Library/LaunchAgents"
+		{
+			printf '<plist version="1.0">\n<dict>\n\t<key>ProgramArguments</key>\n\t<array>\n'
+			printf '\t\t<string>%s</string>\n' "$node"
+			[ -z "$db" ] || printf '\t\t<string>--db</string>\n\t\t<string>%s</string>\n' "$db"
+			printf '\t</array>\n</dict>\n</plist>\n'
+		} >"$home/Library/LaunchAgents/local.agenthallway.node.plist"
+	else
+		mkdir -p "$home/.config/systemd/user"
+		printf '[Service]\nExecStart=%s%s\n' "$node" "${db:+ --db $db}" \
+			>"$home/.config/systemd/user/agenthallway-node.service"
+	fi
+}
+
+# stage_tree lays out an unpacked release directory of either era: the
+# binaries, and the skill under skills/. The current era's ah is
+# current_ah_script; the pre-rename one only says what it is.
+stage_tree() { # stage_tree <directory> <current|legacy> [no-skill]
+	local dir=$1 era=$2 slug app binary
+	if [ "$era" = current ]; then
+		slug=agenthallway
+	else
+		slug=agenthub
+	fi
+	app="$slug-desktop"
+	mkdir -p "$dir"
+	for binary in "$slug-node" "$slug-mcp" "$app"; do
+		printf '#!/bin/sh\necho "%s (fake)"\n' "$binary" >"$dir/$binary"
+		chmod +x "$dir/$binary"
+	done
+	if [ "$era" = current ]; then
+		current_ah_script "$dir/ah"
+	else
+		printf '#!/bin/sh\necho "ah v0.1.11 (fake)"\n' >"$dir/ah"
+		chmod +x "$dir/ah"
+	fi
+	if [ "${3:-}" != no-skill ]; then
+		mkdir -p "$dir/skills/$slug-watch"
+		printf -- '---\nname: %s-watch\n---\n(fake skill)\n' "$slug" >"$dir/skills/$slug-watch/SKILL.md"
+	fi
+}
+
+# The two releases, as the release page carries them: a desktop and a command
+# line archive per era, and a SHA256SUMS. The webkit40 archives are missing on
+# purpose, which is what the fallback cases below turn on.
+for release in current:v0.2.0:agenthallway legacy:v0.1.11:agenthub; do
+	release_era=${release%%:*}
+	release_rest=${release#*:}
+	release_tag=${release_rest%%:*}
+	release_slug=${release_rest#*:}
+	release_dir="$work/rel-$release_era"
+	mkdir -p "$release_dir" "$work/stage-$release_era"
+	stage_tree "$work/stage-$release_era/${release_slug}-desktop_${release_tag}_linux_amd64" "$release_era"
+	tar -C "$work/stage-$release_era" -czf "$release_dir/${release_slug}-desktop_${release_tag}_linux_amd64.tar.gz" \
+		"${release_slug}-desktop_${release_tag}_linux_amd64"
+	sums_beside "$release_dir/${release_slug}-desktop_${release_tag}_linux_amd64.tar.gz"
+	stage_tree "$work/stage-$release_era/${release_slug}_${release_tag}_linux_amd64" "$release_era"
+	tar -C "$work/stage-$release_era" -czf "$release_dir/${release_slug}_${release_tag}_linux_amd64.tar.gz" \
+		"${release_slug}_${release_tag}_linux_amd64"
+	sums_beside "$release_dir/${release_slug}_${release_tag}_linux_amd64.tar.gz"
+done
+current_tgz="$work/rel-current/agenthallway-desktop_v0.2.0_linux_amd64.tar.gz"
+legacy_tgz="$work/rel-legacy/agenthub-desktop_v0.1.11_linux_amd64.tar.gz"
+
+echo "== I1 a pre-rename tag downloads and installs the pre-rename names =="
+i1_dry() { # i1_dry <name> <system> <machine> [args...]
+	local name=$1
+	shift
+	dry_run "$1" "$2" "$work/i1-$name.txt" --version v0.1.11 "${@:3}"
+	commands_only "$work/i1-$name.txt" "$work/i1-$name.cmds"
+	without_work "$work/i1-$name.cmds" "$work/i1-$name.bare"
+	lacks "i1-$name" "$work/i1-$name.bare" "agenthallway"
+	lacks "i1-$name" "$work/i1-$name.cmds" "sudo"
+}
+i1_dry darwin Darwin arm64 --no-open
+contains i1-darwin "$work/i1-darwin.txt" "agenthub-desktop_v0.1.11_darwin_universal.dmg"
+contains i1-darwin "$work/i1-darwin.cmds" "$work/Applications/agenthub-desktop.app"
+contains i1-darwin "$work/i1-darwin.cmds" "/mnt/.skills/agenthub-watch"
+contains i1-darwin "$work/i1-darwin.cmds" "$CLAUDE_CONFIG_DIR/skills/agenthub-watch"
+contains i1-darwin "$work/i1-darwin.txt" "done. AgentHub v0.1.11 is installed:"
+LDCONFIG_SHIM=$(fake_ldconfig 4.1)
+i1_dry linux Linux x86_64
+unset LDCONFIG_SHIM
+contains i1-linux "$work/i1-linux.txt" "agenthub-desktop_v0.1.11_linux_amd64.tar.gz"
+contains i1-linux "$work/i1-linux.cmds" "$work/dry-home/.local/share/agenthub"
+contains i1-linux "$work/i1-linux.cmds" "$work/dry-home/.local/bin/agenthub-desktop"
+contains i1-linux "$work/i1-linux.txt" "+ write $work/dry-home/.local/share/applications/agenthub.desktop"
+contains i1-linux "$work/i1-linux.cmds" "skill-stage/agenthub-watch/.agenthub-install"
+i1_dry cli Linux x86_64 --cli-only
+contains i1-cli "$work/i1-cli.txt" "agenthub_v0.1.11_linux_amd64.tar.gz"
+contains i1-cli "$work/i1-cli.cmds" "$work/dry-home/.local/bin/agenthub-mcp"
+LDCONFIG_SHIM=$(fake_ldconfig 4.0)
+i1_dry webkit40 Linux x86_64
+unset LDCONFIG_SHIM
+contains i1-webkit40 "$work/i1-webkit40.txt" "agenthub-desktop_v0.1.11_linux_amd64_webkit40.tar.gz"
+# The fallback for a tag without a webkit40 build, downloaded for real from a
+# release page that has none: the plain archive, under the pre-rename name.
+i1_home="$work/i1-home"
+mkdir -p "$i1_home"
+checks=$((checks + 1))
+PATH="$(fake_ldconfig 4.0):$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash SB_SERVE="$work/rel-legacy" CLAUDE_CONFIG_DIR="$i1_home/.claude" \
+	sandboxed "$i1_home" env AGENTHALLWAY_LDCONFIG_PATHS= sh "$installer" --version v0.1.11 --no-service \
+	>"$work/i1-fallback.txt" 2>&1 || fail "i1-fallback: the install failed: $(cat "$work/i1-fallback.txt")"
+contains i1-fallback "$work/i1-fallback.txt" "Falling back to agenthub-desktop_v0.1.11_linux_amd64.tar.gz"
+contains i1-fallback "$work/i1-fallback.txt" "verified agenthub-desktop_v0.1.11_linux_amd64.tar.gz against SHA256SUMS"
+checks=$((checks + 1))
+[ -x "$i1_home/.local/share/agenthub/agenthub-node" ] || fail "i1-fallback: no pre-rename tree at $i1_home/.local/share/agenthub"
+checks=$((checks + 1))
+! exists_path "$i1_home/.local/share/agenthallway" || fail "i1-fallback: a pre-rename tag installed a current tree"
+
+echo "== I2 v0.2.0 installs the new names =="
+i2_dry() { # i2_dry <name> <system> <machine> [args...]
+	local name=$1
+	shift
+	dry_run "$1" "$2" "$work/i2-$name.txt" "${@:3}"
+	commands_only "$work/i2-$name.txt" "$work/i2-$name.cmds"
+	without_work "$work/i2-$name.cmds" "$work/i2-$name.bare"
+	lacks "i2-$name" "$work/i2-$name.bare" "agenthub-desktop"
+	lacks "i2-$name" "$work/i2-$name.bare" "agenthub_v"
+	lacks "i2-$name" "$work/i2-$name.bare" "agenthub-watch"
+	lacks "i2-$name" "$work/i2-$name.bare" "share/agenthub/"
+	lacks "i2-$name" "$work/i2-$name.cmds" "sudo"
+}
+# A machine with nothing installed: an Applications of its own, since the
+# shared fake one holds a pre-rename app the upgrade would retire.
+mkdir -p "$work/i2-Applications"
+SB_APPLICATIONS="$work/i2-Applications" i2_dry darwin Darwin arm64 --version v0.2.0 --no-open
+contains i2-darwin "$work/i2-darwin.txt" "agenthallway-desktop_v0.2.0_darwin_universal.dmg"
+contains i2-darwin "$work/i2-darwin.cmds" "ditto $work/tmp/"
+contains i2-darwin "$work/i2-darwin.cmds" "/mnt/agenthallway-desktop.app $work/i2-Applications/agenthallway-desktop.app"
+contains i2-darwin "$work/i2-darwin.cmds" "/mnt/.skills/agenthallway-watch"
+contains i2-darwin "$work/i2-darwin.cmds" "$CLAUDE_CONFIG_DIR/skills/agenthallway-watch"
+contains i2-darwin "$work/i2-darwin.txt" "done. Agent Hallway v0.2.0 is installed:"
+contains i2-darwin "$work/i2-darwin.txt" "Open agenthallway-desktop from Applications"
+LDCONFIG_SHIM=$(fake_ldconfig 4.1)
+i2_dry linux Linux x86_64 --version v0.2.0
+unset LDCONFIG_SHIM
+contains i2-linux "$work/i2-linux.txt" "agenthallway-desktop_v0.2.0_linux_amd64.tar.gz"
+contains i2-linux "$work/i2-linux.cmds" "$work/dry-home/.local/share/agenthallway"
+contains i2-linux "$work/i2-linux.cmds" "$work/dry-home/.local/bin/agenthallway-desktop"
+contains i2-linux "$work/i2-linux.txt" "+ write $work/dry-home/.local/share/applications/agenthallway.desktop"
+contains i2-linux "$work/i2-linux.cmds" "skill-stage/agenthallway-watch/.agenthallway-install"
+i2_dry cli Linux x86_64 --version v0.2.0 --cli-only
+contains i2-cli "$work/i2-cli.txt" "agenthallway_v0.2.0_linux_amd64.tar.gz"
+contains i2-cli "$work/i2-cli.cmds" "$work/dry-home/.local/bin/agenthallway-mcp"
+contains i2-cli "$work/i2-cli.cmds" "$work/dry-home/.local/bin/agenthallway-node"
+LDCONFIG_SHIM=$(fake_ldconfig 4.0)
+i2_dry webkit40 Linux x86_64 --version v0.2.0
+unset LDCONFIG_SHIM
+contains i2-webkit40 "$work/i2-webkit40.txt" "agenthallway-desktop_v0.2.0_linux_amd64_webkit40.tar.gz"
+i2_dry rc Linux x86_64 --version v0.2.0-rc.1 --cli-only
+contains i2-rc "$work/i2-rc.txt" "agenthallway_v0.2.0-rc.1_linux_amd64.tar.gz"
+i2_dry latest Linux x86_64 --cli-only
+contains i2-latest "$work/i2-latest.txt" "agenthallway_vX.Y.Z_linux_amd64.tar.gz"
+i2_home="$work/i2-home"
+mkdir -p "$i2_home"
+checks=$((checks + 1))
+PATH="$(fake_ldconfig 4.0):$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash SB_SERVE="$work/rel-current" CLAUDE_CONFIG_DIR="$i2_home/.claude" \
+	sandboxed "$i2_home" env AGENTHALLWAY_LDCONFIG_PATHS= sh "$installer" --version v0.2.0 --no-service \
+	>"$work/i2-fallback.txt" 2>&1 || fail "i2-fallback: the install failed: $(cat "$work/i2-fallback.txt")"
+contains i2-fallback "$work/i2-fallback.txt" "Falling back to agenthallway-desktop_v0.2.0_linux_amd64.tar.gz"
+checks=$((checks + 1))
+[ -x "$i2_home/.local/share/agenthallway/agenthallway-node" ] || fail "i2-fallback: no current tree at $i2_home/.local/share/agenthallway"
+
+echo "== I3 --from decides the era from the file, and the contents must agree =="
+# A file renamed by hand: the name says one era, the binaries are the other's.
+# Refused once unpacked or mounted, before anything installed is touched.
+for mismatch in current:agenthallway-desktop_v0.2.0_linux_amd64:legacy:agenthub-node \
+	legacy:agenthub-desktop_v0.1.11_linux_amd64:current:agenthallway-node; do
+	mismatch_name=${mismatch%%:*}
+	mismatch_rest=${mismatch#*:}
+	mismatch_file=${mismatch_rest%%:*}
+	mismatch_rest=${mismatch_rest#*:}
+	mismatch_contents=${mismatch_rest%%:*}
+	mismatch_found=${mismatch_rest#*:}
+	mismatch_dir="$work/i3-$mismatch_name"
+	stage_tree "$work/i3-stage-$mismatch_name/$mismatch_file" "$mismatch_contents"
+	mkdir -p "$mismatch_dir"
+	tar -C "$work/i3-stage-$mismatch_name" -czf "$mismatch_dir/$mismatch_file.tar.gz" "$mismatch_file"
+	sums_beside "$mismatch_dir/$mismatch_file.tar.gz"
+	i3_home="$work/i3-home-$mismatch_name"
+	mkdir -p "$i3_home"
+	echo "# the owner's" >"$i3_home/.bashrc"
+	i3_before=$(path_state "$i3_home" "$fake_applications")
+	checks=$((checks + 1))
+	if PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash \
+		sandboxed "$i3_home" sh "$installer" --from "$mismatch_dir/$mismatch_file.tar.gz" \
+		>"$work/i3-$mismatch_name.txt" 2>&1; then
+		fail "i3-$mismatch_name: an archive whose contents are the other era's was installed"
+	fi
+	contains "i3-$mismatch_name" "$work/i3-$mismatch_name.txt" "but it contains $mismatch_found"
+	contains "i3-$mismatch_name" "$work/i3-$mismatch_name.txt" "nothing was installed"
+	checks=$((checks + 1))
+	[ "$(path_state "$i3_home" "$fake_applications")" = "$i3_before" ] ||
+		fail "i3-$mismatch_name: the refused install changed $i3_home"
+done
+# The disk image: named for v0.2.0, holding the pre-rename app.
+i3_dmg_dir="$work/i3-dmg"
+mkdir -p "$i3_dmg_dir" "$work/i3-dmg-contents/agenthub-desktop.app/Contents/MacOS" "$work/i3-mac-home"
+echo "not really a disk image" >"$i3_dmg_dir/agenthallway-desktop_v0.2.0_darwin_universal.dmg"
+sums_beside "$i3_dmg_dir/agenthallway-desktop_v0.2.0_darwin_universal.dmg"
+i3_mac_before=$(path_state "$work/i3-mac-home" "$fake_applications")
+checks=$((checks + 1))
+if PATH="$(fake_uname Darwin arm64):$bare_path" SHELL=/bin/zsh SB_DMG_SOURCE="$work/i3-dmg-contents" \
+	sandboxed "$work/i3-mac-home" sh "$installer" --from "$i3_dmg_dir/agenthallway-desktop_v0.2.0_darwin_universal.dmg" \
+	>"$work/i3-dmg.txt" 2>&1; then
+	fail "i3-dmg: a disk image holding the pre-rename app was installed as v0.2.0"
+fi
+contains i3-dmg "$work/i3-dmg.txt" "but it contains agenthub-desktop.app"
+checks=$((checks + 1))
+[ "$(path_state "$work/i3-mac-home" "$fake_applications")" = "$i3_mac_before" ] ||
+	fail "i3-dmg: the refused install changed something"
+
+# legacy_layout installs v0.1.11 for real into <home> (tree, links, menu
+# entry, marked skill, PATH line), then registers the pre-rename service the
+# way its ah would, on <db>, and puts the node's files and another app's
+# files in the pre-rename data directory.
+legacy_layout() { # legacy_layout <home> <db or "">
+	local home=$1 db=$2
+	mkdir -p "$home"
+	PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="$home/.claude" \
+		sandboxed "$home" sh "$installer" --from "$legacy_tgz" --no-service >"$home.legacy-install.txt" 2>&1 ||
+		{
+			fail "legacy layout: the v0.1.11 install failed: $(cat "$home.legacy-install.txt")"
+			return 1
+		}
+	make_unit "$home" linux "$home/.local/share/agenthub/agenthub-node" "$db"
+	mkdir -p "$home/.config/agenthub/approvals" "$home/.config/agenthub/claims" "$home/.config/agenthub/hooks"
+	echo key >"$home/.config/agenthub/node.key"
+	echo db >"$home/.config/agenthub/agenthub.db"
+	echo wal >"$home/.config/agenthub/agenthub.db-wal"
+	echo theirs >"$home/.config/agenthub/session_metadata.sqlite"
+	echo theirs >"$home/.config/agenthub/approvals/a.json"
+	echo theirs >"$home/.config/agenthub/claims/b"
+	printf '#!/bin/sh\n' >"$home/.config/agenthub/hooks/c.sh"
+}
+
+# current_run installs v0.2.0 for real into <home> from the local release.
+current_run() { # current_run <home> <output file> [args...]
+	local home=$1 out=$2
+	shift 2
+	PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="$home/.claude" \
+		FAKE_AH_LOG="$home.ah.log" sandboxed "$home" sh "$installer" --from "$current_tgz" "$@" >"$out" 2>&1
+}
+
+echo "== I4 upgrading a v0.1.11 Linux install =="
+i4_home="$work/i4-home"
+legacy_layout "$i4_home" "$i4_home/.config/agenthub/agenthub.db"
+cp "$i4_home/.bashrc" "$work/i4-bashrc.before"
+contains i4-setup "$i4_home/.bashrc" "# added by the AgentHub installer"
+i4_data_before=$(path_state "$i4_home/.config/agenthub")
+checks=$((checks + 1))
+current_run "$i4_home" "$work/i4-dry.txt" --dry-run || fail "i4-dry: failed: $(cat "$work/i4-dry.txt")"
+if assert_confined i4-dry "$work/i4-dry.txt"; then
+	checks=$((checks + 1))
+	current_run "$i4_home" "$work/i4.txt" || fail "i4: the upgrade failed: $(cat "$work/i4.txt")"
+	contains i4 "$i4_home.ah.log" "service install --db $i4_home/.config/agenthub/agenthub.db"
+	contains i4 "$work/i4.txt" "keeping the node's database at $i4_home/.config/agenthub/agenthub.db"
+	for present in .local/share/agenthallway/agenthallway-node .local/bin/agenthallway-desktop \
+		.local/share/applications/agenthallway.desktop .claude/skills/agenthallway-watch/.agenthallway-install \
+		.config/systemd/user/agenthallway-node.service; do
+		checks=$((checks + 1))
+		exists_path "$i4_home/$present" || fail "i4: $present is missing after the upgrade"
+	done
+	checks=$((checks + 1))
+	[ "$(readlink "$i4_home/.local/bin/ah")" = "$i4_home/.local/share/agenthallway/ah" ] ||
+		fail "i4: ~/.local/bin/ah points at $(readlink "$i4_home/.local/bin/ah")"
+	for gone in .local/share/agenthub .local/bin/agenthub-desktop .local/share/applications/agenthub.desktop \
+		.claude/skills/agenthub-watch .config/systemd/user/agenthub-node.service; do
+		checks=$((checks + 1))
+		! exists_path "$i4_home/$gone" || fail "i4: the pre-rename $gone is still there"
+	done
+	checks=$((checks + 1))
+	[ "$(path_state "$i4_home/.config/agenthub")" = "$i4_data_before" ] ||
+		fail "i4: install.sh changed the data directory; only the node moves its files"
+	checks=$((checks + 1))
+	cmp -s "$i4_home/.bashrc" "$work/i4-bashrc.before" || fail "i4: .bashrc changed: $(cat "$i4_home/.bashrc")"
+	contains i4 "$work/i4.txt" "$i4_home/.bashrc already adds"
+	contains i4 "$work/i4.txt" "removed the pre-rename AgentHub install:"
+	contains i4 "$work/i4.txt" "pre-rename install: removed:"
+	lacks i4 "$work/i4.txt" "warning: the pre-rename background service"
+	# The dry run printed the retirement it would do, and did nothing.
+	contains i4-dry "$work/i4-dry.txt" "the commands above remove the pre-rename AgentHub install:"
+fi
+
+echo "== I5 --no-service keeps a pre-rename install whose service is registered =="
+i5_home="$work/i5-home"
+legacy_layout "$i5_home" ""
+checks=$((checks + 1))
+current_run "$i5_home" "$work/i5.txt" --no-service || fail "i5: the install failed: $(cat "$work/i5.txt")"
+contains i5 "$work/i5.txt" "warning: the pre-rename background service $i5_home/.config/systemd/user/agenthub-node.service is still registered"
+contains i5 "$work/i5.txt" "pre-rename install: kept, because its background service is still registered"
+for kept in .local/share/agenthub/agenthub-node .local/bin/agenthub-desktop .config/systemd/user/agenthub-node.service \
+	.claude/skills/agenthub-watch .local/share/applications/agenthub.desktop .local/share/agenthallway/agenthallway-node; do
+	checks=$((checks + 1))
+	exists_path "$i5_home/$kept" || fail "i5: $kept is gone"
+done
+: >>"$i5_home.ah.log"
+lacks i5 "$i5_home.ah.log" "service install"
+
+echo "== I6 upgrading a v0.1.11 macOS install =="
+i6_home="$work/i6-home"
+i6_apps="$work/i6-Applications"
+i6_dmg="$work/i6-dmg"
+i6_contents="$work/i6-dmg-contents"
+mac_bundle "$i6_apps/agenthub-desktop.app" "$work/i6-old-ah.log"
+mac_bundle "$i6_home/Applications/agenthub-desktop.app" "$work/i6-old-home-ah.log"
+printf '#!/bin/sh\n' >"$i6_apps/agenthub-desktop.app/Contents/MacOS/desktop"
+mkdir -p "$i6_home/.local/bin" "$i6_home/Library/Caches/com.wails.agenthub-desktop" \
+	"$i6_home/Library/WebKit/com.wails.agenthub-desktop" "$i6_home/Library/Preferences"
+touch "$i6_home/Library/Preferences/com.wails.agenthub-desktop.plist"
+ln -s "$i6_apps/agenthub-desktop.app/Contents/MacOS/ah" "$i6_home/.local/bin/ah"
+make_unit "$i6_home" darwin "$i6_apps/agenthub-desktop.app/Contents/MacOS/agenthub-node"
+mkdir -p "$i6_contents/agenthallway-desktop.app/Contents/MacOS" "$i6_contents/.skills/agenthallway-watch" "$i6_dmg"
+current_ah_script "$i6_contents/agenthallway-desktop.app/Contents/MacOS/ah"
+for binary in desktop agenthallway-node agenthallway-mcp; do
+	printf '#!/bin/sh\n' >"$i6_contents/agenthallway-desktop.app/Contents/MacOS/$binary"
+done
+echo "(fake skill)" >"$i6_contents/.skills/agenthallway-watch/SKILL.md"
+echo "not really a disk image" >"$i6_dmg/agenthallway-desktop_v0.2.0_darwin_universal.dmg"
+sums_beside "$i6_dmg/agenthallway-desktop_v0.2.0_darwin_universal.dmg"
+i6_run() { # i6_run <output file> [args...]
+	local out=$1
+	shift
+	PATH="$(fake_uname Darwin arm64):$bare_path" SHELL=/bin/zsh CLAUDE_CONFIG_DIR="$i6_home/.claude" \
+		SB_APPLICATIONS="$i6_apps" SB_DMG_SOURCE="$i6_contents" FAKE_AH_LOG="$work/i6-ah.log" \
+		SB_RUNNING_ONCE="$i6_apps/agenthub-desktop.app/Contents/MacOS/desktop" SB_RUNNING_ONCE_SEEN="$out.seen" \
+		sandboxed "$i6_home" sh "$installer" --from "$i6_dmg/agenthallway-desktop_v0.2.0_darwin_universal.dmg" "$@" >"$out" 2>&1
+}
+checks=$((checks + 1))
+i6_run "$work/i6-dry.txt" --dry-run || fail "i6-dry: failed: $(cat "$work/i6-dry.txt")"
+if assert_confined i6-dry "$work/i6-dry.txt"; then
+	i6_log_start=$(($(wc -l <"$work/system-shims.log") + 1))
+	checks=$((checks + 1))
+	i6_run "$work/i6.txt" || fail "i6: the upgrade failed: $(cat "$work/i6.txt")"
+	tail -n +"$i6_log_start" "$work/system-shims.log" >"$work/i6-shims.log"
+	contains i6 "$work/i6.txt" "agenthub-desktop is running; asking it to quit before its bundle is removed"
+	contains i6 "$work/i6.txt" "agenthub-desktop quit"
+	checks=$((checks + 1))
+	[ "$(grep -c 'osascript -e quit app "agenthub-desktop"' "$work/i6-shims.log")" = 1 ] ||
+		fail "i6: osascript was not asked exactly once to quit the running pre-rename app: $(grep osascript "$work/i6-shims.log")"
+	lacks i6 "$work/i6-shims.log" 'quit app "agenthallway-desktop"'
+	contains i6 "$work/i6-shims.log" "open $i6_apps/agenthallway-desktop.app"
+	for gone in "$i6_apps/agenthub-desktop.app" "$i6_home/Applications/agenthub-desktop.app" \
+		"$i6_home/Library/Caches/com.wails.agenthub-desktop" "$i6_home/Library/WebKit/com.wails.agenthub-desktop" \
+		"$i6_home/Library/Preferences/com.wails.agenthub-desktop.plist" \
+		"$i6_home/Library/LaunchAgents/local.agenthub.node.plist"; do
+		checks=$((checks + 1))
+		! exists_path "$gone" || fail "i6: $gone is still there"
+	done
+	for present in "$i6_apps/agenthallway-desktop.app/Contents/MacOS/ah" \
+		"$i6_home/Library/LaunchAgents/local.agenthallway.node.plist" "$i6_home/.claude/skills/agenthallway-watch/SKILL.md"; do
+		checks=$((checks + 1))
+		exists_path "$present" || fail "i6: $present is missing"
+	done
+	checks=$((checks + 1))
+	[ "$(readlink "$i6_home/.local/bin/ah")" = "$i6_apps/agenthallway-desktop.app/Contents/MacOS/ah" ] ||
+		fail "i6: ~/.local/bin/ah points at $(readlink "$i6_home/.local/bin/ah")"
+	lacks i6 "$work/i6-shims.log" "ditto shim: refusing"
+fi
+
+echo "== I7 an owner's own agenthub-watch is left by the upgrade =="
+for i7_kind in link copy; do
+	i7_home="$work/i7-home-$i7_kind"
+	tree_at "$i7_home/.local/share/agenthub" "$work/i7-ah.log" "" 0
+	mkdir -p "$i7_home/.claude/skills" "$work/i7-own-$i7_kind/agenthub-watch"
+	echo mine >"$work/i7-own-$i7_kind/agenthub-watch/SKILL.md"
+	if [ "$i7_kind" = link ]; then
+		ln -s "$work/i7-own-$i7_kind/agenthub-watch" "$i7_home/.claude/skills/agenthub-watch"
+	else
+		cp -R "$work/i7-own-$i7_kind/agenthub-watch" "$i7_home/.claude/skills/agenthub-watch"
+	fi
+	checks=$((checks + 1))
+	current_run "$i7_home" "$work/i7-$i7_kind.txt" --no-service || fail "i7-$i7_kind: failed: $(cat "$work/i7-$i7_kind.txt")"
+	checks=$((checks + 1))
+	! exists_path "$i7_home/.local/share/agenthub" || fail "i7-$i7_kind: the pre-rename tree was not retired"
+	checks=$((checks + 1))
+	[ "$(cat "$i7_home/.claude/skills/agenthub-watch/SKILL.md" 2>/dev/null)" = mine ] ||
+		fail "i7-$i7_kind: the owner's agenthub-watch was removed or changed"
+	if [ "$i7_kind" = link ]; then
+		checks=$((checks + 1))
+		[ -L "$i7_home/.claude/skills/agenthub-watch" ] || fail "i7-link: the owner's link was replaced"
+	fi
+done
+
+echo "== I8 a pre-rename release refuses to install over migrated data =="
+i8_home="$work/i8-home"
+mkdir -p "$i8_home/.config/agenthallway"
+echo key >"$i8_home/.config/agenthallway/node.key"
+i8_before=$(path_state "$i8_home")
+i8_run() { # i8_run <output file> [args...]
+	local out=$1
+	shift
+	PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="$i8_home/.claude" \
+		sandboxed "$i8_home" sh "$installer" "$@" >"$out" 2>&1
+}
+checks=$((checks + 1))
+if i8_run "$work/i8.txt" --from "$legacy_tgz"; then
+	fail "i8: a pre-rename release was installed over a machine whose node has moved"
+fi
+contains i8 "$work/i8.txt" "is from before the rename to Agent Hallway"
+contains i8 "$work/i8.txt" "$i8_home/.config/agenthallway/node.key"
+contains i8 "$work/i8.txt" "service install --db \"$i8_home/.config/agenthallway/agenthallway.db\""
+contains i8 "$work/i8.txt" "Nothing was installed."
+checks=$((checks + 1))
+[ "$(path_state "$i8_home")" = "$i8_before" ] || fail "i8: the refused install changed $i8_home"
+# The tag on the command line is the one the recipe reinstalls.
+i8_dry_home="$work/i8-dry-home"
+mkdir -p "$i8_dry_home/.config/agenthallway"
+echo key >"$i8_dry_home/.config/agenthallway/node.key"
+checks=$((checks + 1))
+if PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash \
+	sandboxed "$i8_dry_home" sh "$installer" --dry-run --version v0.1.11 --cli-only >"$work/i8-dry.txt" 2>&1; then
+	fail "i8-dry: a dry run of a pre-rename tag over moved data did not refuse"
+fi
+contains i8-dry "$work/i8-dry.txt" "sh -s -- --version v0.1.11 --no-service"
+# A current install on the machine is the same refusal.
+i8_unit_home="$work/i8-unit-home"
+make_current_unit "$i8_unit_home" linux "$i8_unit_home/.local/share/agenthallway/agenthallway-node"
+checks=$((checks + 1))
+if PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash \
+	sandboxed "$i8_unit_home" sh "$installer" --from "$legacy_tgz" >"$work/i8-unit.txt" 2>&1; then
+	fail "i8-unit: a pre-rename release was installed over a registered Agent Hallway service"
+fi
+contains i8-unit "$work/i8-unit.txt" "$i8_unit_home/.config/systemd/user/agenthallway-node.service"
+# --no-service installs the pre-rename layout, registers nothing, and prints
+# the recipe.
+checks=$((checks + 1))
+i8_run "$work/i8-noservice.txt" --from "$legacy_tgz" --no-service || fail "i8-noservice: failed: $(cat "$work/i8-noservice.txt")"
+contains i8-noservice "$work/i8-noservice.txt" "is installed because of --no-service"
+contains i8-noservice "$work/i8-noservice.txt" "service install --db \"$i8_home/.config/agenthallway/agenthallway.db\""
+checks=$((checks + 1))
+[ -x "$i8_home/.local/share/agenthub/agenthub-node" ] || fail "i8-noservice: the pre-rename layout was not installed"
+checks=$((checks + 1))
+[ -f "$i8_home/.config/agenthallway/node.key" ] || fail "i8-noservice: the moved identity is gone"
+
+echo "== I9 --uninstall removes both the new and the pre-rename installs =="
+i9_home="$work/i9-home"
+mkdir -p "$i9_home"
+printf 'alias keep=1\n' >"$i9_home/.bashrc"
+printf 'alias keep=1\n' >"$work/i9-owner-lines"
+checks=$((checks + 1))
+current_run "$i9_home" "$work/i9-install.txt" --no-service || fail "i9: the current install failed: $(cat "$work/i9-install.txt")"
+contains i9 "$i9_home/.bashrc" "# added by the Agent Hallway installer"
+# The pre-rename install beside it, as v0.1.11 left it.
+tree_at "$i9_home/.local/share/agenthub" "$work/i9-old-ah.log" "" 0
+printf '#!/bin/sh\n' >"$i9_home/.local/share/agenthub/agenthub-desktop"
+ln -s "$i9_home/.local/share/agenthub/agenthub-desktop" "$i9_home/.local/bin/agenthub-desktop"
+printf '[Desktop Entry]\nExec="%s"\n' "$i9_home/.local/share/agenthub/agenthub-desktop" \
+	>"$i9_home/.local/share/applications/agenthub.desktop"
+mkdir -p "$i9_home/.claude/skills/agenthub-watch" "$i9_home/.config/fish/conf.d"
+touch "$i9_home/.claude/skills/agenthub-watch/.agenthub-install"
+# shellcheck disable=SC2016 # literal startup-file lines
+printf 'export KEEP=1\n\n# added by the AgentHub installer\nexport PATH="$HOME/.local/bin:$PATH"\n' >"$i9_home/.profile"
+printf 'export KEEP=1\n' >"$work/i9-profile-after"
+# shellcheck disable=SC2016 # literal fish lines
+printf '\n# added by the AgentHub installer\ncontains -- $HOME/.local/bin $PATH; or set -gx PATH $HOME/.local/bin $PATH\n' \
+	>"$i9_home/.config/fish/conf.d/agenthub.fish"
+# shellcheck disable=SC2016 # literal fish lines
+printf '\n# added by the Agent Hallway installer\ncontains -- $HOME/.local/bin $PATH; or set -gx PATH $HOME/.local/bin $PATH\n' \
+	>"$i9_home/.config/fish/conf.d/agenthallway.fish"
+make_unit "$i9_home" linux "$i9_home/.local/share/agenthub/agenthub-node"
+make_current_unit "$i9_home" linux "$i9_home/.local/share/agenthallway/agenthallway-node"
+i9_run() { # i9_run <output file> [args...]
+	local out=$1
+	shift
+	PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="$i9_home/.claude" \
+		FAKE_AH_LOG="$work/i9-ah.log" sandboxed "$i9_home" sh "$installer" --uninstall "$@" >"$out" 2>&1
+}
+checks=$((checks + 1))
+i9_run "$work/i9-dry.txt" --dry-run || fail "i9-dry: failed: $(cat "$work/i9-dry.txt")"
+if assert_confined i9-dry "$work/i9-dry.txt"; then
+	: >"$work/i9-ah.log"
+	checks=$((checks + 1))
+	i9_run "$work/i9.txt" || fail "i9: --uninstall failed: $(cat "$work/i9.txt")"
+	checks=$((checks + 1))
+	[ "$(grep -c 'service uninstall' "$work/i9-ah.log")" = 1 ] ||
+		fail "i9: the current ah was not asked exactly once to take both services down: $(cat "$work/i9-ah.log")"
+	for gone in .local/share/agenthallway .local/share/agenthub .local/bin/ah .local/bin/agenthallway-desktop \
+		.local/bin/agenthub-desktop .local/share/applications/agenthallway.desktop \
+		.local/share/applications/agenthub.desktop .claude/skills/agenthallway-watch .claude/skills/agenthub-watch \
+		.config/fish/conf.d/agenthub.fish .config/fish/conf.d/agenthallway.fish \
+		.config/systemd/user/agenthub-node.service .config/systemd/user/agenthallway-node.service; do
+		checks=$((checks + 1))
+		! exists_path "$i9_home/$gone" || fail "i9: $gone is still there"
+	done
+	checks=$((checks + 1))
+	cmp -s "$i9_home/.bashrc" "$work/i9-owner-lines" || fail "i9: .bashrc is not the owner's lines alone: $(cat "$i9_home/.bashrc")"
+	checks=$((checks + 1))
+	cmp -s "$i9_home/.profile" "$work/i9-profile-after" || fail "i9: .profile kept a pre-rename PATH line: $(cat "$i9_home/.profile")"
+	contains i9 "$work/i9.txt" "done. Agent Hallway is uninstalled."
+fi
+
+echo "== I10/I11 --purge deletes only our files from a data directory another app shares =="
+for i10_os in darwin linux; do
+	i10_home="$work/i10-home-$i10_os"
+	if [ "$i10_os" = darwin ]; then
+		i10_old="$i10_home/Library/Application Support/agenthub"
+		i10_new="$i10_home/Library/Application Support/agenthallway"
+		i10_log_old="$i10_home/Library/Logs/agenthub"
+		i10_log_new="$i10_home/Library/Logs/agenthallway"
+		i10_uname=$(fake_uname Darwin arm64)
+	else
+		i10_old="$i10_home/.config/agenthub"
+		i10_new="$i10_home/.config/agenthallway"
+		i10_log_old="$i10_home/.local/state/agenthub"
+		i10_log_new="$i10_home/.local/state/agenthallway"
+		i10_uname=$(fake_uname Linux x86_64)
+	fi
+	mkdir -p "$i10_old/approvals" "$i10_old/claims" "$i10_old/hooks" "$i10_new" "$i10_log_old" "$i10_log_new"
+	for ours in node.key agenthub.db agenthub.db-wal agenthub.db-shm .node.key-123; do
+		echo ours >"$i10_old/$ours"
+	done
+	for ours in node.key agenthallway.db .migrating-from-agenthub; do
+		echo ours >"$i10_new/$ours"
+	done
+	echo theirs >"$i10_old/session_metadata.sqlite"
+	echo theirs >"$i10_old/approvals/a.json"
+	echo theirs >"$i10_old/claims/b"
+	printf '#!/bin/sh\n' >"$i10_old/hooks/c.sh"
+	echo log >"$i10_log_old/node.log"
+	echo theirs >"$i10_log_old/their.log"
+	echo log >"$i10_log_new/node.log"
+	i10_foreign_before=$(path_state "$i10_old/session_metadata.sqlite" "$i10_old/approvals" "$i10_old/claims" \
+		"$i10_old/hooks" "$i10_log_old/their.log")
+	# An Applications of its own: the shared fake one holds a pre-rename app,
+	# which a macOS uninstall would rightly remove.
+	mkdir -p "$work/i10-Applications"
+	i10_run() { # i10_run <output file> [args...]
+		local out=$1
+		shift
+		PATH="$i10_uname:$bare_path" SHELL=/bin/bash SB_APPLICATIONS="$work/i10-Applications" \
+			sandboxed "$i10_home" sh "$installer" --uninstall --purge "$@" >"$out" 2>&1
+	}
+	checks=$((checks + 1))
+	i10_run "$work/i10-$i10_os-dry.txt" --dry-run || fail "i10-$i10_os-dry: failed: $(cat "$work/i10-$i10_os-dry.txt")"
+	commands_only "$work/i10-$i10_os-dry.txt" "$work/i10-$i10_os-dry.cmds"
+	# I11: files with rm -f, directories with rmdir, and never rm -rf on a data
+	# or log directory, or anything inside one.
+	for i11_dir in "$i10_old" "$i10_new" "$i10_log_old" "$i10_log_new"; do
+		checks=$((checks + 1))
+		if grep -F -- "+ rm -rf" "$work/i10-$i10_os-dry.cmds" | grep -qF -- "$i11_dir"; then
+			fail "i11-$i10_os: an rm -rf names $i11_dir: $(grep -F -- '+ rm -rf' "$work/i10-$i10_os-dry.cmds")"
+		fi
+	done
+	contains "i11-$i10_os" "$work/i10-$i10_os-dry.cmds" "rm -f $(quote_for_test "$i10_old/node.key")"
+	contains "i11-$i10_os" "$work/i10-$i10_os-dry.cmds" "rm -f $(quote_for_test "$i10_old/.node.key-123")"
+	contains "i11-$i10_os" "$work/i10-$i10_os-dry.cmds" "rmdir $(quote_for_test "$i10_new")"
+	contains "i11-$i10_os" "$work/i10-$i10_os-dry.cmds" "rmdir $(quote_for_test "$i10_log_new")"
+	lacks "i11-$i10_os" "$work/i10-$i10_os-dry.cmds" "rmdir $(quote_for_test "$i10_old")"
+	contains "i11-$i10_os" "$work/i10-$i10_os-dry.txt" "left $i10_old: it holds files that are not Agent Hallway's (approvals, claims, hooks, session_metadata.sqlite)"
+	if assert_confined "i10-$i10_os-dry" "$work/i10-$i10_os-dry.txt"; then
+		checks=$((checks + 1))
+		i10_run "$work/i10-$i10_os.txt" || fail "i10-$i10_os: failed: $(cat "$work/i10-$i10_os.txt")"
+		for gone in node.key agenthub.db agenthub.db-wal agenthub.db-shm .node.key-123; do
+			checks=$((checks + 1))
+			! exists_path "$i10_old/$gone" || fail "i10-$i10_os: $gone is still in the shared directory"
+		done
+		for gone in "$i10_new" "$i10_log_new" "$i10_log_old/node.log"; do
+			checks=$((checks + 1))
+			! exists_path "$gone" || fail "i10-$i10_os: $gone is still there"
+		done
+		checks=$((checks + 1))
+		[ "$(path_state "$i10_old/session_metadata.sqlite" "$i10_old/approvals" "$i10_old/claims" \
+			"$i10_old/hooks" "$i10_log_old/their.log")" = "$i10_foreign_before" ] ||
+			fail "i10-$i10_os: another app's files changed"
+		checks=$((checks + 1))
+		[ -d "$i10_old" ] && [ -d "$i10_log_old" ] || fail "i10-$i10_os: a directory another app shares was removed"
+		contains "i10-$i10_os" "$work/i10-$i10_os.txt" "installing again makes a new node"
+	fi
+done
+
+echo "== I12 either PATH comment counts =="
+# Installing: the pre-rename comment already adds the line, so nothing is
+# appended (I4 asserts the same for .bashrc through a whole upgrade); for fish
+# the pre-rename file is the one that counts.
+i12_home="$work/i12-home"
+mkdir -p "$i12_home/.config/fish/conf.d"
+# shellcheck disable=SC2016 # literal fish lines
+printf '\n# added by the AgentHub installer\ncontains -- $HOME/.local/bin $PATH; or set -gx PATH $HOME/.local/bin $PATH\n' \
+	>"$i12_home/.config/fish/conf.d/agenthub.fish"
+checks=$((checks + 1))
+PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/usr/bin/fish CLAUDE_CONFIG_DIR="$i12_home/.claude" \
+	sandboxed "$i12_home" sh "$installer" --from "$current_tgz" --no-service >"$work/i12.txt" 2>&1 ||
+	fail "i12: failed: $(cat "$work/i12.txt")"
+contains i12 "$work/i12.txt" "$i12_home/.config/fish/conf.d/agenthub.fish already adds"
+checks=$((checks + 1))
+! exists_path "$i12_home/.config/fish/conf.d/agenthallway.fish" || fail "i12: a second fish PATH file was written"
+# Uninstalling: both comments' blocks go from one file, the owner's lines stay.
+i12_un_home="$work/i12-un-home"
+mkdir -p "$i12_un_home"
+# shellcheck disable=SC2016 # literal startup-file lines
+printf 'alias keep=1\n\n# added by the AgentHub installer\nexport PATH="$HOME/.local/bin:$PATH"\nalias also=1\n\n# added by the Agent Hallway installer\nexport PATH="$HOME/.local/bin:$PATH"\n' \
+	>"$i12_un_home/.bashrc"
+printf 'alias keep=1\nalias also=1\n' >"$work/i12-bashrc-after"
+checks=$((checks + 1))
+PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash \
+	sandboxed "$i12_un_home" sh "$installer" --uninstall >"$work/i12-un.txt" 2>&1 || fail "i12-un: failed: $(cat "$work/i12-un.txt")"
+checks=$((checks + 1))
+cmp -s "$i12_un_home/.bashrc" "$work/i12-bashrc-after" || fail "i12-un: .bashrc is $(cat "$i12_un_home/.bashrc")"
+
+echo "== I13 a stale MCP entry is reported and never written =="
+i13_home="$work/i13-home"
+mkdir -p "$i13_home/claude-config" "$i13_home/codex"
+printf '{"mcpServers":{"agenthub":{"command":"/x/agenthub-mcp"}}}\n' >"$i13_home/.claude.json"
+printf '{"mcpServers":{"agenthub":{"command":"/y/agenthub-mcp"}}}\n' >"$i13_home/claude-config/.claude.json"
+printf '[mcp_servers.agenthub]\ncommand = "/z/agenthub-mcp"\n' >"$i13_home/codex/config.toml"
+i13_before=$(path_state "$i13_home/.claude.json" "$i13_home/claude-config/.claude.json" "$i13_home/codex/config.toml")
+for i13_mode in --dry-run ""; do
+	checks=$((checks + 1))
+	# shellcheck disable=SC2086 # the empty mode is meant to vanish
+	PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="$i13_home/claude-config" \
+		CODEX_HOME="$i13_home/codex" sandboxed "$i13_home" sh "$installer" --from "$current_tgz" --no-service $i13_mode \
+		>"$work/i13.txt" 2>&1 || fail "i13$i13_mode: failed: $(cat "$work/i13.txt")"
+	contains "i13$i13_mode" "$work/i13.txt" "these still start agenthub-mcp, which this upgrade removed:"
+	contains "i13$i13_mode" "$work/i13.txt" "$i13_home/claude-config/.claude.json"
+	contains "i13$i13_mode" "$work/i13.txt" "$i13_home/.claude.json"
+	contains "i13$i13_mode" "$work/i13.txt" "$i13_home/codex/config.toml"
+	contains "i13$i13_mode" "$work/i13.txt" "mcp__agenthallway__*"
+	checks=$((checks + 1))
+	[ "$(path_state "$i13_home/.claude.json" "$i13_home/claude-config/.claude.json" "$i13_home/codex/config.toml")" = "$i13_before" ] ||
+		fail "i13$i13_mode: an MCP configuration was written"
+done
+# A pre-rename install says nothing about MCP: its entries are still right.
+mkdir -p "$work/i13-legacy-home"
+checks=$((checks + 1))
+PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="$i13_home/claude-config" \
+	CODEX_HOME="$i13_home/codex" sandboxed "$work/i13-legacy-home" sh "$installer" --from "$legacy_tgz" --no-service --dry-run \
+	>"$work/i13-legacy.txt" 2>&1 || fail "i13-legacy: failed: $(cat "$work/i13-legacy.txt")"
+lacks i13-legacy "$work/i13-legacy.txt" "these still start"
+
+echo "== I14 the pre-rename environment names still work =="
+mkdir -p "$work/i14-home"
+i14_dry() { # i14_dry <output file> <env assignments and installer args...>
+	local out=$1
+	shift
+	PATH="$no_service_ah:$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash \
+		sandboxed "$work/i14-home" env "$@" >"$out" 2>&1
+}
+i14_dry "$work/i14-version.txt" AGENTHUB_VERSION=v0.2.0 sh "$installer" --dry-run --cli-only
+contains i14-version "$work/i14-version.txt" "agenthallway_v0.2.0_linux_amd64.tar.gz"
+i14_dry "$work/i14-version-both.txt" AGENTHUB_VERSION=v0.1.11 AGENTHALLWAY_VERSION=v0.2.0 sh "$installer" --dry-run --cli-only
+contains i14-version-both "$work/i14-version-both.txt" "agenthallway_v0.2.0_linux_amd64.tar.gz"
+i14_dry "$work/i14-version-old.txt" AGENTHUB_VERSION=v0.1.11 sh "$installer" --dry-run --cli-only
+contains i14-version-old "$work/i14-version-old.txt" "agenthub_v0.1.11_linux_amd64.tar.gz"
+i14_dry "$work/i14-home-both.txt" AGENTHUB_HOME="$work/i14-old-tree" AGENTHALLWAY_HOME="$work/i14-new-tree" \
+	sh "$installer" --dry-run --version v0.2.0 --cli-only
+contains i14-home-both "$work/i14-home-both.txt" "installed $work/i14-new-tree"
+# The pre-rename Applications knob alone: the new one unset, and the fallback
+# must stop at it rather than reach the real /Applications.
+mkdir -p "$work/i14-Applications"
+PATH="$no_service_ah:$(fake_uname Darwin arm64):$bare_path" SHELL=/bin/zsh \
+	sandboxed "$work/i14-home" env -u AGENTHALLWAY_APPLICATIONS AGENTHUB_APPLICATIONS="$work/i14-Applications" \
+	sh "$installer" --dry-run --version v0.2.0 --no-open >"$work/i14-apps.txt" 2>&1
+contains i14-apps "$work/i14-apps.txt" "installed $work/i14-Applications/agenthallway-desktop.app"
+lacks i14-apps "$work/i14-apps.txt" " /Applications/"
+# An AGENTHUB_HOME tree is upgraded in place: the same directory, now holding
+# the current binaries, and not retired afterwards.
+i14_tree="$work/i14-ahome"
+i14_real_home="$work/i14-real-home"
+mkdir -p "$i14_real_home"
+PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="$i14_real_home/.claude" \
+	sandboxed "$i14_real_home" env AGENTHUB_HOME="$i14_tree" sh "$installer" --from "$legacy_tgz" --no-service \
+	>"$work/i14-legacy.txt" 2>&1 || fail "i14-inplace: the v0.1.11 install failed: $(cat "$work/i14-legacy.txt")"
+checks=$((checks + 1))
+PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="$i14_real_home/.claude" \
+	sandboxed "$i14_real_home" env AGENTHUB_HOME="$i14_tree" sh "$installer" --from "$current_tgz" --no-service \
+	>"$work/i14-inplace.txt" 2>&1 || fail "i14-inplace: the upgrade failed: $(cat "$work/i14-inplace.txt")"
+checks=$((checks + 1))
+[ -x "$i14_tree/agenthallway-node" ] && [ -x "$i14_tree/ah" ] || fail "i14-inplace: $i14_tree does not hold the current release"
+checks=$((checks + 1))
+! exists_path "$i14_tree/agenthub-node" || fail "i14-inplace: the tree still holds the pre-rename binaries"
+checks=$((checks + 1))
+! exists_path "$i14_real_home/.local/bin/agenthub-desktop" || fail "i14-inplace: the stale pre-rename link was left"
+checks=$((checks + 1))
+! exists_path "$i14_real_home/.local/share/applications/agenthub.desktop" || fail "i14-inplace: the stale pre-rename menu entry was left"
+contains i14-inplace "$work/i14-inplace.txt" "installed $i14_tree"
+lacks i14-inplace "$work/i14-inplace.txt" "removed $i14_tree"
+
+echo "== the current era: a real install, its menu entry, a refusal, an upgrade =="
+cur_home="$work/cur-home"
+cur_xdg="$work/cur-xdg"
+mkdir -p "$cur_home"
+cur_install() { # cur_install <output file> <archive> [args...]
+	local out=$1 archive=$2
+	shift 2
+	PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="$cur_home/.claude" \
+		sandboxed "$cur_home" env XDG_DATA_HOME="$cur_xdg" sh "$installer" --from "$archive" \
+		--prefix "$work/cur-pfx" --no-service "$@" >"$out" 2>&1
+}
+checks=$((checks + 1))
+cur_install "$work/cur.txt" "$current_tgz" || fail "cur: the install failed: $(cat "$work/cur.txt")"
+contains cur "$work/cur.txt" "verified agenthallway-desktop_v0.2.0_linux_amd64.tar.gz against SHA256SUMS"
+for binary in ah agenthallway-node agenthallway-mcp agenthallway-desktop; do
+	checks=$((checks + 1))
+	[ -x "$work/cur-pfx/share/agenthallway/$binary" ] || fail "cur: $binary is missing from the install"
+done
+checks=$((checks + 1))
+[ -f "$work/cur-pfx/.agenthallway-install" ] || fail "cur: the prefix carries no .agenthallway-install marker"
+cur_entry="$cur_xdg/applications/agenthallway.desktop"
+contains cur-menu "$cur_entry" "Name=Agent Hallway"
+contains cur-menu "$cur_entry" "Exec=\"$work/cur-pfx/share/agenthallway/agenthallway-desktop\""
+contains cur-menu "$cur_entry" "StartupWMClass=agenthallway-desktop"
+contains cur "$work/cur.txt" "done. Agent Hallway is installed:"
+checks=$((checks + 1))
+cur_install "$work/cur2.txt" "$current_tgz" || fail "cur-rerun: the second install failed: $(cat "$work/cur2.txt")"
+contains cur-rerun "$work/cur2.txt" "installed $work/cur-pfx/share/agenthallway"
+cur_bad="$work/cur-bad"
+mkdir -p "$cur_bad"
+cp "$current_tgz" "$cur_bad/"
+printf '%s  %s\n' "0000000000000000000000000000000000000000000000000000000000000000" \
+	"agenthallway-desktop_v0.2.0_linux_amd64.tar.gz" >"$cur_bad/SHA256SUMS"
+checks=$((checks + 1))
+if PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash \
+	sandboxed "$cur_home" sh "$installer" --from "$cur_bad/agenthallway-desktop_v0.2.0_linux_amd64.tar.gz" \
+	--prefix "$work/cur-refused" --no-service >"$work/cur-bad.txt" 2>&1; then
+	fail "cur-bad: a corrupted SHA256SUMS was accepted"
+fi
+contains cur-bad "$work/cur-bad.txt" "checksum mismatch"
+checks=$((checks + 1))
+[ ! -e "$work/cur-refused" ] || fail "cur-bad: the refused install still created $work/cur-refused"
+# A --prefix upgrade from the pre-rename layout in that prefix: retired inside
+# the prefix, and nothing outside it touched.
+cur_pfx_old="$work/cur-pfx-old"
+PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash \
+	sandboxed "$cur_home" env XDG_DATA_HOME="$cur_xdg" sh "$installer" --from "$legacy_tgz" \
+	--prefix "$cur_pfx_old" --no-service >"$work/cur-pfx-legacy.txt" 2>&1 ||
+	fail "cur-pfx: the v0.1.11 prefix install failed: $(cat "$work/cur-pfx-legacy.txt")"
+cur_outside_before=$(path_state "$cur_home")
+checks=$((checks + 1))
+PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash \
+	sandboxed "$cur_home" env XDG_DATA_HOME="$cur_xdg" sh "$installer" --from "$current_tgz" \
+	--prefix "$cur_pfx_old" --no-service >"$work/cur-pfx-up.txt" 2>&1 ||
+	fail "cur-pfx: the prefix upgrade failed: $(cat "$work/cur-pfx-up.txt")"
+for gone in share/agenthub bin/agenthub-desktop .agenthub-install; do
+	checks=$((checks + 1))
+	! exists_path "$cur_pfx_old/$gone" || fail "cur-pfx: the pre-rename $gone is still in the prefix"
+done
+checks=$((checks + 1))
+! exists_path "$cur_xdg/applications/agenthub.desktop" || fail "cur-pfx: the prefix's pre-rename menu entry was left"
+checks=$((checks + 1))
+[ "$(path_state "$cur_home")" = "$cur_outside_before" ] || fail "cur-pfx: the prefix upgrade changed $cur_home"
+
+echo "== the current era: the skill =="
+cur_skill_cfg="$work/cur-skill"
+cur_skill_home="$work/cur-skill-home"
+mkdir -p "$cur_skill_home"
+cur_skill_run() { # cur_skill_run <output file> [args...]
+	local out=$1
+	shift
+	PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="$cur_skill_cfg" \
+		sandboxed "$cur_skill_home" sh "$installer" "$@" >"$out" 2>&1
+}
+checks=$((checks + 1))
+cur_skill_run "$work/cur-skill.txt" --from "$current_tgz" --no-service --no-modify-path ||
+	fail "cur-skill: failed: $(cat "$work/cur-skill.txt")"
+contains cur-skill "$work/cur-skill.txt" "installed the Claude Code skill $cur_skill_cfg/skills/agenthallway-watch"
+checks=$((checks + 1))
+[ -f "$cur_skill_cfg/skills/agenthallway-watch/.agenthallway-install" ] || fail "cur-skill: the installed skill carries no marker"
+echo stale >"$cur_skill_cfg/skills/agenthallway-watch/stale.txt"
+checks=$((checks + 1))
+cur_skill_run "$work/cur-skill2.txt" --from "$current_tgz" --no-service --no-modify-path ||
+	fail "cur-skill-upgrade: failed: $(cat "$work/cur-skill2.txt")"
+checks=$((checks + 1))
+[ ! -e "$cur_skill_cfg/skills/agenthallway-watch/stale.txt" ] || fail "cur-skill-upgrade: a file of the old copy survived"
+checks=$((checks + 1))
+cur_skill_run "$work/cur-skill-un.txt" --uninstall || fail "cur-skill-un: failed: $(cat "$work/cur-skill-un.txt")"
+checks=$((checks + 1))
+! exists_path "$cur_skill_cfg/skills/agenthallway-watch" || fail "cur-skill-un: the installed skill is still there"
+checks=$((checks + 1))
+! exists_path "$cur_skill_home/.local/share/agenthallway" || fail "cur-skill-un: the tree is still there"
+
 # ---- what the last lines tell a stranger -----------------------------------
 
 echo "== the closing lines say what to do next =="
@@ -1689,6 +2910,10 @@ contains closing "$work/svc-none.txt" "$work/pfx/bin/ah"
 contains closing "$work/svc-none.txt" "node: running as a background service"
 contains closing "$work/darwin-cli.txt" "node: not registered (--no-service)"
 contains closing "$work/linux.txt" "it starts on a setup checklist."
+
+echo "== the tripwire: this machine's own install is as it was =="
+checks=$((checks + 1))
+tripwire_check || failures=$((failures + 1))
 
 echo
 if [ "$failures" -ne 0 ]; then
