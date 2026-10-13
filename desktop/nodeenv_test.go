@@ -26,7 +26,7 @@ func TestNodeDefaultPathsMatchTheStandardLibraryHere(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := nodePaths{
-		database: filepath.Join(config, "agenthub", "agenthub.db"),
+		database: filepath.Join(config, "agenthallway", "agenthallway.db"),
 		claude:   filepath.Join(home, ".claude"),
 		codex:    filepath.Join(home, ".codex"),
 	}
@@ -45,18 +45,18 @@ func TestNodeDefaultPathsFollowEachPlatformsRule(t *testing.T) {
 		want    string // the database, or the error's text
 		wantErr bool
 	}{
-		{goos: "linux", env: []string{"HOME=/home/me", "XDG_CONFIG_HOME=/srv/cfg"}, want: "/srv/cfg/agenthub/agenthub.db"},
-		{goos: "linux", env: []string{"HOME=/home/me"}, want: "/home/me/.config/agenthub/agenthub.db"},
-		{goos: "linux", env: []string{"HOME=/home/me", "XDG_CONFIG_HOME="}, want: "/home/me/.config/agenthub/agenthub.db"},
+		{goos: "linux", env: []string{"HOME=/home/me", "XDG_CONFIG_HOME=/srv/cfg"}, want: "/srv/cfg/agenthallway/agenthallway.db"},
+		{goos: "linux", env: []string{"HOME=/home/me"}, want: "/home/me/.config/agenthallway/agenthallway.db"},
+		{goos: "linux", env: []string{"HOME=/home/me", "XDG_CONFIG_HOME="}, want: "/home/me/.config/agenthallway/agenthallway.db"},
 		{goos: "linux", env: []string{"HOME=/home/me", "XDG_CONFIG_HOME=cfg"}, want: "relative", wantErr: true},
 		{goos: "linux", env: []string{"XDG_CONFIG_HOME=/srv/cfg"}, want: "HOME", wantErr: true},
 		{goos: "darwin", env: []string{"HOME=/Users/me", "XDG_CONFIG_HOME=/srv/cfg"},
-			want: "/Users/me/Library/Application Support/agenthub/agenthub.db"},
+			want: "/Users/me/Library/Application Support/agenthallway/agenthallway.db"},
 		{goos: "darwin", env: []string{"PATH=/usr/bin"}, want: "HOME", wantErr: true},
 		// The first entry for a name wins, as in the node's own os.Getenv.
-		{goos: "linux", env: []string{"HOME=/first", "HOME=/second"}, want: "/first/.config/agenthub/agenthub.db"},
+		{goos: "linux", env: []string{"HOME=/first", "HOME=/second"}, want: "/first/.config/agenthallway/agenthallway.db"},
 		{goos: "windows", env: []string{`=C:=C:\somewhere`, `USERPROFILE=C:\Users\me`, `APPDATA=C:\Users\me\AppData\Roaming`},
-			want: filepath.Join(`C:\Users\me\AppData\Roaming`, "agenthub", "agenthub.db")},
+			want: filepath.Join(`C:\Users\me\AppData\Roaming`, "agenthallway", "agenthallway.db")},
 		{goos: "windows", env: []string{`USERPROFILE=C:\Users\me`}, want: "APPDATA", wantErr: true},
 	}
 	for _, tc := range cases {
@@ -68,6 +68,55 @@ func TestNodeDefaultPathsFollowEachPlatformsRule(t *testing.T) {
 			t.Errorf("%s %q: %v", tc.goos, tc.env, err)
 		case !tc.wantErr && paths.database != tc.want:
 			t.Errorf("%s %q: database %s, want %s", tc.goos, tc.env, paths.database, tc.want)
+		}
+	}
+}
+
+// W16. Where a pre-rename node keeps its database: the old directory and the
+// old file name, under exactly the environment rules the current default
+// follows — a node started with XDG_CONFIG_HOME had its database there too.
+func TestLegacyDatabaseFollowsEachPlatformsRule(t *testing.T) {
+	cases := []struct {
+		goos    string
+		env     []string
+		want    string // the database, or the error's text
+		wantErr bool
+	}{
+		{goos: "linux", env: []string{"HOME=/home/me", "XDG_CONFIG_HOME=/srv/cfg"}, want: "/srv/cfg/agenthub/agenthub.db"},
+		{goos: "linux", env: []string{"HOME=/home/me"}, want: "/home/me/.config/agenthub/agenthub.db"},
+		{goos: "linux", env: []string{"HOME=/home/me", "XDG_CONFIG_HOME="}, want: "/home/me/.config/agenthub/agenthub.db"},
+		{goos: "linux", env: []string{"HOME=/home/me", "XDG_CONFIG_HOME=cfg"}, want: "relative", wantErr: true},
+		{goos: "linux", env: []string{"PATH=/usr/bin"}, want: "HOME", wantErr: true},
+		{goos: "darwin", env: []string{"HOME=/Users/me", "XDG_CONFIG_HOME=/srv/cfg"},
+			want: "/Users/me/Library/Application Support/agenthub/agenthub.db"},
+		{goos: "darwin", env: []string{"PATH=/usr/bin"}, want: "HOME", wantErr: true},
+		{goos: "windows", env: []string{`USERPROFILE=C:\Users\me`, `AppData=C:\Users\me\AppData\Roaming`},
+			want: filepath.Join(`C:\Users\me\AppData\Roaming`, "agenthub", "agenthub.db")},
+		{goos: "windows", env: []string{`USERPROFILE=C:\Users\me`}, want: "APPDATA", wantErr: true},
+	}
+	for _, tc := range cases {
+		lookup := environmentLookup(tc.goos, tc.env)
+		database, err := legacyDatabase(tc.goos, lookup)
+		switch {
+		case tc.wantErr && (err == nil || !strings.Contains(err.Error(), tc.want)):
+			t.Errorf("%s %q: %q, %v; want an error about %s", tc.goos, tc.env, database, err, tc.want)
+		case !tc.wantErr && err != nil:
+			t.Errorf("%s %q: %v", tc.goos, tc.env, err)
+		case !tc.wantErr && database != tc.want:
+			t.Errorf("%s %q: %s, want %s", tc.goos, tc.env, database, tc.want)
+		}
+		if err != nil {
+			continue
+		}
+		// The same configuration directory as the current default: the node
+		// moves the one into the other, and a node cannot move across two.
+		current, err := nodeDefaultPaths(tc.goos, lookup)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if filepath.Dir(filepath.Dir(current.database)) != filepath.Dir(filepath.Dir(database)) {
+			t.Errorf("%s %q: the old database %s and the new %s are under different configuration directories",
+				tc.goos, tc.env, database, current.database)
 		}
 	}
 }
