@@ -1329,6 +1329,12 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     if (!serviceOk) wizard.phase.login = true;
     renderFirstRun();
     const mark = state.notices[0];
+    if (managed && !serviceOk && status.legacy) {
+      // Registered under the pre-rename name: a restart would start the old
+      // program again. The panel says what it is and offers what replaces it.
+      goToService();
+      return false;
+    }
     if (managed && !serviceOk && !status.installed && nodeRunningNotAService(status)) {
       // Started by hand, on a database this window cannot see. The form says
       // what to type and asks before a blank; the wizard gets out of its way.
@@ -7185,6 +7191,10 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     let words;
     if (status.toolError) words = t("service.pillNoAh");
     else if (!status.supported) { tone = ""; words = t("service.pillUnsupported"); }
+    // Registered under the pre-rename name: whatever it is doing, it is the
+    // old program, and the press goes to the panel that offers what replaces
+    // it (serviceQuickAction).
+    else if (status.legacy) words = t("service.pillLegacy");
     // Running is the service manager's word, not the node's: a service whose
     // process is up while the node answers nothing is not green. The press is
     // the same quick action, which reads the status again and goes from there.
@@ -7210,6 +7220,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     line.className = "line";
     // Shown only where this panel says it is; every branch below decides.
     restart.classList.add("hidden");
+    renderServiceLegacy(status);
     if (status.toolError) {
       line.textContent = t("service.lineNoAh", { error: status.toolError });
       line.classList.add("warn");
@@ -7259,6 +7270,9 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
       line.classList.add("warn");
       open.textContent = t("service.install");
     }
+    // The pre-rename registration starts the old program: a restart would
+    // start it again, so the banner's re-registration is offered instead.
+    if (status.legacy) restart.classList.add("hidden");
     open.classList.remove("hidden");
     uninstall.classList.toggle("hidden", !status.installed);
     renderServiceRepair(status);
@@ -7284,6 +7298,75 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     repair.append(
       element("div", "stale",
         t("service.pinnedSettings", { pinned: pinned.join(t("candidate.flagJoin")) })));
+  }
+
+  // renderServiceLegacy says that the background service is registered under
+  // the pre-rename name (desktop/service.go ServiceStatus.Legacy), or that the
+  // pre-rename registration is still on disk beside this one
+  // (LegacyAlsoInstalled), and offers the one step that replaces it.
+  //
+  // Either way it starts the old program at login, and the node does not move
+  // its identity out of the old directory while it is there; a restart would
+  // only start the old program again (RestartNode refuses it).
+  function renderServiceLegacy(status) {
+    const box = el("service-legacy");
+    box.replaceChildren();
+    if (!status?.supported || !status.installed || !(status.legacy || status.legacyAlsoInstalled)) return;
+    const note = element("div", "stale", status.legacy
+      ? t("service.legacyRegistration", { unit: status.unitPath ?? "" })
+      : t("service.legacyAlsoInstalled"));
+    const action = element("button", "ghost", t("service.legacyReregister"));
+    action.onclick = () => reregisterLegacy(state.service ?? status, { button: action }).catch(() => {});
+    box.append(note, action);
+  }
+
+  // reregisterLegacy replaces the pre-rename registration with this product's,
+  // on the database the old one ran on: `ah service install --db <that>`,
+  // which stops and removes the old registration before it writes the new one
+  // (internal/service). The path is carried over for the reason
+  // reinstallWithoutPinnedSettings carries it: a reinstall that dropped it
+  // would put the node on another database, which is a new identity and no
+  // pairings. The node moves the old default database to its own when it
+  // first starts; a path the old registration named is kept as it is.
+  //
+  // Where the old registration's database cannot be read (Windows, whose task
+  // definition is not read back) there is nothing to carry over, so the form
+  // opens instead, where installService asks before it installs on a
+  // database it cannot compare.
+  //
+  // Answers whether it registered, as reinstallWithoutPinnedSettings does.
+  async function reregisterLegacy(status = state.service, { button = null } = {}) {
+    if (!status?.dbPathKnown) {
+      await openServiceForm();
+      return false;
+    }
+    const ok = await askConfirm({
+      title: t("service.legacyReregisterConfirmTitle"),
+      body: t("service.legacyReregisterConfirm", { path: status.dbPath || t("service.nodeDefaultLocation") }),
+      confirmLabel: t("service.legacyReregisterConfirmAction"),
+    });
+    if (!ok) return false;
+    const previousPid = state.service?.pid ?? 0;
+    let reregistered = false;
+    await withBusy(t("service.busyReregister"), async () => {
+      let result;
+      try {
+        result = await api.InstallService({ dbPath: status.dbPath });
+      } catch (error) {
+        // ah's own words — a --db the old registration named and this one
+        // would drop, say — go where the output goes.
+        const output = el("service-output");
+        output.textContent = String(error);
+        output.classList.remove("hidden");
+        throw error;
+      }
+      reregistered = true;
+      showServiceOutput(result);
+      const up = await waitForNode({ previousPid });
+      await load();
+      banner(up.answering ? t("service.legacyReregistered") : t("service.reregisteredNoAnswer"), up.answering);
+    }, { button });
+    return reregistered;
   }
 
   // reinstallWithoutPinnedSettings re-registers the service with the database it
@@ -7531,6 +7614,9 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
   // page — no ah, no service manager, a status not read yet, or nothing to fix.
   function serviceQuickAction(status = state.service) {
     if (!status || status.toolError || status.supported !== true) return "settings";
+    // The pre-rename registration is replaced from the panel, which says what
+    // it is and asks before re-registering; one press is not that.
+    if (status.legacy) return "settings";
     if (status.installed && status.running) return "settings";
     return status.installed ? "restart" : "install";
   }
@@ -9586,6 +9672,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     didNotStick, sameSettingValue, paintAfterSave,
     serviceStatusOrUnknown, loadService, renderService, restartNode, waitForNode,
     openServiceForm, installService, renderServiceRepair, reinstallWithoutPinnedSettings,
+    renderServiceLegacy, reregisterLegacy,
     renderPeerListenProblem, peerListenRepairs, applyPeerListenRepair, applyPeerListenRepairFromCard,
     loadNodeSettings, saveNodeSettings, applyNodeSettings, readNodeSettingsPatch,
     renderNodeLine, relabelNodeSettings, repaintFromState, renderMCPStatus,

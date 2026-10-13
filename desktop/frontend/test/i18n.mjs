@@ -673,13 +673,23 @@ if (t("pair.nodeSaidWrap", { detail: "x" }) !== "（Agent Hallway 回報：x）"
 }
 
 // The product is called Agent Hallway. The old name is for the keys that name
-// what an older install left behind, and for nothing else on the screen.
+// what an older install left behind, and for nothing else on the screen: the
+// banner about a background service still registered under the pre-rename
+// name, which an owner has to be able to recognise as the thing they set up.
 {
-  const mayNameTheOldProduct = new Set([]);
+  const mayNameTheOldProduct = new Set([
+    "service.legacyRegistration", "service.legacyAlsoInstalled",
+    "service.legacyReregisterConfirm", "service.legacyReregistered",
+  ]);
   for (const [name, table] of [["en", EN], ["zh-Hant", ZH]]) {
     for (const [key, value] of Object.entries(table)) {
       if (mayNameTheOldProduct.has(key)) continue;
       if (/\bAgentHub\b/.test(value)) failures.push(`${name} ${key} still says AgentHub: ${value}`);
+    }
+    // Each allowed key exists and does name it: an allowance for a key that
+    // is gone, or that no longer needs it, is one left for a later string.
+    for (const key of mayNameTheOldProduct) {
+      if (!/\bAgentHub\b/.test(table[key] ?? "")) failures.push(`${name} ${key} is allowed the old name and does not use it`);
     }
   }
 }
