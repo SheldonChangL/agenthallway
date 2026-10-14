@@ -161,7 +161,7 @@ try {
 
 Section 'Build from source'
 Push-Location $work
-$clone = Invoke-Native { git clone --depth 1 https://github.com/SheldonChangL/agenthub.git repo }
+$clone = Invoke-Native { git clone --depth 1 https://github.com/SheldonChangL/agenthallway.git repo }
 if ($null -eq $clone.Code -or $clone.Code -ne 0) {
     Report 'clone the repository' 'FAIL'
     Show-Tail $clone.Output

@@ -82,7 +82,7 @@ Settings → Privacy & Security → Open Anyway, or
 **macOS and Linux, one line:**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh
 ```
 
 It downloads the one release asset for your machine, checks it against that
@@ -101,7 +101,7 @@ which prints what it would do and does none of it. Flags go after `sh -s --`
 when the script arrives through a pipe:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --no-service
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh -s -- --no-service
 ```
 
 To remove it again — service, app, links, the PATH line, caches — the same
@@ -109,7 +109,7 @@ script takes `--uninstall`; the node's identity and database stay unless you add
 `--purge` (see `docs/install-script.md`):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh -s -- --uninstall
 ```
 
 > **Outdated:** the app now opens on a three-step first-run setup, not a checklist; see [First-time setup](guide.md#first-time-setup) in the user guide.
@@ -118,7 +118,7 @@ When it finishes it prints what it installed and where, whether the node is
 running, and the one thing to do next: open `agenthallway-desktop` from
 Applications, which starts on a setup checklist. Uneasy about piping a script
 into a shell? Read it first:
-`curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | less`.
+`curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | less`.
 
 Windows has its own installer; see below. The manual downloads still work
 everywhere, and are what the rest of this section describes.
@@ -127,7 +127,7 @@ everywhere, and are what the rest of this section describes.
 > the user guide under [Install](guide.md#install).
 
 Downloads are on the
-[Releases page](https://github.com/SheldonChangL/agenthub/releases). Desktop
+[Releases page](https://github.com/SheldonChangL/agenthallway/releases). Desktop
 downloads ship from the next tagged release onward; a release page that only
 lists `agenthub_<tag>_<os>_<arch>` archives (the name before v0.2.0) predates them — use the command-line
 install below or build from source. The desktop download is one file and brings
@@ -148,7 +148,7 @@ The same release holds six archives — `linux`, `darwin` and `windows`, each
 Unpack the one for your platform, put the binaries on your `PATH` (nothing here
 needs administrator rights), then `agenthallway-node --db ./data/agenthallway.db` in one
 terminal and `ah discover && ah list` in another. The one-liner does this too:
-`curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --cli-only`.
+`curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh -s -- --cli-only`.
 
 ## Build and test
 
@@ -1065,12 +1065,12 @@ See [verification notes](verification.md) for the tested platform matrix and rem
 
 The issue tracker is written in Traditional Chinese, so the titles do not read
 as English — the gloss is here:
-[#1](https://github.com/SheldonChangL/agenthub/issues/1) multi-node,
-[#57](https://github.com/SheldonChangL/agenthub/issues/57) the Claude Code
-channel wake, [#60](https://github.com/SheldonChangL/agenthub/issues/60) waking,
-[#65](https://github.com/SheldonChangL/agenthub/issues/65) keeping the node
+[#1](https://github.com/SheldonChangL/agenthallway/issues/1) multi-node,
+[#57](https://github.com/SheldonChangL/agenthallway/issues/57) the Claude Code
+channel wake, [#60](https://github.com/SheldonChangL/agenthallway/issues/60) waking,
+[#65](https://github.com/SheldonChangL/agenthallway/issues/65) keeping the node
 running on all three platforms,
-[#67](https://github.com/SheldonChangL/agenthub/issues/67) distribution and
+[#67](https://github.com/SheldonChangL/agenthallway/issues/67) distribution and
 packaging.
-[#21](https://github.com/SheldonChangL/agenthub/issues/21), real-host
+[#21](https://github.com/SheldonChangL/agenthallway/issues/21), real-host
 acceptance, is the one in English.

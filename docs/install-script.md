@@ -3,7 +3,7 @@
 The one-line install for macOS and Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh
 ```
 
 It downloads one release asset, **verifies it against that release's own
@@ -15,7 +15,7 @@ Piping a script from the internet into a shell is a thing worth being uneasy
 about. Read it first:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | less
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | less
 ```
 
 `--dry-run` is the other half of that: it prints every command it would run, in
@@ -109,7 +109,7 @@ message naming `--prefix`, not an unbound-variable error.
 | any, with `--cli-only` | `agenthallway_<tag>_<os>_<arch>.tar.gz` |
 
 Without `--version` the tag comes from
-`https://api.github.com/repos/SheldonChangL/agenthub/releases/latest`, read with
+`https://api.github.com/repos/SheldonChangL/agenthallway/releases/latest`, read with
 `sed`; there is no `jq` dependency. The tag is read before any path is decided,
 because it decides the names. A release that has no desktop asset for this
 platform stops the install with a message naming `--cli-only`, rather than
@@ -256,7 +256,7 @@ install carries on to register the node.
 ## Uninstall
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh -s -- --uninstall
 ```
 
 One run removes the current install and a pre-rename one, whichever are there.

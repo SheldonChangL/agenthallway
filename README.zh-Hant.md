@@ -21,14 +21,14 @@ agent 之間用收件匣互相留訊息：Linux 主機上的 Codex 跑完 migrat
 **macOS 與 Linux：**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh
 ```
 
 腳本會先用該版本的檢查碼核對下載的檔案，過程中不會要你輸入密碼。
 它也會放一個 Claude Code skill，教 agent 怎麼用 `ah`；不要的話，把最後的 `sh` 換成 `sh -s -- --no-skill`。
 
-**Windows：**安裝程式在 [Releases 頁面](https://github.com/SheldonChangL/agenthub/releases)。
-Windows 版從沒在真的 Windows 電腦上跑過（[#21](https://github.com/SheldonChangL/agenthub/issues/21)）。
+**Windows：**安裝程式在 [Releases 頁面](https://github.com/SheldonChangL/agenthallway/releases)。
+Windows 版從沒在真的 Windows 電腦上跑過（[#21](https://github.com/SheldonChangL/agenthallway/issues/21)）。
 下載檔沒有簽章，手動下載的檔案第一次開啟前會跳警告；[怎麼核對檔案、怎麼放行](docs/guide.zh-Hant.md#電腦跳出下載警告時)。
 
 裝好後兩台都打開 **agenthallway-desktop**，照三個步驟走：準備好這台機器、

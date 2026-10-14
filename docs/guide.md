@@ -54,7 +54,7 @@ registered to start when you log in.
 Paste this into a terminal:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh
 ```
 
 The script downloads the release for your machine and checks it against the
@@ -66,7 +66,7 @@ agents on this machine know how to use `ah` (put `sh -s -- --no-skill` in place
 of the last `sh` to leave it out). It never uses `sudo` and never asks for your
 password.
 
-Want to read it before running it? `curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | less`.
+Want to read it before running it? `curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | less`.
 Every file it writes and every option it takes is listed in
 [install-script.md](install-script.md).
 
@@ -84,11 +84,11 @@ To open the app:
 
 Agent Hallway has never been run on a real Windows computer. The Windows build is
 built and tested in CI only, and acceptance on real machines is still open
-([#21](https://github.com/SheldonChangL/agenthub/issues/21),
+([#21](https://github.com/SheldonChangL/agenthallway/issues/21),
 [verification.md](verification.md#build-matrix)). What follows is what the
 installer is written to do.
 
-1. Open the [Releases page](https://github.com/SheldonChangL/agenthub/releases)
+1. Open the [Releases page](https://github.com/SheldonChangL/agenthallway/releases)
    and download `agenthallway-desktop_<version>_windows_amd64-installer.exe`
    (Windows 10 or 11, 64-bit).
 2. Run it. Windows warns you first; see the next section.
@@ -735,7 +735,7 @@ machine, without losing your pairings by accident.
 On macOS and Linux, run the install command again:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh
 ```
 
 It replaces the app, keeps the background service's database and identity, and registers the
@@ -824,7 +824,7 @@ the same identity.
 
 ```sh
 ah service uninstall
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --version v0.1.11 --no-service
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh -s -- --version v0.1.11 --no-service
 "<the v0.1.11 ah>" service install --db "<config>/agenthallway/agenthallway.db"
 ```
 
@@ -841,7 +841,7 @@ later carries that `--db` and needs no move.
 The full command:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh -s -- --uninstall
 ```
 
 Either way, the machines you paired with still list this one until they press

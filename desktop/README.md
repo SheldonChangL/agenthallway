@@ -136,4 +136,4 @@ the app executable.
   waits in the inbox until something reads it (Step 8, #60).
 - Provider metadata is rendered through DOM text APIs and covered by a hostile
   metadata regression test; see closed
-  [issue #19](https://github.com/SheldonChangL/agenthub/issues/19).
+  [issue #19](https://github.com/SheldonChangL/agenthallway/issues/19).

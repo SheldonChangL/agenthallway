@@ -13,7 +13,7 @@ deliberately deferred; structural design is not.
 Design reference: four artboards covering the local view, the LAN node view,
 pairing, and the audience picker.
 
-Tracked as [#1](https://github.com/SheldonChangL/agenthub/issues/1); each step
+Tracked as [#1](https://github.com/SheldonChangL/agenthallway/issues/1); each step
 below links its issues.
 
 ## The decision that drove the foundation

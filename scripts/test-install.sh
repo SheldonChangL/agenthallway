@@ -715,7 +715,7 @@ lacks menu-darwin "$work/entry-mac.txt" "agenthub.desktop"
 
 echo "== the latest release is looked up when no version is given =="
 dry_run Linux x86_64 "$work/latest.txt" --prefix "$work/pfx"
-contains latest "$work/latest.txt" "api.github.com/repos/SheldonChangL/agenthub/releases/latest"
+contains latest "$work/latest.txt" "api.github.com/repos/SheldonChangL/agenthallway/releases/latest"
 
 echo "== --help and a bad flag =="
 checks=$((checks + 1))
@@ -1845,8 +1845,8 @@ if [ "$(grep -n '/mnt/.skills/agenthub-watch' "$work/skill-dry-mac.txt" | cut -d
 fi
 # Nothing is fetched on its own: a skill from raw.githubusercontent would be a
 # file no SHA256SUMS ever vouched for.
-lacks skill-dry "$work/skill-dry-linux.txt" "raw.githubusercontent.com/SheldonChangL/agenthub/main/.claude"
-lacks skill-dry "$work/skill-dry-mac.txt" "raw.githubusercontent.com/SheldonChangL/agenthub/main/.claude"
+lacks skill-dry "$work/skill-dry-linux.txt" "raw.githubusercontent.com/SheldonChangL/agenthallway/main/.claude"
+lacks skill-dry "$work/skill-dry-mac.txt" "raw.githubusercontent.com/SheldonChangL/agenthallway/main/.claude"
 checks=$((checks + 1))
 ! exists_path "$CLAUDE_CONFIG_DIR/skills/agenthub-watch" || fail "skill-dry: a dry run installed the skill"
 DRY_HOME="$skill_dry_home" dry_run Darwin arm64 "$work/skill-dry-no.txt" --version v0.1.0 --no-service --no-open --no-skill
@@ -2200,7 +2200,11 @@ i1_dry() { # i1_dry <name> <system> <machine> [args...]
 	dry_run "$1" "$2" "$work/i1-$name.txt" --version v0.1.11 "${@:3}"
 	commands_only "$work/i1-$name.txt" "$work/i1-$name.cmds"
 	without_work "$work/i1-$name.cmds" "$work/i1-$name.bare"
-	lacks "i1-$name" "$work/i1-$name.bare" "agenthallway"
+	# The repository itself is named agenthallway since the rename, so every
+	# era's download URLs carry that name. What a pre-rename tag must not
+	# reach is a post-rename file, binary or path: mask the repository first.
+	sed 's#SheldonChangL/agenthallway#SheldonChangL/REPO#g' "$work/i1-$name.bare" >"$work/i1-$name.norepo"
+	lacks "i1-$name" "$work/i1-$name.norepo" "agenthallway"
 	lacks "i1-$name" "$work/i1-$name.cmds" "sudo"
 }
 i1_dry darwin Darwin arm64 --no-open
