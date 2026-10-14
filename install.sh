@@ -1927,7 +1927,12 @@ warn_stale_mcp_configs() {
 		fi
 	done
 	[ -n "$stale" ] || return 0
-	warn "these still start $LEGACY_MCP_NAME, which this upgrade removed:$stale. Replace that entry with the one the app's MCP config button gives (tools are now mcp__${CURRENT_SLUG}__*). Project .mcp.json files were not searched."
+	# The one this run installed: it sits beside ah in the app and the tree.
+	stale_replacement="$CURRENT_MCP_NAME"
+	if [ -n "$AH" ]; then
+		stale_replacement="$(dirname "$AH")/$CURRENT_MCP_NAME"
+	fi
+	warn "these still start $LEGACY_MCP_NAME, which this upgrade removed:$stale. Replace that entry with one keyed $CURRENT_SLUG whose command is $stale_replacement and whose arguments are the old entry's (-as <provider>:<id>, plus -url or -channel if it had them); the tools are now mcp__${CURRENT_SLUG}__*. Project .mcp.json files were not searched."
 }
 
 # --- uninstall -------------------------------------------------------------------
