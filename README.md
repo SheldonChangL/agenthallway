@@ -1,8 +1,10 @@
 <img src="docs/icon.png" width="112" align="right" alt="">
 
-# AgentHub
+# Agent Hallway
 
 English | [繁體中文](README.zh-Hant.md)
+
+*Called AgentHub before v0.2.0, and renamed to avoid confusion with an unrelated project of the same name. Upgrading from v0.1.x? See [Upgrading from AgentHub](docs/guide.md#upgrading-from-agenthub-v01x).*
 
 **See Claude Code and Codex sessions across your machines, and let them leave each other messages.**
 
@@ -34,7 +36,7 @@ never been run on a real Windows computer
 not signed, so a file you download by hand gets a warning;
 [how to check it and let it through](docs/guide.md#if-your-computer-warns-about-the-download).
 
-Then open **agenthub-desktop** on both machines and follow its three steps: get
+Then open **agenthallway-desktop** on both machines and follow its three steps: get
 this machine ready, connect the other one by comparing fingerprints on both
 screens, and tick the sessions to share. The
 [user guide](docs/guide.md#first-time-setup) walks through each screen.
@@ -52,11 +54,11 @@ screens, and tick the sessions to share. The
   agent to read; nothing assigns or tracks work.
   [Set it up](docs/guide.md#let-an-agent-use-the-four-tools).
 - **Can wake a Codex session** when a note arrives, if you turn that on. The
-  session does not have to be open: AgentHub resumes its thread in the
+  session does not have to be open: Agent Hallway resumes its thread in the
   background. [Waking an agent](docs/guide.md#waking-an-agent).
-- **Claude Code reads its notes when it checks.** AgentHub cannot wake it, so
+- **Claude Code reads its notes when it checks.** Agent Hallway cannot wake it, so
   the session has to stay open, checking its inbox with the bundled
-  agenthub-watch skill. Claude Code's own cross-session messaging has the same
+  agenthallway-watch skill. Claude Code's own cross-session messaging has the same
   need from the other side: the receiving session has to be open, both sessions
   need Remote Control on and the same claude.ai account, and messages go through
   claude.ai. If both machines run only Claude Code under one account, that may
@@ -64,7 +66,7 @@ screens, and tick the sessions to share. The
 
 ## Privacy
 
-Paired machines talk to each other directly; there is no relay. AgentHub talks
+Paired machines talk to each other directly; there is no relay. Agent Hallway talks
 only to machines on your network, and reaches GitHub only when you run the
 install script. Pairing is confirmed by people comparing the same fingerprints
 on both screens, and pairing alone shares no session. Only while a pairing
@@ -90,6 +92,6 @@ Windows build has never run on a real Windows computer. [Test records](docs/veri
 - [SECURITY.md](SECURITY.md) for reporting a vulnerability privately;
   [CONTRIBUTING.md](CONTRIBUTING.md) for helping.
 
-AgentHub is free and will stay free. If it saves you time, there is a
+Agent Hallway is free and will stay free. If it saves you time, there is a
 [Ko-fi page](https://ko-fi.com/sheldonchang); a bug report that says what you
 were trying to do is worth more. License: MIT, see [LICENSE](LICENSE).

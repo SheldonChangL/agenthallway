@@ -20,11 +20,11 @@ flowchart TB
         CLI[ah CLI]
     end
 
-    MCP["agenthub-mcp - bound to one session<br/>agent_list · agent_status<br/>agent_inbox · agent_send<br/>no file or shell tools"]
+    MCP["agenthallway-mcp - bound to one session<br/>agent_list · agent_status<br/>agent_inbox · agent_send<br/>no file or shell tools"]
 
     API["Loopback HTTP API<br/>127.0.0.1:7462"]
 
-    subgraph Node["agenthub-node"]
+    subgraph Node["agenthallway-node"]
         Registry[("SQLite<br/>sessions · audience · trust<br/>inbox · outbox<br/>wake events · node settings")]
         Key[["node.key - Ed25519<br/>DPAPI-protected on Windows"]]
         Scan["Filesystem discovery<br/>~/.claude · ~/.codex - read only"]
@@ -45,10 +45,10 @@ flowchart TB
 The MCP layer exists as of Step 7 (#56), and the wake-up edges as of Step 8
 (#60).
 
-The agent starts `agenthub-mcp` as its own child process, which is why that
+The agent starts `agenthallway-mcp` as its own child process, which is why that
 process cannot know which session called it unless it is told at startup — hence
 the `-as` binding. It reaches the registry only through the same loopback API the
-desktop app and CLI use, never SQLite directly, so `agenthub-node` stays the only
+desktop app and CLI use, never SQLite directly, so `agenthallway-node` stays the only
 writer; a test asserts the registry and every SQLite package are absent from the
 command's dependency closure. `agent_list` reads presence rather than the
 registry, so the MCP surface is not a second path around audience filtering.
@@ -61,7 +61,7 @@ flowchart LR
         OwnerA["Owner: ah send / desktop"]
         AgentA[Agent on A]
         OutA{{"allowOutbound<br/>default off"}}
-        NodeA[agenthub-node]
+        NodeA[agenthallway-node]
     end
 
     subgraph B["Node B"]
@@ -89,7 +89,7 @@ to receive is not willing to send, and neither is willing to act unattended:
 | Gate | Where | State |
 |---|---|---|
 | `acceptMessages` | on the recipient | implemented |
-| `allowOutbound` | on the sender | implemented, default off, enforced by the node in `POST /v1/messages`; `agenthub-mcp` also checks it first for the sends it makes |
+| `allowOutbound` | on the sender | implemented, default off, enforced by the node in `POST /v1/messages`; `agenthallway-mcp` also checks it first for the sends it makes |
 | `autoWake` | on the recipient | implemented, default off, and needs the node's own `-auto-wake` open as well; neither alone wakes anything |
 
 TLS is pinned to the public key recorded when the two nodes paired, verified
@@ -99,7 +99,7 @@ middlebox that substitutes its own certificate cannot complete the connection.
 ### How a message reaches an agent
 
 Delivery to the inbox works today and has been exercised between two machines,
-an agent can read and send through `agenthub-mcp`, and a message can now start a
+an agent can read and send through `agenthallway-mcp`, and a message can now start a
 turn on its own when the owner has opened both wake switches.
 
 | Leg | Mechanism | State |
@@ -112,11 +112,11 @@ turn on its own when the owner has opened both wake switches.
 | Arrives unprompted, Claude Code | MCP channel, `claude/channel` capability | implemented; the push has **not** been observed arriving in a real session, see [channel-push-not-observed.md](channel-push-not-observed.md) |
 
 The two wake-up paths are asymmetric, and that is why one is verified and the
-other is not. The Claude Code path runs through `agenthub-mcp`, which the agent
+other is not. The Claude Code path runs through `agenthallway-mcp`, which the agent
 itself launched: nothing can be pushed unless that session is already running
 and its server has subscribed, and the push it then makes is unacknowledged, so
 this node cannot tell a delivered notification from a dropped one. The Codex
-path has `agenthub-node` connect outwards to the Codex App Server over
+path has `agenthallway-node` connect outwards to the Codex App Server over
 supervised stdio — the node spawns the App Server itself — and `turn/start`
 returns a turn id, which is an answer.
 
@@ -146,7 +146,7 @@ of them do, is recorded in
 | Provider session -> node | Filesystem discovery is enabled. The Codex App Server client is wired into the daemon for waking only — the node starts its supervisor under `-auto-wake` — while `thread/list` parsing is implemented and schema-tested without being on the scan path |
 | Owner -> node | `ah`, desktop app, and loopback HTTP API are implemented |
 | Node -> node | Implemented and exercised between two hosts: pinned TLS, recipient-bound signed envelopes, a persisted heartbeat sequence, presence with expiry, and message routing with acks. Bound to loopback unless `-allow-lan` is set and `-peer-listen` names a private address |
-| MCP client -> node | `agenthub-mcp` serves `agent_list`, `agent_status`, `agent_inbox` and `agent_send` over stdio, bound to one session by `-as`. Remote data comes from presence only; outbound needs the owner's `allowOutbound`, enforced by the node and checked earlier in this process |
+| MCP client -> node | `agenthallway-mcp` serves `agent_list`, `agent_status`, `agent_inbox` and `agent_send` over stdio, bound to one session by `-as`. Remote data comes from presence only; outbound needs the owner's `allowOutbound`, enforced by the node and checked earlier in this process |
 | Node -> agent | An agent reads its inbox when asked, and — with the node's `-auto-wake` and that session's `autoWake` both open — a message can start a turn on its own through the provider's own API. Both switches are closed by default. Three rate limits and a hop count bound it, and one woken turn runs at a time per Codex thread. See [ADR-003](decisions/003-waking-with-nobody-present.md) |
 | Pairing | Implemented end to end, without carrying a key by hand. With `-discover`, a node opens a timed window in which it announces its id, name, platform and fingerprint — never its key — and lists others doing the same; appearing in that list still grants nothing. `ah pair request <host:port>` then posts a signed `pair.request` to the other machine's peer listener and polls for the answer, so nothing has to dial back. Both owners compare the same two fingerprints, each derived locally from the key that side received, and each confirms on their own machine: `ah pair approve` there, `ah pair confirm` here. There is no auto-accept. The manual five-argument `ah pair` stays for the case where the two machines cannot connect at all. See [ADR-004](decisions/004-pairing-exchange.md). Step 9, #61 and #62 |
 | Distribution | CI builds all three binaries for six platforms and uploads them with checksums, so a reviewer can download one. A tag-triggered release workflow packages and publishes them — the desktop app for macOS (universal `.dmg`), Windows (installer and `.zip`) and Linux (two archives, one per WebKit2GTK ABI) plus the command-line archives — and `desktop/build/bundle-binaries.sh` puts the three inside the desktop app. Tags exist (v0.1.2 is the latest) and a build from one reports that version; `install.sh` downloads the matching release, checks it against its `SHA256SUMS` and registers the service ([install-script.md](install-script.md)). Step 10, #64 and #67; Windows autostart acceptance is still open in #65 |
@@ -184,7 +184,7 @@ Every status response carries `statusSource` so consumers can distinguish report
 
 ## Privacy boundary
 
-Audience and export flags are stored in AgentHub, not provider files. Discovery
+Audience and export flags are stored in Agent Hallway, not provider files. Discovery
 uses an upsert that never updates those owner-controlled fields, so provider
 rescans cannot undo the owner's choice.
 
@@ -416,7 +416,7 @@ indistinguishable from a first start — as it would be to any scheme that keeps
 its high-water mark in the same file it is protecting. Local storage
 authenticity is not something this build can infer. Ruling out a full rollback
 needs a monotonic store outside the database, or a node identity that rotates
-whenever the database does; AgentHub implements neither and claims neither.
+whenever the database does; Agent Hallway implements neither and claims neither.
 
 Consumers replace the complete previous snapshot for that node; they never
 merge session arrays. **A session absent from a heartbeat has had its

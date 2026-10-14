@@ -1,4 +1,4 @@
-# Spec: AgentHub MVP
+# Spec: Agent Hallway MVP
 
 ## Objective
 
@@ -8,14 +8,14 @@ Success means a user can start one node, discover local sessions while decoding
 and persisting metadata fields only, inspect normalized status, explicitly add
 or remove individual sessions from a local export preview, and exchange queued
 messages through the local API, and exchange them with a paired node over an
-authenticated transport. The MCP surface is served by `agenthub-mcp` over
+authenticated transport. The MCP surface is served by `agenthallway-mcp` over
 stdio; `mcp-tools.json` is its contract, and a test asserts that the tools,
 arguments, types, descriptions and annotations it documents are the ones the
 server serves.
 
 ## Assumptions
 
-1. The first supported AgentHub hosts are Windows, macOS, and Ubuntu. Provider support may differ: Claude Code documents Windows 10+ through WSL or Git for Windows; native provider runtime acceptance remains separate from AgentHub compatibility.
+1. The first supported Agent Hallway hosts are Windows, macOS, and Ubuntu. Provider support may differ: Claude Code documents Windows 10+ through WSL or Git for Windows; native provider runtime acceptance remains separate from Agent Hallway compatibility.
 2. Existing provider sessions are unmanaged. Their activity is inferred conservatively from metadata recency and provider process presence.
 3. Managed sessions will report lifecycle state directly to the registry; launching and supervising providers is outside this increment.
 4. All discovered sessions default to audience `none`. Re-discovery must never reset audience or export flags. An audience by itself sends nothing off this host: delivery also needs a paired node with a recorded address, and without `-allow-lan` the delivery policy is loopback-only, so two nodes on one machine still exchange real per-peer heartbeats while nothing reaches the network.
@@ -35,42 +35,42 @@ server serves.
 go test ./...
 go test -race ./...
 go vet ./...
-go build ./cmd/agenthub-node ./cmd/ah ./cmd/agenthub-mcp
-GOOS=windows GOARCH=amd64 go build ./cmd/agenthub-node ./cmd/ah ./cmd/agenthub-mcp
-GOOS=linux GOARCH=amd64 go build ./cmd/agenthub-node ./cmd/ah ./cmd/agenthub-mcp
-go run ./cmd/agenthub-node --db ./data/agenthub.db
+go build ./cmd/agenthallway-node ./cmd/ah ./cmd/agenthallway-mcp
+GOOS=windows GOARCH=amd64 go build ./cmd/agenthallway-node ./cmd/ah ./cmd/agenthallway-mcp
+GOOS=linux GOARCH=amd64 go build ./cmd/agenthallway-node ./cmd/ah ./cmd/agenthallway-mcp
+go run ./cmd/agenthallway-node --db ./data/agenthallway.db
 go run ./cmd/ah list
 ```
 
 ## Project structure
 
 ```text
-cmd/agenthub-node/    node daemon entrypoint
-cmd/ah/               user CLI entrypoint
-cmd/agenthub-mcp/     MCP server entrypoint, bound to one session
-desktop/              Wails desktop management app (separate Go module)
-internal/adapter/     provider discovery adapters
-internal/address/     qualified <node-id>/<provider>:<id> parsing
-internal/api/         local HTTP API, and the separate peer mux
-internal/cli/         the ah subcommands, including settings and service
-internal/codexapp/    Codex App Server JSON-RPC client and its supervisor
-internal/codexdriver/ waking a Codex thread: resume, start a turn, one at a time
-internal/discovery/   mDNS announcements, candidates, and the trust cache
-internal/hub/         the discovery pass: provider roots in, registry rows out
-internal/identity/    persistent node identity
-internal/label/       bounded, normalized human-readable labels crossing the network
-internal/mcpserver/   the four MCP tools an agent calls
-internal/model/       normalized contracts
-internal/nodeconfig/  listen-address validation and the private-range rules
-internal/pairing/     pairing mode, announcements and announceable addresses
-internal/process/     platform process enumeration
-internal/protocol/    signed broker envelopes, addressing, and export projection
-internal/registry/    SQLite persistence
-internal/service/     launchd, systemd --user and Task Scheduler registration
-internal/status/      lifecycle inference
-internal/transport/   delivering presence and messages to peers over pinned TLS
-internal/wake/        the wake gate: limits, hops, drivers, and the channel
-docs/                 architecture and protocol contracts
+cmd/agenthallway-node/ node daemon entrypoint
+cmd/ah/                user CLI entrypoint
+cmd/agenthallway-mcp/  MCP server entrypoint, bound to one session
+desktop/               Wails desktop management app (separate Go module)
+internal/adapter/      provider discovery adapters
+internal/address/      qualified <node-id>/<provider>:<id> parsing
+internal/api/          local HTTP API, and the separate peer mux
+internal/cli/          the ah subcommands, including settings and service
+internal/codexapp/     Codex App Server JSON-RPC client and its supervisor
+internal/codexdriver/  waking a Codex thread: resume, start a turn, one at a time
+internal/discovery/    mDNS announcements, candidates, and the trust cache
+internal/hub/          the discovery pass: provider roots in, registry rows out
+internal/identity/     persistent node identity
+internal/label/        bounded, normalized human-readable labels crossing the network
+internal/mcpserver/    the four MCP tools an agent calls
+internal/model/        normalized contracts
+internal/nodeconfig/   listen-address validation and the private-range rules
+internal/pairing/      pairing mode, announcements and announceable addresses
+internal/process/      platform process enumeration
+internal/protocol/     signed broker envelopes, addressing, and export projection
+internal/registry/     SQLite persistence
+internal/service/      launchd, systemd --user and Task Scheduler registration
+internal/status/       lifecycle inference
+internal/transport/    delivering presence and messages to peers over pinned TLS
+internal/wake/         the wake gate: limits, hops, drivers, and the channel
+docs/                  architecture and protocol contracts
 ```
 
 ## Code style
@@ -105,14 +105,14 @@ Errors add operation context. Public JSON uses lower camel case. Time values use
 
 ## Success criteria
 
-1. `agenthub-node`, `ah` and `agenthub-mcp` build and run.
+1. `agenthallway-node`, `ah` and `agenthallway-mcp` build and run.
 2. Discovery registers synthetic and local Claude/Codex sessions while decoding and persisting metadata fields only; message-body fields are ignored.
 3. A Codex App Server client boundary can initialize and parse live `thread/list` status without being enabled by default.
 4. Every newly discovered session has audience `none`; rediscovery preserves audience and export flags.
 5. The heartbeat contains sessions published to at least one audience, projected into remote `SessionSummary`, signed by the node key, and validated against the published broker schema.
 6. Managed and unmanaged status behavior is covered by deterministic tests.
 7. `ah list`, `status`, `publish`, `unpublish`, `send`, and `inbox` work against the node.
-8. Broker and MCP contracts are documented as JSON Schema-compatible JSON; the broker envelope is validated against runtime output, and the MCP contract is checked against what `agenthub-mcp` serves.
+8. Broker and MCP contracts are documented as JSON Schema-compatible JSON; the broker envelope is validated against runtime output, and the MCP contract is checked against what `agenthallway-mcp` serves.
 9. Windows, macOS, and Linux builds compile; macOS runs locally, while Windows and Ubuntu runtime acceptance is documented for real-host verification.
 
 ## Deferred work

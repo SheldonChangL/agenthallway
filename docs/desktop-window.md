@@ -55,7 +55,7 @@ sees a confirmation can revoke the machine it approved.
 ## What pairing broadcasts
 
 With discovery on, opening pairing announces this machine on the local segment
-until the time runs out. Everyone on the segment learns that it runs AgentHub
+until the time runs out. Everyone on the segment learns that it runs Agent Hallway
 and sees the name it calls itself, its platform and its fingerprint — never its
 public key. The window spells the name out because a hostname is often a
 person's name and an employer's domain, and on macOS with no HostName set it can

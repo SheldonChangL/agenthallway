@@ -8,8 +8,8 @@ The structure is:
 * darwin - macOS specific files
 * windows - Windows specific files
 * `bundle-binaries.sh` - **not from the Wails template.** A `postBuildHook`
-  (see `desktop/wails.json`) that builds `ah`, `agenthub-node` and
-  `agenthub-mcp` for the same target and copies them in beside the app
+  (see `desktop/wails.json`) that builds `ah`, `agenthallway-node` and
+  `agenthallway-mcp` for the same target and copies them in beside the app
   executable, then re-seals the macOS bundle. The app resolves those three
   beside its own executable and never falls back to PATH, so whatever this
   script fails to copy, the app cannot find at all — see `desktop/README.md`.

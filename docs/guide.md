@@ -1,14 +1,14 @@
-# AgentHub user guide
+# Agent Hallway user guide
 
 English | [繁體中文](guide.zh-Hant.md) · [README](../README.md) · [Developer guide](developer.md)
 
-This guide walks through AgentHub one task at a time. Button names are written
+This guide walks through Agent Hallway one task at a time. Button names are written
 in **bold** exactly as the window shows them in English. The machine names and
 addresses in the examples (studio-mac, ubuntu-lab, Demo-MacBook, 192.168.50.10) are made up.
 
 A few words used throughout:
 
-- **Background service**: the small AgentHub program (`agenthub-node`) that
+- **Background service**: the small Agent Hallway program (`agenthallway-node`) that
   runs in the background on each machine. The window you click on is only its
   control panel.
 - **Machine ID**: the `node_…` value that names a machine. **Copy machine ID**
@@ -22,7 +22,7 @@ A few words used throughout:
 - **Sharing** a session: letting paired machines see it. A session you have
   not shared is **Not shared**.
 - **Heartbeat**: the short signed update each machine sends every paired
-  machine every 15 seconds. It says AgentHub is up and carries the sessions
+  machine every 15 seconds. It says Agent Hallway is up and carries the sessions
   shared with that machine. "No heartbeat yet" means nothing has arrived from
   it.
 - **Searching the network** (the background service's `-discover`): listening
@@ -46,7 +46,7 @@ Contents:
 
 ## Install
 
-After this chapter AgentHub is on your computer and its background service is
+After this chapter Agent Hallway is on your computer and its background service is
 registered to start when you log in.
 
 ### macOS and Linux
@@ -59,9 +59,9 @@ curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install
 
 The script downloads the release for your machine and checks it against the
 release's own checksum list (`SHA256SUMS`) before it unpacks anything. It then
-puts the app in `/Applications` on macOS or `~/.local/share/agenthub` on Linux,
+puts the app in `/Applications` on macOS or `~/.local/share/agenthallway` on Linux,
 adds the `ah` command to `~/.local/bin`, registers the background service, and
-installs a small Claude Code skill in `~/.claude/skills/agenthub-watch` so
+installs a small Claude Code skill in `~/.claude/skills/agenthallway-watch` so
 agents on this machine know how to use `ah` (put `sh -s -- --no-skill` in place
 of the last `sh` to leave it out). It never uses `sudo` and never asks for your
 password.
@@ -76,36 +76,36 @@ build for your system and tells you which package to install if it is missing.
 To open the app:
 
 - **macOS:** the script opens it when it finishes. After that, open
-  agenthub-desktop from Applications.
-- **Linux:** AgentHub in your applications menu, or `agenthub-desktop` in a new
+  agenthallway-desktop from Applications.
+- **Linux:** Agent Hallway in your applications menu, or `agenthallway-desktop` in a new
   terminal (the script puts it in `~/.local/bin`).
 
 ### Windows
 
-AgentHub has never been run on a real Windows computer. The Windows build is
+Agent Hallway has never been run on a real Windows computer. The Windows build is
 built and tested in CI only, and acceptance on real machines is still open
 ([#21](https://github.com/SheldonChangL/agenthub/issues/21),
 [verification.md](verification.md#build-matrix)). What follows is what the
 installer is written to do.
 
 1. Open the [Releases page](https://github.com/SheldonChangL/agenthub/releases)
-   and download `agenthub-desktop_<version>_windows_amd64-installer.exe`
+   and download `agenthallway-desktop_<version>_windows_amd64-installer.exe`
    (Windows 10 or 11, 64-bit).
 2. Run it. Windows warns you first; see the next section.
 3. The installer puts the app in place (by default in
-   `C:\Program Files\agenthub-desktop\agenthub-desktop`), registers the
+   `C:\Program Files\agenthallway-desktop\agenthallway-desktop`), registers the
    background service with Task Scheduler, starts it, and adds a Start menu entry
-   and a desktop shortcut, both named agenthub-desktop. Open the app from
+   and a desktop shortcut, both named agenthallway-desktop. Open the app from
    either. The Claude Code skill is a box on the installer's components page,
    unticked by default.
 
 Prefer no installer? The `..._windows_amd64.zip` from the same page unpacks and
-runs. Keep `ah.exe`, `agenthub-node.exe` and `agenthub-mcp.exe` in the same
+runs. Keep `ah.exe`, `agenthallway-node.exe` and `agenthallway-mcp.exe` in the same
 folder as the app.
 
 ### If your computer warns about the download
 
-None of the AgentHub files are signed. A signing certificate costs money every
+None of the Agent Hallway files are signed. A signing certificate costs money every
 year and this project has not bought one, so your computer is right to say that
 nothing vouches for the file. What you can check instead is the checksum: every
 release ships a `SHA256SUMS` file, and the same values are in the release
@@ -122,7 +122,7 @@ notes.
   - macOS 14 and earlier: right-click the app, choose **Open**, then **Open**
     again.
   - From a terminal, either version:
-    `xattr -dr com.apple.quarantine /Applications/agenthub-desktop.app`
+    `xattr -dr com.apple.quarantine /Applications/agenthallway-desktop.app`
 - **Windows:** SmartScreen says "Windows protected your PC". Press **More
   info**, then **Run anyway**.
 - **Linux:** no warning.
@@ -135,7 +135,7 @@ sha256sum -c SHA256SUMS --ignore-missing         # Linux
 ```
 
 ```powershell
-Get-FileHash .\agenthub-desktop_<version>_windows_amd64-installer.exe -Algorithm SHA256
+Get-FileHash .\agenthallway-desktop_<version>_windows_amd64-installer.exe -Algorithm SHA256
 ```
 
 On Windows, compare the printed value with the matching line in `SHA256SUMS`.
@@ -146,7 +146,7 @@ After this chapter the background service runs, other machines on your
 network can reach it (if you chose that), and you have either paired a second
 machine or skipped that for later.
 
-The first time you open AgentHub, the window shows a three-step setup. The
+The first time you open Agent Hallway, the window shows a three-step setup. The
 steps are listed on the left; the current one fills the right. Nothing is shared
 by any of this until you tick sessions in step 3.
 
@@ -158,9 +158,9 @@ The heading reads **First, get this machine ready**, above three checks:
 
 | Check | What it means |
 |---|---|
-| **AgentHub is running in the background** | The background service is running. It keeps going when the window is closed. |
+| **Agent Hallway is running in the background** | The background service is running. It keeps going when the window is closed. |
 | **Starts when you log in** | The background service is registered with launchd (macOS), `systemd --user` (Linux) or Task Scheduler (Windows). |
-| **Other machines on the network can find and reach it** | AgentHub listens on an address on your home or office network, so other machines can connect, and searches the network, so they can find it. |
+| **Other machines on the network can find and reach it** | Agent Hallway listens on an address on your home or office network, so other machines can connect, and searches the network, so they can find it. |
 
 A blue box above the buttons says what the button will open, in two sentences:
 
@@ -188,14 +188,14 @@ and you pair by typing its address. If searching could not be turned on, the
 step says so and offers **Next** anyway, for the same reason.
 
 If the address is already open and searching is off, but the background service
-is not running — it is stopped, AgentHub is running outside it, or its status is
+is not running — it is stopped, Agent Hallway is running outside it, or its status is
 still being read — the button reads **Get this machine ready**, with **Get this
 machine ready, without searching** beside it. That second button does the same
 to the service as the first (it starts it, or sends you to Settings to confirm
 the database first) but writes no network setting, so searching stays off; once
 the service is running, it moves on to step 2.
 
-Prefer to keep AgentHub on this one machine? Press **Use it on this machine
+Prefer to keep Agent Hallway on this one machine? Press **Use it on this machine
 only**. Step 2 is then marked **Staying on this machine** and skipped.
 
 **If something fails**, the row that failed shows **Not done** with one plain
@@ -203,7 +203,7 @@ sentence, and **Details** under it holds the original error. Press **Try
 again**. The setup does not move on until the failure is fixed. Two cases stop
 it on purpose:
 
-- AgentHub is already running but was not started as a background service (you
+- Agent Hallway is already running but was not started as a background service (you
   started it from a terminal, say). The window sends you to Settings to confirm
   which database it uses before installing, because installing on a
   different database would give the machine a new identity. **Continue setup**
@@ -238,7 +238,7 @@ with.
      its inbox, and the session can reply.
    - **Messages and waking**: a message also tries to wake the agent. This one
      cannot be picked when every ticked session is a Claude Code session,
-     because AgentHub cannot wake a Claude Code session.
+     because Agent Hallway cannot wake a Claude Code session.
 3. Press **Share 2 sessions**. The number follows what you ticked; with nothing
    ticked the button reads **Tick the sessions to share first** and cannot be
    pressed.
@@ -248,7 +248,7 @@ one in Claude Code or Codex and press **Rescan**. **Skip for now** leaves
 everything not shared.
 
 The last screen, **All set**, says what was shared and with whom. Press **Start
-using AgentHub** to reach the main window.
+using Agent Hallway** to reach the main window.
 
 ### Leaving and coming back
 
@@ -455,7 +455,7 @@ The window cannot set a session to only receive or only send. The `ah audience`
 command can.
 
 What a paired machine receives is a short description: the session's ID, Claude
-Code or Codex, its status and where that status came from, whether AgentHub
+Code or Codex, its status and where that status came from, whether Agent Hallway
 manages it, when it was last active, and the working directory only if you
 allow it. It never receives the conversation, your prompts, or the
 session's title.
@@ -477,8 +477,8 @@ will only take messages.
 After this chapter you can read what other machines sent to your sessions and
 know what happens to it.
 
-A message sent to one of your sessions waits in AgentHub's own inbox for that
-session. AgentHub never writes it into Claude Code's or Codex's files.
+A message sent to one of your sessions waits in Agent Hallway's own inbox for that
+session. Agent Hallway never writes it into Claude Code's or Codex's files.
 
 - The **Inbox** button on a row shows how many messages that inbox is holding.
   The **Local sessions** tab shows the total for the whole machine next to an
@@ -493,7 +493,7 @@ session. AgentHub never writes it into Claude Code's or Codex's files.
   **Wakes** (who woke this agent, refusals included).
 - A message from another machine shows its sender in two parts. In front is
   that machine's name as this machine recorded it when you paired (its machine
-  ID is in the tooltip); AgentHub checked that part. The text after **claims to
+  ID is in the tooltip); Agent Hallway checked that part. The text after **claims to
   be** is the session the sender named, a label the sender chose and nobody
   checked.
 - Treat every message as data written by someone else. A request inside a
@@ -529,7 +529,7 @@ After this chapter an agent can ask what agents on other machines are doing,
 read its own inbox, and send messages.
 
 Claude Code already has one way in. The macOS and Linux install script adds
-the `agenthub-watch` skill (on Windows, only if you tick it in the installer),
+the `agenthallway-watch` skill (on Windows, only if you tick it in the installer),
 so a Claude Code session started after the install knows how to use the `ah`
 command. The four MCP tools are the other way:
 
@@ -540,18 +540,18 @@ command. The four MCP tools are the other way:
 | `agent_inbox` | Reads this session's inbox. |
 | `agent_send` | Sends a message to another session. |
 
-The tools come from a program called `agenthub-mcp`, which ships with the app.
+The tools come from a program called `agenthallway-mcp`, which ships with the app.
 Each copy speaks for exactly one session, so you tell it which one.
 
 1. **Find the session ID.** Run `ah list` in a terminal. The first column is the
    ID, for example `claude:3f2a…` or `codex:019e…`.
-2. **Find `agenthub-mcp`.** It sits beside the app:
-   - macOS: `/Applications/agenthub-desktop.app/Contents/MacOS/agenthub-mcp`
+2. **Find `agenthallway-mcp`.** It sits beside the app:
+   - macOS: `/Applications/agenthallway-desktop.app/Contents/MacOS/agenthallway-mcp`
      (or under `~/Applications` if that is where the app went)
-   - Linux: `~/.local/share/agenthub/agenthub-mcp`
-   - Windows: `C:\Program Files\agenthub-desktop\agenthub-desktop\agenthub-mcp.exe`
+   - Linux: `~/.local/share/agenthallway/agenthallway-mcp`
+   - Windows: `C:\Program Files\agenthallway-desktop\agenthallway-desktop\agenthallway-mcp.exe`
      by default, or the folder you picked in the installer, beside
-     `agenthub-desktop.exe`. That path comes from the installer script and has
+     `agenthallway-desktop.exe`. That path comes from the installer script and has
      not been seen on a real Windows computer.
 3. **For Claude Code**, save this as `.mcp.json` in the session's project
    folder, with the full path and your session ID:
@@ -559,8 +559,8 @@ Each copy speaks for exactly one session, so you tell it which one.
    ```json
    {
      "mcpServers": {
-       "agenthub": {
-         "command": "/Applications/agenthub-desktop.app/Contents/MacOS/agenthub-mcp",
+       "agenthallway": {
+         "command": "/Applications/agenthallway-desktop.app/Contents/MacOS/agenthallway-mcp",
          "args": ["-as", "claude:<id>"]
        }
      }
@@ -601,10 +601,10 @@ so it needs two switches, and neither works alone:
 
 What to expect:
 
-- **Codex sessions:** waking has been seen working on one machine. AgentHub
+- **Codex sessions:** waking has been seen working on one machine. Agent Hallway
   resumes the Codex thread and starts a turn in it.
 - **Claude Code sessions:** not verified. The window does not offer waking for
-  them. Even with every setting in place, AgentHub records the message as woken
+  them. Even with every setting in place, Agent Hallway records the message as woken
   and no turn has been seen arriving. See
   [channel-push-not-observed.md](channel-push-not-observed.md). Claude Code's
   own cross-session messaging is a different route: with Remote Control on in
@@ -628,12 +628,12 @@ likes, within those limits. If you stop trusting it, press **Revoke trust** on
 the Network tab, or turn the machine's switch off.
 
 What a woken Codex should do with a message is written in this repository's
-[AGENTS.md](../AGENTS.md), under "When AgentHub wakes you". Codex reads the
+[AGENTS.md](../AGENTS.md), under "When Agent Hallway wakes you". Codex reads the
 `AGENTS.md` of the project it runs in, so copy that section into yours.
 
 ## Notifications
 
-After this chapter you know where AgentHub tells you things and how long each
+After this chapter you know where Agent Hallway tells you things and how long each
 message stays.
 
 - **Pop-up messages** appear at the bottom right, one at a time. A new one
@@ -652,8 +652,8 @@ message stays.
 
   | Item | Button |
   |---|---|
-  | **AgentHub is not answering** | **Retry** |
-  | **AgentHub is not a background service yet** / **The background service is installed but not running** | **Install as a background service**, **Install from settings** or **Start the background service** |
+  | **Agent Hallway is not answering** | **Retry** |
+  | **Agent Hallway is not a background service yet** / **The background service is installed but not running** | **Install as a background service**, **Install from settings** or **Start the background service** |
   | **Inbox full: …** | **Open inbox** |
   | A machine calling itself … **wants to pair with this machine** | **Compare and approve** |
 
@@ -665,7 +665,7 @@ message stays.
 
 ## The background service
 
-After this chapter you can tell whether AgentHub is running and fix it when it
+After this chapter you can tell whether Agent Hallway is running and fix it when it
 is not.
 
 The background service is the part that watches your sessions and answers other
@@ -677,10 +677,10 @@ first-run setup installs it; this is where to look afterwards.
 | Pill | Meaning |
 |---|---|
 | **background service running** | All good. |
-| **service running, AgentHub not answering** | The service is up but AgentHub does not reply. |
+| **service running, Agent Hallway not answering** | The service is up but Agent Hallway does not reply. |
 | **service installed, not running** | Registered, but stopped. |
-| **AgentHub is not a background service** | AgentHub runs, but stops with the window or terminal that started it. |
-| **AgentHub not running** | Nothing is running. |
+| **Agent Hallway is not a background service** | Agent Hallway runs, but stops with the window or terminal that started it. |
+| **Agent Hallway not running** | Nothing is running. |
 | **no background service on this platform** / **ah not found** | The window cannot manage a service here. |
 
 Press the pill to fix what it describes: it installs the service, starts it, or
@@ -690,18 +690,18 @@ Settings has tabs down the left: **Background service**, **Connection
 settings**, **This machine's identity**, **Appearance** and **Language**.
 
 **Settings → Background service** has **Read again**, **Install as a
-background service…**, **Restart AgentHub** and **Remove the service…**. The
+background service…**, **Restart Agent Hallway** and **Remove the service…**. The
 install form has one field, **Database path**. Leave it empty to use the default
 location. A different path means a different machine identity, and every paired
 machine would have to pair again; the window asks before it does that.
 
-**Settings → Connection settings** holds what AgentHub reads when it starts:
+**Settings → Connection settings** holds what Agent Hallway reads when it starts:
 **Listen addresses** (a checkbox for each address this machine has),
 **Allow LAN connections**, **Search the LAN for other machines (and, while pairing, let them find this one)**
 and **Allow messages to wake agents automatically**. **Treat as private
 ranges** is in the **Advanced** fold, which opens by itself when it holds a
 value or when a warning about a range appears.
-**Save and restart the service** saves them, restarts AgentHub, and checks that
+**Save and restart the service** saves them, restarts Agent Hallway, and checks that
 the change stuck. **Search the LAN for other machines (and, while pairing, let them find this one)** is
 the searching switch: while it is ticked, this machine always listens for other
 machines' announcements (it only receives), to list machines that want to pair
@@ -717,17 +717,17 @@ Platform differences:
 
 - macOS and Linux restart the background service by themselves if it crashes.
 - Windows starts it at log-in only. If it stops, it stays stopped until you press
-  **Restart AgentHub** or log in again.
+  **Restart Agent Hallway** or log in again.
 - On Linux the background service runs while you are logged in. For a machine that should run
   it with nobody logged in, run `loginctl enable-linger <user>` once.
 
-The log is at `~/Library/Logs/agenthub/node.log` on macOS,
-`journalctl --user -u agenthub-node` on Linux, and
-`%LOCALAPPDATA%\agenthub\node.log` on Windows.
+The log is at `~/Library/Logs/agenthallway/node.log` on macOS,
+`journalctl --user -u agenthallway-node` on Linux, and
+`%LOCALAPPDATA%\agenthallway\node.log` on Windows.
 
 ## Upgrade and remove
 
-After this chapter you can move to a new version, or take AgentHub off a
+After this chapter you can move to a new version, or take Agent Hallway off a
 machine, without losing your pairings by accident.
 
 ### Upgrade
@@ -741,11 +741,95 @@ curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install
 It replaces the app, keeps the background service's database and identity, and registers the
 service again so it points at the new copy. If it uses a database you
 chose yourself (`--db`), it also prints `keeping the node's database at
-<path>`; with the default database there is no such line. On macOS it first asks a running AgentHub window to
+<path>`; with the default database there is no such line. On macOS it first asks a running Agent Hallway window to
 quit and waits up to 10 seconds. To install a particular version, add
 `sh -s -- --version vX.Y.Z` in place of the last `sh`.
 
 On Windows, download the new installer from the Releases page and run it.
+
+Coming from AgentHub v0.1.x? Read
+[Upgrading from AgentHub (v0.1.x)](#upgrading-from-agenthub-v01x) first.
+
+### Upgrading from AgentHub (v0.1.x)
+
+Agent Hallway was called AgentHub up to v0.1.11. v0.2.0 renamed it, to avoid
+confusion with an unrelated project of the same name. It is the same program and
+the same machine: paired machines keep working across the two versions, because
+the wire protocol, the signatures and the discovery name did not change. You can
+upgrade one machine at a time.
+
+Upgrade as above: run the install command again on macOS and Linux, or the new
+installer on Windows.
+
+**What happens by itself**
+
+- The new app and files go in under the new names (`agenthallway-desktop`,
+  `~/.local/share/agenthallway` and so on), and the old AgentHub app, files,
+  links and the `agenthub-watch` skill the script installed are removed. Your
+  data, your logs and the PATH line in your shell's startup file are not
+  touched. On macOS a running AgentHub window is asked to quit first.
+- The background service is registered again under the new name (launchd
+  `local.agenthallway.node`, systemd `agenthallway-node`, Task Scheduler
+  `Agent Hallway Node`), on the same database. The old registration
+  (`local.agenthub.node`, `agenthub-node`, `AgentHub Node`) is removed.
+- On its first start the node moves its identity and database from
+  `…/agenthub/` to `…/agenthallway/` (`node.key` and `agenthub.db`, which is
+  `agenthallway.db` from then on; only its own files move). That folder is in
+  `~/Library/Application Support` on macOS, `~/.config` (or `$XDG_CONFIG_HOME`)
+  on Linux and `%APPDATA%` on Windows. The machine ID stays the same, so every
+  pairing holds.
+- On Windows the installer first runs the AgentHub uninstaller silently. It
+  removes the old program files, shortcuts and scheduled task and leaves
+  `%APPDATA%\agenthub`, which the node then moves. If an `agenthub-desktop`
+  entry is still listed in Installed apps afterwards, uninstall it there.
+
+**If the old install is still there.** With `--no-service`, or when the script
+could not read the registered service, it keeps the whole AgentHub install,
+because the old service would otherwise fail at every login. Run
+`ah service install`, then the install command again. The window says the same
+thing: the title bar pill reads **service registered under the old name**, and
+**Settings → Background service** shows a note that the service is still
+registered under the pre-rename name, with **Register again as Agent Hallway**,
+which replaces the old registration on the same database, after asking. If the
+node refuses to start with "pre-rename background service is still registered",
+the fix is the same: `ah service install` keeps the database.
+
+**What you do by hand**
+
+- **MCP entries.** The upgrade never edits an MCP configuration. The server is
+  now called `agenthallway`, run by `agenthallway-mcp`, so remove the old
+  `agenthub` entry (`claude mcp remove agenthub -s <scope>`, Codex
+  `[mcp_servers.agenthub]`, each project's `.mcp.json`) and add a new one as in
+  [Let an agent use the four tools](#let-an-agent-use-the-four-tools). The tools
+  are now `mcp__agenthallway__agent_*`, so update any permission allowlist in
+  `.claude/settings*.json` too. The install script names the user-level
+  configurations that still start `agenthub-mcp`; it never writes them.
+- **The skill.** It is `/agenthallway-watch` now. An `agenthub-watch` you linked
+  or copied yourself is left where it is; rename or remove it if you want.
+- **Environment variables.** `AGENTHUB_*` variables are still read, but prefer
+  `AGENTHALLWAY_*`.
+
+**Smaller changes**
+
+- The window's own preferences (filters, sort, language override, background)
+  reset once, and the first-run setup shows again.
+- Logs now go to the paths in [The background service](#the-background-service);
+  old logs stay where they were.
+- **macOS.** If peers show offline after the upgrade, check System Settings →
+  Privacy & Security → Local Network for `agenthallway-node`.
+
+**Rolling back one machine** to v0.1.11: the new `ah` removes both registrations
+and the data stays where it is. The old node then runs on the moved files, with
+the same identity.
+
+```sh
+ah service uninstall
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --version v0.1.11 --no-service
+"<the v0.1.11 ah>" service install --db "<config>/agenthallway/agenthallway.db"
+```
+
+Never move the files back by hand while any node is running. Upgrading again
+later carries that `--db` and needs no move.
 
 ### Remove
 
@@ -764,24 +848,24 @@ Either way, the machines you paired with still list this one until they press
 **Revoke trust** (or run `ah revoke <node-id>`). Add `--dry-run` to see every
 step without doing any of it.
 
-On Windows, uninstall AgentHub from Settings → Apps like any other program. The
+On Windows, uninstall Agent Hallway from Settings → Apps like any other program. The
 uninstaller removes the scheduled task, the app and the skill copy it installed.
-The machine's identity and database in `%APPDATA%\agenthub` stay.
+The machine's identity and database in `%APPDATA%\agenthallway` stay.
 
 ## Troubleshooting
 
 After this chapter you can sort out the problems people hit most often.
 
-**AgentHub is not answering.** Open the bell and press **Retry** on its item
+**Agent Hallway is not answering.** Open the bell and press **Retry** on its item
 under **Needs you**, or press the pill in the title bar. If it still does not
-answer, go to Settings → **Background service** → **Restart AgentHub**, and
+answer, go to Settings → **Background service** → **Restart Agent Hallway**, and
 read the log (paths in
 [The background service](#the-background-service)). A setting you just saved in
 **Connection settings** is the first thing to suspect.
 
 **The other machine does not appear.** Both machines must have finished step
 1, which turns on searching: if only one searches, neither sees the other. Both
-must be on the same network, with AgentHub open at step 2 or in the Network
+must be on the same network, with Agent Hallway open at step 2 or in the Network
 tab's drawer. If step 2 says this machine is not looking, press **Start
 searching the network**. A firewall on either machine can block port 7463, and
 some networks block the multicast that searching uses. Then use **Can't find
@@ -792,7 +876,7 @@ the other machine?** and type the address: that works with searching off.
 - "Pairing is not open on the other machine": open step 2 or the pairing drawer
   there, then send again.
 - "Could not reach that address": check the address, that both machines share a
-  network, and that AgentHub on the other side is running.
+  network, and that Agent Hallway on the other side is running.
 - "This machine will not send data to that address": the address is outside the
   ranges this machine treats as private. Addresses starting with `10.`,
   `172.16.` to `172.31.`, `192.168.` or `169.254.` already count as private and
@@ -803,8 +887,8 @@ the other machine?** and type the address: that works with searching off.
   a number: `122.122.0.0/16` covers every address starting with `122.122.`, and
   `122.122.122.0/24` fixes the first three numbers. Either one covers both ends
   of that cable.
-- "The other machine runs a build of AgentHub without the pairing exchange":
-  update AgentHub there.
+- "The other machine runs a build of Agent Hallway without the pairing exchange":
+  update Agent Hallway there.
 
 **The fingerprints do not match.** Press **Different — reject** (**Reject** in
 the Network tab's drawer) and do not send the request again until you know which
@@ -813,7 +897,7 @@ machine you reached. Something between the two may be answering for one of them.
 **Paired, but I see none of their sessions.** Pairing shares no session on its
 own. The other person has to share a session with you. If the Network tab says no heartbeat has
 arrived, the other machine may not have finished its side of the pairing, or
-AgentHub is not running there.
+Agent Hallway is not running there.
 
 **An inbox is full.** Open it from **Open inbox** in the bell, read what you
 need, and press **Clear the inbox…**, or let the agent delete what it has handled. A full
@@ -828,7 +912,7 @@ of the install script stopped the upgrade when macOS answered its quit request
 with an error, even though the app quit a moment later. That is fixed: the script
 now waits up to 10 seconds and stops only if the app really is still running.
 The one-line command always fetches the current script. If it does stop, quit
-AgentHub yourself (right-click its Dock icon → **Quit**) and run the command
+Agent Hallway yourself (right-click its Dock icon → **Quit**) and run the command
 again.
 
 **A Claude Code session did not wake.** That is expected today; see

@@ -1,6 +1,6 @@
 # Code of conduct
 
-AgentHub follows the
+Agent Hallway follows the
 [Contributor Covenant, version 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
 The full text is at that link; this page summarises it and says how to reach
 the maintainer.

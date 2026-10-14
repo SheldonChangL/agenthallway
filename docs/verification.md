@@ -1,5 +1,7 @@
 # Verification
 
+> Recorded before the rename to Agent Hallway (v0.2.0); commands and paths below use the old name AgentHub.
+
 Verified on 2026-08-28, except where a later date is given. The *Two-host run,
 2026-09-02* and *MCP two-host run, 2026-09-03* sections are later, and passages
 annotated "(annotated 2026-09-02)" were corrected then because the transport

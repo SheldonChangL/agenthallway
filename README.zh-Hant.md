@@ -1,8 +1,10 @@
 <img src="docs/icon.png" width="112" align="right" alt="">
 
-# AgentHub
+# Agent Hallway
 
 [English](README.md) | 繁體中文
+
+*v0.2.0 之前叫 AgentHub，改名是為了避免和另一個同名、不相干的專案混淆。從 v0.1.x 升級？請看[從 AgentHub 升級](docs/guide.zh-Hant.md#從-agenthub-v01x-升級)。*
 
 **查看不同機器上的 Claude Code 與 Codex session，也能讓它們互相留訊息。**
 
@@ -29,7 +31,7 @@ curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install
 Windows 版從沒在真的 Windows 電腦上跑過（[#21](https://github.com/SheldonChangL/agenthub/issues/21)）。
 下載檔沒有簽章，手動下載的檔案第一次開啟前會跳警告；[怎麼核對檔案、怎麼放行](docs/guide.zh-Hant.md#電腦跳出下載警告時)。
 
-裝好後兩台都打開 **agenthub-desktop**，照三個步驟走：準備好這台機器、
+裝好後兩台都打開 **agenthallway-desktop**，照三個步驟走：準備好這台機器、
 在兩台螢幕上比對指紋連到另一台、勾選要分享的 session。
 每個畫面的說明在[使用手冊](docs/guide.zh-Hant.md#第一次設定)。
 
@@ -41,16 +43,16 @@ Windows 版從沒在真的 Windows 電腦上跑過（[#21](https://github.com/Sh
   對方拿到的是一段簡短摘要，例如 session 的 ID、狀態和最後活動時間，不含提示詞和對話紀錄。
 - **讓 agent 互相留訊息**，透過四個 MCP 工具或 `ah` 指令，前提是那個 session 設成「可留訊息」。
   訊息留在收件匣等 agent 來讀；沒有任務指派或追蹤。[設定方式](docs/guide.zh-Hant.md#讓-agent-使用四個工具)。
-- **可以用訊息喚醒 Codex session**，要你自己打開。那個 session 不必開著：AgentHub 會在背景把它的 thread 接回來。
+- **可以用訊息喚醒 Codex session**，要你自己打開。那個 session 不必開著：Agent Hallway 會在背景把它的 thread 接回來。
   [喚醒 agent](docs/guide.zh-Hant.md#喚醒-agent)。
-- **Claude Code 要自己檢查收件匣才會讀到訊息。** AgentHub 叫不醒它，所以 session 要一直開著，
-  用一起裝好的 agenthub-watch skill 定時檢查。Claude Code 內建的跨 session 訊息也有同樣的前提：
+- **Claude Code 要自己檢查收件匣才會讀到訊息。** Agent Hallway 叫不醒它，所以 session 要一直開著，
+  用一起裝好的 agenthallway-watch skill 定時檢查。Claude Code 內建的跨 session 訊息也有同樣的前提：
   收訊息的 session 要開著，兩邊都要開 Remote Control、登入同一個 claude.ai 帳號，訊息會經過 claude.ai。
   如果兩台都只用 Claude Code、登入同一個帳號，用內建的可能就夠了。
 
 ## 隱私
 
-配對過的機器彼此直接連線，中間沒有中繼。AgentHub 只和你網路上的機器溝通，
+配對過的機器彼此直接連線，中間沒有中繼。Agent Hallway 只和你網路上的機器溝通，
 只有執行安裝腳本時才會連 GitHub。配對要兩邊的人在兩台螢幕上比對同一組指紋才算數，
 而且配對本身不會分享任何 session。只有配對視窗開著時，同一個網路上的其他機器才看得到這台的名稱、位址、平台、指紋和機器 ID。
 [每一點是怎麼做到的](docs/developer.md#how-it-stays-private)（英文）。
@@ -69,5 +71,5 @@ Windows 版從沒在真的 Windows 電腦上跑過（[#21](https://github.com/Sh
 - [開發者文件](docs/developer.md)（英文）：建置、命令列、本機 API、隱私模型細節。
 - [SECURITY.md](SECURITY.md)（英文）私下回報安全漏洞；[CONTRIBUTING.md](CONTRIBUTING.md)（英文）怎麼參與，issue 和 PR 用中文寫也可以。
 
-AgentHub 免費，以後也會一直免費。如果它幫你省了時間，可以到 [Ko-fi 頁面](https://ko-fi.com/sheldonchang)支持一下；
+Agent Hallway 免費，以後也會一直免費。如果它幫你省了時間，可以到 [Ko-fi 頁面](https://ko-fi.com/sheldonchang)支持一下；
 回報 bug 時順便說說你當時想做什麼，比錢更有幫助。授權：MIT，見 [LICENSE](LICENSE)。

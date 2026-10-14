@@ -73,8 +73,10 @@ body:
     attributes:
       label: ah output or node log
       description: |
-        The relevant lines only. Node logs are at `~/Library/Logs/agenthub/node.log` (macOS),
-        `journalctl --user -u agenthub-node` (Linux) and `%LOCALAPPDATA%\agenthub\node.log` (Windows).
+        The relevant lines only. Node logs are at `~/Library/Logs/agenthallway/node.log` (macOS),
+        `journalctl --user -u agenthallway-node` (Linux) and `%LOCALAPPDATA%\agenthallway\node.log` (Windows).
+        From v0.1.x (called AgentHub then) they are `~/Library/Logs/agenthub/node.log`,
+        `journalctl --user -u agenthub-node` and `%LOCALAPPDATA%\agenthub\node.log`.
         **Remove session contents, node ids, host names and addresses first.**
       render: text
   - type: textarea

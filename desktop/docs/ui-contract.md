@@ -48,7 +48,7 @@
 
 | 綁定 | 現在的入口 | 觸發後必須發生的事 |
 |---|---|---|
-| `Overview()` | 啟動、`btn-reload`、每次寫入後、待處理列「AgentHub 沒有回應」的「重試」、首次設定精靈第 1 步結束時（§3.2） | 更新 session/nodes/peers/counts、連線指示、footer；清掉已不存在的選取；讀不到節點時在**待處理列**（§3.1）說明（保留上次清單或從未載入過），不再用 toast |
+| `Overview()` | 啟動、`btn-reload`、每次寫入後、待處理列「Agent Hallway 沒有回應」的「重試」、首次設定精靈第 1 步結束時（§3.2） | 更新 session/nodes/peers/counts、連線指示、footer；清掉已不存在的選取；讀不到節點時在**待處理列**（§3.1）說明（保留上次清單或從未載入過），不再用 toast |
 | `Discover()` | `btn-discover`；首次設定精靈第 3 步沒有 session 時的「重新掃描」（同一個 `discoverSessions()`）；視窗第一次**連得到節點**而且 0 筆 session 時自動呼叫一次（`state.busy` 時不算，留給下一次不忙的讀取） | 掃描後 reload；toast 報 claude/codex/total/skipped 數 |
 | `Heartbeat()` | `btn-heartbeat`（在設定頁的身分區 `settings-identity`） | 對話框顯示已簽章 envelope 純文字 |
 | `SetAudience(ids, audience)` | 分享面板「套用」（列上的分享按鈕、批次列「分享…」，§3.2；`applySharePanel()`）、toast 的「復原」、首次設定精靈第 3 步「分享 N 個 session」（`applyAudienceChoice()`→`applyAudiencePairs()`，帶 `withoutCwd`：一律 `exportCwd: false`，`peerAction: false`：toast 沒有「在區網頁看」，復原仍寫回原值） | 成功：關面板、批次時清空選取（列上的面板不動選取）、toast＝標題＋`peerOutcome()` 的一句對方視角（「alice 現在看得到 N 個 session。」／「N 台機器看得到這些 session。」／已停止分享時「其他機器不再看得到。」／還沒配對任何機器時「…日後配對的機器才看得到」）＋〔在區網頁看 X〕＋〔復原〕；部分失敗：面板不關、留著選取、錯誤 toast 顯示第一個錯誤（面板開著時浮在面板上方，§3.1），至少一個成功時才帶「復原」（寫回每個 session 的原值，對失敗的那些是同值重寫、冪等），全部失敗時不帶。寫入**依結果分組**：每個不同的 audience 呼叫一次，帶所有得到它的 session（`writeAudiences()`）；整次呼叫丟錯時該組全部算失敗，走同一條部分失敗規則 |
@@ -65,18 +65,18 @@
 | `RejectPairRequest(id)` | 任一未決請求列「拒絕」；首次設定精靈第 2 步等待畫面的「取消這次請求」與比對畫面的「不一樣，拒絕」 | 成功後把節點回的 `nextStep` 放進 toast——推不出去的拒絕只有這裡會說 |
 | `Inbox(sessionId)` | 每列的「收件匣」（動作欄） | 開**抽屜**（`inbox-modal`，三個分頁：收件匣／送出紀錄／喚醒紀錄），先畫 loading；序號守衛；清空按鈕只在答案回來後才對準這個 session |
 | `ClearInbox(sessionId)` | 收件匣「清空收件匣…」 | `askConfirm` 按「清空」後執行；結果（移除 N 則 / 失敗未變動）顯示在**對話框內**，不是 toast |
-| `ServiceStatus()` | 每次 Overview 後 | 五種狀態文案（找不到 ah / 不支援 / 已裝執行中 / 已裝未執行 / 節點在跑但非服務 / 都沒有） |
+| `ServiceStatus()` | 每次 Overview 後 | 五種狀態文案（找不到 ah / 不支援 / 已裝執行中 / 已裝未執行 / 節點在跑但非服務 / 都沒有），另加**改名前的登記**：`legacy`（只有 v0.1.x 的登記，`unitPath`、`dbPath`、執行狀態都是它的）與 `legacyAlsoInstalled`（現行登記旁邊還留著舊的），畫面見 §3.4 |
 | `InstallService(form)` | 服務表單「安裝為背景服務」；待處理列服務那一列與標題列 `service-pill` 的一鍵處理（支援但未安裝時，§3.1）；首次設定精靈第 1 步的一鍵（**走同一個一鍵處理** `runServiceQuickAction()`，§3.2） | 顯示 `$ command` + output；失敗把錯誤放進 output 區。一鍵處理**動手前先重讀** `ServiceStatus()`（`loadService()`，用讀到的狀態重算；畫面上的可能是好幾分鐘前的——有選取或對話框開著時 15 秒 tick 不讀——而 `ah service install` 會取代既有註冊，照舊狀態裝等於用預設資料庫換掉節點身分），重讀失敗就跳設定頁並用錯誤 toast 說明（`service.quickReadFailed`），什麼都不做；**節點在跑但不是服務**（`state.nodeReachable` 或狀態的 `nodeAnswering`，且未安裝）不直接裝，改去設定頁的服務表單（`goToService()` 會展開它）。其餘走**同一個** `installService()`：先 `openServiceForm()`（未安裝時資料庫欄位一定是空的＝節點預設），再照表單按鈕的路徑安裝，含它既有的 `askConfirm`（已安裝但讀不到／改了資料庫路徑，未安裝時兩者都不會問）。服務表單在「節點在跑但不是服務」時資料庫說明改為 `service.dbNoteRunningNotService`（它若是用 --db 啟動的就填那個路徑，這時留空＝預設資料庫＝對它而言是新身分、現有配對失效——後半句也在這個條件裡，用預設資料庫跑的節點留空不會換身分；測試 `service-panel.mjs`），欄位空白按安裝先 `askConfirm`（`service.runningNotServiceConfirm*`，danger、焦點在取消；有填路徑不問；測試 `inline-publish.mjs` §6） |
 | `UninstallService()` | `service-uninstall` | `askConfirm`；成功後 reload |
 | `LocalAddresses()` | 開啟服務表單時；首次設定精靈出現或重新打開時（`readForFirstRun()`，不需要節點在跑） | 重建位址下拉；非私有網段自動帶入 `treatAsPrivate` 建議並說明。精靈只列 `private` 的位址給使用者選 |
-| `NodeURL()` / `SetNodeURL()` | 目前**沒有** UI 入口（靠 `AGENTHUB_URL`） | 保留為未接綁定 |
+| `NodeURL()` / `SetNodeURL()` | 目前**沒有** UI 入口（靠 `AGENTHALLWAY_URL`） | 保留為未接綁定 |
 
 | `Outbound(session, limit, after)` | 收件匣抽屜的「送出紀錄」分頁 | 分頁載入；序號守衛；`next` 為空表示沒有更多 |
 | `Wakes(session, limit)` | 收件匣抽屜的「喚醒紀錄」分頁 | 分頁載入；序號守衛；`limits` 顯示節點端的上限 |
 | `NodeSettings()` | 進入設定頁的節點設定區 | 讀回 `settings`（執行中）與 `saved`（存下來的）兩份；規則見 §7.8 |
 | `SaveNodeSettings(patch)` | 節點設定區的「儲存」；配對抽屜第 1 步與首次設定精靈第 1 步的修復鈕、精靈第 2 步的「開始在區網上搜尋」（都走 `applyPeerListenRepairFromCard()` → 表單的 `saveNodeSettings()`，§7.8；精靈的兩顆經 `writeFirstRunNetwork()`） | patch 併到 **`saved`** 不是 `settings`；存完重讀並比對「有沒有真的寫進去」；沒生效要說出來 |
 | `RestartService()` | 節點設定區的「重新啟動服務」；一鍵處理「已安裝但沒在跑」、首次設定精靈第 1 步遇到已安裝的服務而節點沒回應（`restartNode({ service: true })`：直接呼叫這個綁定，不經 `RestartNode` 在 Go 端再判一次，其餘——等節點回答、degraded 的說法——與設定頁同一份） | 走 `ah service restart`；三平台都支援——macOS `launchctl kickstart -k`、Linux `systemctl --user restart`、Windows `taskkill` 掉 node 再 `schtasks /Run` 排程工作 |
-| `RestartNode()` | 服務區的「重新啟動／啟動」（`service-restart`）、首次設定精靈第 1 步在沒有服務管理員（不支援、找不到 ah）而節點沒回應時、節點設定儲存後 | 已安裝服務→`RestartService()`；否則 app 自己停掉再啟動節點（`desktop/nodeprocess.go`）。**帶著原本的資料庫重啟（#205）**：節點 API 不回報資料庫路徑，所以 Go 端讀正在跑的 agenthub-node 自己的命令列與環境變數（macOS `kern.procargs2`；Linux `/proc/<pid>/cmdline`、`/proc/<pid>/environ`；Windows 命令列走 WMI——PowerShell 用 `%SystemRoot%` 下的絕對路徑、只讀 stdout、關掉進度記錄——環境變數讀程序的 PEB，使用者比對程序 token 的 SID），命令列照節點的旗標表解析、Windows 照 Go `os.Args` 的切法（不是 `CommandLineToArgvW`），用同一組參數啟動新的——只拿掉節點記住的五個設定（它們正是這次重啟要套用的存檔值，帶回舊旗標會蓋掉存檔）。命令列沒寫的路徑（`--db`、`--claude-root`、`--codex-root`）是節點**用它自己的環境**算出來的（`defaultPaths`：macOS `HOME`、Linux `XDG_CONFIG_HOME` 再 `HOME`、Windows `APPDATA`／`USERPROFILE`），app 用節點的環境照同樣規則算（`desktop/nodeenv.go`），**明確**以 `--db <絕對路徑>` 等傳給新節點，不讓新節點用 app 的環境重算。**停之前**就判斷，下列情況拒絕且不碰節點：讀不到命令列、同時有兩個以上 agenthub-node、路徑旗標是相對路徑或由環境算出相對路徑、資料庫檔不存在、旗標表不認得的旗標、`-listen` 不是 app 的位址（`127.0.0.1:7462`）、有路徑沒寫而節點環境讀不到（macOS／Linux 一律拒絕；Windows 見下）、節點在回答但 `GET /v1/node` 讀不到身分、節點沒回答而資料庫只是 app 推斷的。停了之後等該 pid 從程序清單消失（殭屍程序不算在跑）才啟動，逾時就回錯誤不啟動——埠關了不代表程序已放開資料庫。啟動後比對 node id 與指紋，不同就回錯誤（兩個 id＋把舊節點帶回來的命令），不宣稱成功。復原命令分兩種：路徑都是從節點自己的命令列或環境讀來的，命令裡每個路徑都明確寫出，在哪個環境執行都指向同一個資料庫；有路徑是 app 用自己的環境**推算**的（Windows 讀不到 PEB 的 fallback），復原命令只給舊節點原本的命令列、不帶推算的路徑（新節點正是開在那些路徑上才變成別人），並寫明哪些旗標是推算的、要在舊節點原本啟動的環境（它的登入或啟動它的 shell）裡執行（測試 `TestRestartNodeDoesNotHandBackAnInferredPathAsTheWayBack`）；輸出與錯誤裡的命令（`commandLine`，`desktop/nodeargs.go`）照平台的 shell 加引號：Windows 是 PowerShell 形式（`& '…\agenthub-node.exe' --db '…'`，單引號內 `$`、`` ` `` 都是字面，`'` 與 PowerShell 視同單引號的彎引號重複一次；只有旗標名稱（`--db`、`-discover`）不加引號，其餘一律加——5.1 會把沒引號的 `-a.b` 在點切開，`--`、`--%` 是它自己的語法），macOS／Linux 是 sh／bash／zsh 的單引號形式；cmd.exe、fish 不在保證內。Windows PowerShell 5.1 傳給程式時會丟掉空字串參數、不跳脫參數內的 `"`（Windows 路徑兩者都不會有；PowerShell 7.3 起沒有這問題）。測試 `TestShellCommandLineQuotesForEachShell`、`TestCommandLineSurvivesTheShell`（把命令交給本機每個 `/bin` shell、Windows 上交給 Windows PowerShell 5.1，執行測試自己的 binary 比對收到的參數）；節點重啟前沒回答（沒有 id 可比）時照樣啟動，但輸出寫明沒有比對、用的是哪個資料庫、從哪裡讀來。沒有任何 agenthub-node 在跑＝首次啟動，照舊不帶參數。**保證範圍**：macOS／Linux 上，新節點開的資料庫路徑就是舊節點命令列或它自己環境所指的那一個（檔案須存在），加上事後 id／指紋比對。**Windows 殘餘風險**：讀 PEB 失敗（權限、位元數不同等）而有路徑沒寫時，改用 app 自己的 `APPDATA`／`USERPROFILE` 算出的路徑，條件是資料庫檔存在、節點程序 token 的使用者 SID 與 app 相同、且節點重啟前有回答身分（事後比對 id）——同一使用者但節點啟動時 `APPDATA` 被改過、而 app 那邊的預設資料庫恰好也存在時，新節點會開 app 那一個，這時只靠事後 id 比對發現（回錯誤＋復原命令，不刪任何東西），不是事前擋下。Windows 這一半（WMI、PEB、token）只在 CI 的 `desktop-windows-processes` job 實際執行，開發機上只編譯；macOS 這一半（`kern.procargs2`：環境後面直接接核心自己的 apple strings、中間不保證有空項目，讀到 buffer 結尾就是字串區結束；apple strings 留在環境清單尾端，查找取第一筆所以蓋不掉真的變數）另在 CI 的 `desktop-macos-processes` job 跑，真程序測試 `-count=20`。兩個 job 都要求清單裡每個測試在 log 有 `--- PASS:`，且只為該 OS 編譯的測試檔裡每個 `Test*` 都在清單上。列舉遇到 `EINVAL`／`ESRCH`（有個 agenthub-node 正在退出、還不是殭屍）時重試幾次（6×50ms）再決定，**不當成它已消失**，持續失敗就拒絕。前端**不另外問**：Go 端在上述範圍內確認資料庫才動手、確認不了就拒絕，所以 `nodeRunningNotAService` 時按重新啟動也不 `askConfirm`；拒絕的原文照 `restartNode()` 的失敗路徑放進 `service-output`，不出「已重新啟動」（測試 `service-panel.mjs`） |
+| `RestartNode()` | 服務區的「重新啟動／啟動」（`service-restart`）、首次設定精靈第 1 步在沒有服務管理員（不支援、找不到 ah）而節點沒回應時、節點設定儲存後 | 已安裝服務→`RestartService()`；但**只有改名前的登記**（`ServiceStatus().legacy`）時直接回錯誤、什麼都不停——重啟只會把舊程式帶回來，要用「以 Agent Hallway 重新登記」或 `ah service install` 換掉它（見 §3.4）；否則 app 自己停掉再啟動節點（`desktop/nodeprocess.go`，兩個名字的節點都停，啟動的是旁邊的 `agenthallway-node`；改名前的節點沒寫 `--db` 時，帶它正開著的舊預設資料庫 `…/agenthub/agenthub.db`，不是新預設的空資料庫）。**帶著原本的資料庫重啟（#205）**：節點 API 不回報資料庫路徑，所以 Go 端讀正在跑的節點（`agenthallway-node`，或改名前的 `agenthub-node`）自己的命令列與環境變數（macOS `kern.procargs2`；Linux `/proc/<pid>/cmdline`、`/proc/<pid>/environ`；Windows 命令列走 WMI——PowerShell 用 `%SystemRoot%` 下的絕對路徑、只讀 stdout、關掉進度記錄——環境變數讀程序的 PEB，使用者比對程序 token 的 SID），命令列照節點的旗標表解析、Windows 照 Go `os.Args` 的切法（不是 `CommandLineToArgvW`），用同一組參數啟動新的——只拿掉節點記住的五個設定（它們正是這次重啟要套用的存檔值，帶回舊旗標會蓋掉存檔）。命令列沒寫的路徑（`--db`、`--claude-root`、`--codex-root`）是節點**用它自己的環境**算出來的（`defaultPaths`：macOS `HOME`、Linux `XDG_CONFIG_HOME` 再 `HOME`、Windows `APPDATA`／`USERPROFILE`），app 用節點的環境照同樣規則算（`desktop/nodeenv.go`），**明確**以 `--db <絕對路徑>` 等傳給新節點，不讓新節點用 app 的環境重算。**停之前**就判斷，下列情況拒絕且不碰節點：讀不到命令列、同時有兩個以上節點行程（`agenthallway-node` 與改名前的 `agenthub-node` 一起算）、路徑旗標是相對路徑或由環境算出相對路徑、資料庫檔不存在、旗標表不認得的旗標、`-listen` 不是 app 的位址（`127.0.0.1:7462`）、有路徑沒寫而節點環境讀不到（macOS／Linux 一律拒絕；Windows 見下）、節點在回答但 `GET /v1/node` 讀不到身分、節點沒回答而資料庫只是 app 推斷的。停了之後等該 pid 從程序清單消失（殭屍程序不算在跑）才啟動，逾時就回錯誤不啟動——埠關了不代表程序已放開資料庫。啟動後比對 node id 與指紋，不同就回錯誤（兩個 id＋把舊節點帶回來的命令），不宣稱成功。復原命令分兩種：路徑都是從節點自己的命令列或環境讀來的，命令裡每個路徑都明確寫出，在哪個環境執行都指向同一個資料庫；有路徑是 app 用自己的環境**推算**的（Windows 讀不到 PEB 的 fallback），復原命令只給舊節點原本的命令列、不帶推算的路徑（新節點正是開在那些路徑上才變成別人），並寫明哪些旗標是推算的、要在舊節點原本啟動的環境（它的登入或啟動它的 shell）裡執行（測試 `TestRestartNodeDoesNotHandBackAnInferredPathAsTheWayBack`）；輸出與錯誤裡的命令（`commandLine`，`desktop/nodeargs.go`）照平台的 shell 加引號：Windows 是 PowerShell 形式（`& '…\agenthallway-node.exe' --db '…'`，單引號內 `$`、`` ` `` 都是字面，`'` 與 PowerShell 視同單引號的彎引號重複一次；只有旗標名稱（`--db`、`-discover`）不加引號，其餘一律加——5.1 會把沒引號的 `-a.b` 在點切開，`--`、`--%` 是它自己的語法），macOS／Linux 是 sh／bash／zsh 的單引號形式；cmd.exe、fish 不在保證內。Windows PowerShell 5.1 傳給程式時會丟掉空字串參數、不跳脫參數內的 `"`（Windows 路徑兩者都不會有；PowerShell 7.3 起沒有這問題）。測試 `TestShellCommandLineQuotesForEachShell`、`TestCommandLineSurvivesTheShell`（把命令交給本機每個 `/bin` shell、Windows 上交給 Windows PowerShell 5.1，執行測試自己的 binary 比對收到的參數）；節點重啟前沒回答（沒有 id 可比）時照樣啟動，但輸出寫明沒有比對、用的是哪個資料庫、從哪裡讀來。沒有任何節點行程（兩個名字都算）在跑＝首次啟動，照舊不帶參數。**保證範圍**：macOS／Linux 上，新節點開的資料庫路徑就是舊節點命令列或它自己環境所指的那一個（檔案須存在），加上事後 id／指紋比對。**Windows 殘餘風險**：讀 PEB 失敗（權限、位元數不同等）而有路徑沒寫時，改用 app 自己的 `APPDATA`／`USERPROFILE` 算出的路徑，條件是資料庫檔存在、節點程序 token 的使用者 SID 與 app 相同、且節點重啟前有回答身分（事後比對 id）——同一使用者但節點啟動時 `APPDATA` 被改過、而 app 那邊的預設資料庫恰好也存在時，新節點會開 app 那一個，這時只靠事後 id 比對發現（回錯誤＋復原命令，不刪任何東西），不是事前擋下。Windows 這一半（WMI、PEB、token）只在 CI 的 `desktop-windows-processes` job 實際執行，開發機上只編譯；macOS 這一半（`kern.procargs2`：環境後面直接接核心自己的 apple strings、中間不保證有空項目，讀到 buffer 結尾就是字串區結束；apple strings 留在環境清單尾端，查找取第一筆所以蓋不掉真的變數）另在 CI 的 `desktop-macos-processes` job 跑，真程序測試 `-count=20`。兩個 job 都要求清單裡每個測試在 log 有 `--- PASS:`，且只為該 OS 編譯的測試檔裡每個 `Test*` 都在清單上。列舉遇到 `EINVAL`／`ESRCH`（有個節點行程正在退出、還不是殭屍）時重試幾次（6×50ms）再決定，**不當成它已消失**，持續失敗就拒絕。前端**不另外問**：Go 端在上述範圍內確認資料庫才動手、確認不了就拒絕，所以 `nodeRunningNotAService` 時按重新啟動也不 `askConfirm`；拒絕的原文照 `restartNode()` 的失敗路徑放進 `service-output`，不出「已重新啟動」（測試 `service-panel.mjs`） |
 | `SetNodeAddresses(id, addresses)` | 節點詳情的位址清單（首選＋備援，每列可改可移除，「新增備援」最多到 4 列）、「記錄位址」 | **整組取代**（`PUT /v1/nodes/{id}/addresses`）：移除的位址就從節點上消失，打錯的備援刪得掉；送出前 trim、丟掉空列，全空不送（錯誤 toast `network.addressEmpty`）；清單是草稿，`interactionInProgress()` 期間不被背景重畫蓋掉，增刪列保留其他列已打的字。舊節點（該路由 404/405、且不是節點自己的 JSON 錯誤）由綁定改走單一位址端點只記第一個，回 `olderNode: true`，視窗用 `network.addressSavedOlderNode` 說明備援在舊節點上無法編輯，不當成功顯示。測試：`app_test.go` 的 `TestSetNodeAddresses*`、`frontend/test/node-addresses.mjs` |
 | `SetNodeAddress(...)` | 目前**沒有** UI 入口（節點詳情改用 `SetNodeAddresses`；它會把被取代的首選留成備援） | 保留為未接綁定 |
 | `HostPlatform()` | 啟動一次 | 回 `runtime.GOOS`；`darwin` 時加 `body.mac` 讓標題列留出視窗按鈕的位置。問的是**主機**不是節點，兩者是不同的事實，而節點的那份正好在連不上時缺席 |
@@ -102,10 +102,10 @@
   左右方向鍵與 Home/End 移到相鄰分頁並切換（`viewSwitchKey`）；程式以 `#view-switch [data-view]` 找它們，
   `dom-shim.mjs` 從 index.html 解出這三個節點（測試 `inline-publish.mjs` §8）。
   右側三個控制項：**服務狀態 pill**（`service-pill`，**一鍵處理**：支援但未安裝且沒有節點在跑 → 安裝（節點在跑但不是服務 → 服務表單）、已安裝沒在跑 → `RestartService()`、
-  其餘〔找不到 ah、平台不支援、狀態還沒讀到、已在跑〕→ 跳設定頁的服務區；`runServiceQuickAction()`，與待處理列同一份。
+  其餘〔找不到 ah、平台不支援、狀態還沒讀到、已在跑、只有改名前的登記（`status.legacy`）〕→ 跳設定頁的服務區；`runServiceQuickAction()`，與待處理列同一份。
   綠色「背景服務執行中」只在服務已裝、在跑**而且節點有回答**時；服務在跑但節點沒回應（`state.nodeChecked` 且 `!state.nodeReachable`）
-  是 amber 的 `service.pillRunningNoAnswer`「背景服務在跑，但 AgentHub 沒回應」，按下同一個一鍵處理——它重讀狀態，已在跑就到設定頁的服務區，
-  那裡有「重新啟動」；測試 `first-run-pairing.mjs` §14）、
+  是 amber 的 `service.pillRunningNoAnswer`「背景服務在跑，但 Agent Hallway 沒回應」，按下同一個一鍵處理——它重讀狀態，已在跑就到設定頁的服務區，
+  那裡有「重新啟動」；只有改名前的登記（`status.legacy`）時，不管它跑不跑，都是 amber 的 `service.pillLegacy`「背景服務仍用舊名稱登記」，按下到設定頁的服務區，不重啟；測試 `first-run-pairing.mjs` §14）、
   重新掃描（`btn-discover`）、「繼續設定」（`btn-resume-setup`，ghost 不是主按鈕；首次設定精靈收著而設定沒完成時才出現，§3.2）、通知紀錄的鈴鐺（`btn-bell`，見下面「通知三層」）。
   **首次設定精靈開著時**（`#app.firstrun-on`）標題列只留 app 名稱、連線點、鈴鐺與 toast：三個分頁、服務 pill、重新掃描、`node-line` 與底部狀態列都隱藏。`btn-reload` 保留在 DOM 但 `hidden`（15 秒背景輪詢取代它）；預覽 heartbeat
   移到設定頁的身分區（§2 `Heartbeat()`）。標題列是 Wails 拖曳區；macOS 下 `body.mac` 讓左側留出視窗按鈕的位置。
@@ -167,13 +167,13 @@
 
     | 項目 | 條件 | 嚴重度 | 按鈕 |
     |---|---|---|---|
-    | AgentHub 沒有回應 | 至少一次 `Overview()` 已回答（`state.nodeChecked`）且最後一次 `reachable` 為 false；說明沿用 `app.notConnected`（含錯誤原文與「上次成功載入」／「還沒有載入過」） | alert | 「重試」＝前景 `load()`（走 `withBusy`） |
+    | Agent Hallway 沒有回應 | 至少一次 `Overview()` 已回答（`state.nodeChecked`）且最後一次 `reachable` 為 false；說明沿用 `app.notConnected`（含錯誤原文與「上次成功載入」／「還沒有載入過」） | alert | 「重試」＝前景 `load()`（走 `withBusy`） |
     | 背景服務 | `ServiceStatus().supported === true`、沒有 `toolError`、且不是「已安裝且執行中」 | alert | 未安裝「安裝為背景服務」（節點在跑但不是服務時「到設定頁安裝」，`attention.service.formAction`）、已安裝「啟動背景服務」，按了就做（`runServiceQuickAction()`，見下） |
     | 收件匣已滿 | `inboxCounts.ok` 且有 `full`（讀不到數字時不顯示，不拿舊數字說滿） | warn | 「開啟收件匣」開第一個滿的（依表格順序）；兩個以上時標題寫數量 |
     | 有機器想配對 | 節點回報配對開放中，且最近一次讀到的交換裡有 `incoming`＋`pending`（讀取規則見 §2 `PairRequests`） | info | 「比對並核准」＝`goToPairing()`。一件時標題是「自稱 {name} 的機器想和這台機器配對」：name 是對方自選的 `displayName`，放在 `class="claimed"` 的 span（同收件匣寄件者的自選那半），沒有名字（空白或只有空格）時另一句（`attention.pair.titleOneNoName`），**不拿 nodeId 當自稱名稱**（同候選列的「（未提供名稱）」，`candidateName()`；測試 `notifications.mjs` 3d） |
 
     **背景服務一鍵處理（2026-09-29）**：按下先重讀 `ServiceStatus()`，用讀到的算；讀失敗→設定頁＋錯誤 toast，不動手。`serviceQuickAction(status)` 只看狀態——沒有狀態、有 `toolError`、`supported !== true`、
-    或已安裝且在跑 → `settings`；已安裝 → `restart`；其餘 → `install`。`install` 走設定頁按鈕的 `installService()`（資料庫路徑留空），
+    只有改名前的登記（`status.legacy`）、或已安裝且在跑 → `settings`；已安裝 → `restart`；其餘 → `install`。`install` 走設定頁按鈕的 `installService()`（資料庫路徑留空），
     `restart` 走 `restartNode({ service: true })`，`settings` 是 `goToService()`。重讀期間按下的那顆就轉圈並停用（`busy`＋`aria-busy`＋`disabled`；待處理列的按鈕帶 `busy` 時 render 不會把它解除停用）；
     整個一鍵處理由模組層旗標 `serviceQuickPending` 鎖住，pill 與待處理列同時按（或同一顆連按）只跑一次，另一下直接返回，
     重讀回來先放開再依結果決定；重讀期間另一個寫入開始了（`state.busy`）就什麼都不做、連表單都不開（測試 `inline-publish.mjs` §6）。之後都經 `withBusy` 讓按下的那顆轉圈；結果用 toast，
@@ -238,10 +238,10 @@
     **沒人碰過、沒在跑**時每次 render 都再算一次，只往前、不往回；使用者按過任何東西（含「上一步」）之後步驟就是他的（`syncFirstRun()`，
     測試 `first-run.mjs` §1b、`first-run-pairing.mjs` §1）。
   - **每步的完成狀態每次 render 從 state 重算，不存**（`firstRunChecks()`、`firstRunStepComplete()`）：
-    ①「AgentHub 在背景執行」＝`state.nodeReachable`；「登入後自動啟動」＝`ServiceStatus` 已安裝且在跑（狀態還沒讀到＝確認中；
+    ①「Agent Hallway 在背景執行」＝`state.nodeReachable`；「登入後自動啟動」＝`ServiceStatus` 已安裝且在跑（狀態還沒讀到＝確認中；
     `toolError` 或 `supported !== true`＝不適用，說明但不算失敗、不擋下一步）；「區網裡的其他機器找得到、也連得到」＝`pairHereState(state.pairing.state).reachable`
     （節點說了就聽節點的，§3.3）**而且** `state.pairing.availability === "on"`（節點在區網上搜尋，2026-10-01）。在終端機移除服務，那一行自己變回未完成。②＝`state.nodes` 非空。③＝`counts.all_paired + selected > 0`。
-    - **為什麼要搜尋（2026-10-01，產品 BLOCKER）**：節點的 `-discover` 預設關（`cmd/agenthub-node/main.go` 的旗標、`nodeconfig.DefaultSettings()`），
+    - **為什麼要搜尋（2026-10-01，產品 BLOCKER）**：節點的 `-discover` 預設關（`cmd/agenthallway-node/main.go` 的旗標、`nodeconfig.DefaultSettings()`），
       沒開時節點回答配對視窗、拒絕候選清單（`App.Pairing()` 回 `off`，視窗開著時 `openNotAnnouncing`），第 2 步「同一個網路上找到的機器」在兩台上都永遠是空的。
       只看可達性的舊判定讓全新安裝在第 1 步打勾、到第 2 步才發現找不到對方；dev mock 與測試的假節點把 `availability: "on"`、`discover: true` 寫死，所以沒有人看到。
     - **選擇合在同一行而不是第 4 行**：一顆按鈕、一次存檔、一次重啟同時做兩件事，使用者也只關心「另一台能不能找到、連到這台」；分成兩行只會讓兩行在同一次按下一起翻面。
@@ -307,7 +307,7 @@
     「已選擇只在這台用」，直接到第 3 步，第 3 步只說之後再分享並只給「先跳過」。**節點與服務那段成功後才算數**（`localOnly`）；
     失敗時選擇只記成待定（`localOnlyPending`），區網那一行、說明句與兩個選擇都留著，「重試」重做同一個選擇、不開放區網
     （測試 `first-run.mjs` §6b 後段）。
-  - 節點連不到時「AgentHub 在背景執行」那一行的主文是 `firstRun.node.down`，`dial tcp…` 原文只在它的 `<details>` 裡。
+  - 節點連不到時「Agent Hallway 在背景執行」那一行的主文是 `firstRun.node.down`，`dial tcp…` 原文只在它的 `<details>` 裡。
   - **第 2 步「連到另一台機器」**（2026-09-30 第二段）：配對抽屜換了外觀與順序，**安全邏輯一條都是抽屜的**——
     送出走 `sendPairRequest()`（只帶位址）、決定走 `decidePairRequest()`（id 來自畫出那張卡的請求）、指紋區塊走 `writeFingerprintBlock()`
     （節點 `fingerprints` 陣列原樣，標籤走固定對照表，沒有陣列時照 §3.3 說去用 `ah pair pending`）、候選與請求都走 `reconcileRows()`
@@ -316,7 +316,7 @@
     notice 走 `candidateNoticeText()`、錯誤翻譯走 `pairErrorMessage()`。由上而下：
     - 標題；已配對時一句「已經和 N 台電腦配對。」，**「下一步」（主要按鈕）移到這句下面**，候選列的「送出配對請求」降為 ghost（一次一顆主要按鈕），仍可再配對一台。
     - 怎麼結束的（`frended`，見下）。
-    - 虛線提示框：「**在另一台機器也打開 AgentHub**，做到這一步。兩台都在這個畫面時，會互相出現在下面。」
+    - 虛線提示框：「**在另一台機器也打開 Agent Hallway**，做到這一步。兩台都在這個畫面時，會互相出現在下面。」
     - **有未決請求（pending／awaiting-confirm）時**，每個請求一張卡（`frrequest`，以 request id 為 key），提示框與下面的尋找區隱藏：
       outgoing pending ＝等待畫面（轉圈、「等 X 按『核准』」、對方畫面會看到什麼、「對方核准之後，這裡會換成兩組指紋，你也要在這台比對一次」、
       「取消這次請求」→ `RejectPairRequest`，沒有指紋）；incoming pending 或 awaiting-confirm ＝比對畫面（標題「X（自稱）想和這台配對」／
@@ -326,7 +326,7 @@
       en「if any group differs, reject it — something is intercepting the connection」——因為同一句同時在抽屜的「拒絕」和這張卡的
       「不一樣，拒絕」上面，指名哪一顆都會在另一個畫面上說錯〕、放大的指紋區塊、
       **按鈕在指紋下面**：「一樣，核准」→ Approve／「一樣，完成配對」→ Confirm，「不一樣，拒絕」→ Reject）。等待→比對是**同一張卡、同一顆拒絕鈕**。
-      成功 toast 同抽屜（`pairStepText()` 的句子＋「（AgentHub 回報：…）」），但**不帶「去分享 session」**（`fromWizard`：精靈的下一步就是分享，那顆會把人帶出精靈）。
+      成功 toast 同抽屜（`pairStepText()` 的句子＋「（Agent Hallway 回報：…）」），但**不帶「去分享 session」**（`fromWizard`：精靈的下一步就是分享，那顆會把人帶出精靈）。
     - 沒有未決請求時：「同一個網路上找到的機器」（`frmachine`，以 nodeId 為 key）：平台圖示（固定對照表，不取自字串）、名稱（無名「（未提供名稱）」）＋ amber「自稱」、
       旗標行（`candidateFlagLines()`，與抽屜共用：標籤＋原因）、平台 · 最後看到；完整 nodeId、宣告的指紋、位址、首次／最後看到收進該列的 `<details>`
       （§4 的候選列斷言是對抽屜的 `candidate-rows`，在 DOM 裡就算數；精靈這份在 details 裡，也在 DOM 裡）；「送出配對請求」。
@@ -344,7 +344,7 @@
       不可達時不印位址、複製 disabled、說明並給「回到第 1 步」（不重複修復按鈕）、何時需要手動的一句、「手動輸入配對資料…」（`openPairModal()`）。
     - 底部：「先跳過，之後再配對」（`pairSkipped`，步驟欄標「已略過」；取代開發用的佔位鈕）、「上一步」（到第 1 步）；已配對時只有「下一步」與「上一步」。
     - **怎麼結束的**：第 2 步畫過的未決請求從清單消失、而不是這個視窗自己決定的（`pairDecided`，決定前記下、失敗時移除），讀一次 `PairRequests(true)`，
-      用 `pairStepText()` 說（`fingerprint_mismatch` 是專屬句），節點的 `nextStep` 以「（AgentHub 回報：…）」跟在後面（已結束的列才顯示它，§3.3），「知道了」收起。
+      用 `pairStepText()` 說（`fingerprint_mismatch` 是專屬句），節點的 `nextStep` 以「（Agent Hallway 回報：…）」跟在後面（已結束的列才顯示它，§3.3），「知道了」收起。
     - **生命週期**：第 2 步在畫面上（`firstRunPairingActive()`：精靈可見、`step === 2`、不是只在這台用）＝配對抽屜開著。`renderFirstRun()` 每次比對前後狀態
       （`syncFirstRunPairing()`），進入時 `enterFirstRunPairing()`（讀請求、`loadPairing()`、`openPairingWindowIfNeeded()`＝`OpenPairing(0)`），
       離開時（任何方式，含 `stepOutOfFirstRun()`）`releasePairingWindow()`。5 秒與 2 秒兩個既有 interval 的條件延伸到它（§4），1 秒倒數在它上面也跑，
@@ -414,7 +414,7 @@
   - **工作目錄是獨立勾選框，永遠看得到**（「不分享」時連同「可以做什麼」一起停用：區塊加 `.off`、`opacity: .5`，三個 radio 與 `#audience-cwd` 都 `disabled`，
     區塊本身一律顯示；選了其他對象就恢復。寫入語意不變，「不分享」仍寫四旗標全關）；多選不一致用 `indeterminate`。它既然看得到，就不需要「含工作目錄」這類事前警告
     （`popover.withCwd` 系列已刪）。
-  - **喚醒**：全是 Claude Code 時「可留訊息並喚醒」disabled＋`popover.wakeClaudeOnly`；混合時可選，並說「其中 N 個是 Claude Code session，AgentHub 叫不醒…」（`share.wakeSomeClaude`）；
+  - **喚醒**：全是 Claude Code 時「可留訊息並喚醒」disabled＋`popover.wakeClaudeOnly`；混合時可選，並說「其中 N 個是 Claude Code session，Agent Hallway 叫不醒…」（`share.wakeSomeClaude`）；
     節點沒開自動喚醒時勾喚醒多一句 `share.wakeNodeOff`；選取裡有 `autoWake` 的 Claude Code session 時多一句 `audience.autoWakeWillTurnOff`。
     喚醒備註 `wake.caveat` **不在面板、列、toast 出現**，只在設定頁節點設定「允許訊息自動喚醒」的第二行與精靈第 3 步。
   - **機器清單只給名字＋線上點**，node id 進 `title`（刪了手打節點 ID 欄）。指定機器但一台都沒勾：「套用」disabled，左側灰字 `share.pickAMachine`。
@@ -490,7 +490,7 @@
 
    **但位址不可達時不准把它當成「對方要輸入的位址」印出來，而「沒有位址」也是不可達的一種。**
    預設節點沒有 `-allow-lan`，peer listener 在 loopback 上，而 `announceablePeerAddress()`
-   （`cmd/agenthub-node/main.go`）對 loopback／不可公告的位址回**空字串**——所以預設節點的
+   （`cmd/agenthallway-node/main.go`）對 loopback／不可公告的位址回**空字串**——所以預設節點的
    `/v1/pairing` 根本**不帶 `peerAddress` 這個欄位**。`#pair-here` 以前遇到空位址是整塊隱藏，
    於是全新安裝的使用者只看到「配對視窗開著，但還沒有人連得進來。」，沒有原因也沒有按鈕。
    **現在只有 `windowAvailable` 為 false 才隱藏**；位址不可達（含完全沒有位址）一律顯示
@@ -511,7 +511,7 @@
    §8a-ii（節點自己說不可達＋原因）、§8a-iii（真的區網位址）、§8b（loopback 字串）。
 
    **抽屜標題底下那句是 render 出來的，不是寫死在 `index.html` 的**（`#pairing-sub`，
-   `renderPairingSubtitle()`）：「開啟後同網段的人都會知道這台機器在跑 AgentHub。」只有在
+   `renderPairingSubtitle()`）：「開啟期間，同網段的人看得到這台機器在跑 Agent Hallway。」（`pair.drawerSubAnnouncing`）只有在
    `announceableAddresses > 0` 時才成立，寫死在標記裡就是在一個不廣播的節點上開頭第一句就說謊。
 2. **一屏規則**（`renderPairScreens()`，由 `renderPairRequests()` 在 `renderPairStepper()` 之後呼叫；與精靈第 2 步同一條規則，同樣從
    `state.pairRequests` 推導）：有 `pending`／`awaiting-confirm` 的列時**只顯示交換畫面**，沒有時**只顯示找對方畫面**。
@@ -539,7 +539,7 @@
      不是在講某個人的決定的結束方式。
    - 按下核准／確認／拒絕之後的 toast 用**這個視窗自己的中文句子**
      （`pairStepText()`，退回 `PAIR_TEXT.decided`），節點的英文 `nextStep` 以
-     「（AgentHub 回報：…）」跟在後面——既不能只丟英文，也不能把它吞掉。
+     「（Agent Hallway 回報：…）」跟在後面——既不能只丟英文，也不能把它吞掉。
    - 已結束（approved/rejected/expired，含 `reason: displaced`）不進預設清單，
      `pair-requests-all` 勾選（現在在抽屜底部 footer，永遠可見）→ `all=true`。已結束的列才顯示節點的 `nextStep`。
    - **任何地方都不得有自動核准或略過比對的入口。**
@@ -555,8 +555,18 @@
 五個分頁（左側直排 `role="tablist"`，方向鍵上下／Home／End），只顯示 `settingsSection` 那一個：
 
 - **背景服務**：狀態行、重新讀取、安裝／重新安裝、移除；展開表單**只有一個欄位：資料庫路徑**
-  （`service-db`，留空＝AgentHub 預設位置）。其餘五個值不在這裡，是 #116 的決定——燒進 unit 檔會變成節點之外的
+  （`service-db`，留空＝Agent Hallway 預設位置）。其餘五個值不在這裡，是 #116 的決定——燒進 unit 檔會變成節點之外的
   第二份設定來源。安裝說明；輸出區 `<pre>`。節點沒在跑且未安裝時表單自動展開一次。
+  **改名前的登記（v0.2.0 起）**：`ServiceStatus()` 的 `legacy`（只有 v0.1.x 的登記，launchd `local.agenthub.node`、systemd `agenthub-node`、工作排程器「AgentHub Node」）
+  或 `legacyAlsoInstalled`（現行登記旁邊還留著它）為真時，狀態行下面的 `#service-legacy` 出一個 `stale` 區塊和一顆 ghost 按鈕
+  （`renderServiceLegacy()`）。說明：`service.legacyRegistration`「這個背景服務仍以改名前的名稱 AgentHub 登記（{unit}），登入時啟動的是舊程式。以 Agent Hallway 重新登記：沿用同一個資料庫，這台機器的身分與所有配對都保留。」
+  （`{unit}` 是 `unitPath`）；`legacyAlsoInstalled` 時改說 `service.legacyAlsoInstalled`「改名前的 AgentHub 登記仍留在這個登記旁邊，登入時會啟動舊程式。重新登記即可移除：沿用同一個資料庫，身分與配對都保留。」
+  按鈕 `service.legacyReregister`「以 Agent Hallway 重新登記」：`askConfirm`（標題 `service.legacyReregisterConfirmTitle`「以 Agent Hallway 重新登記背景服務？」，
+  內文 `service.legacyReregisterConfirm`「AgentHub 的登記會停止並移除，Agent Hallway 以同一個資料庫（{path}）登記：這台機器的身分與所有配對都保留。」，確認鈕 `service.legacyReregisterConfirmAction`「重新登記」）
+  後 `InstallService({ dbPath })`（`ah service install --db <同一個>`，它先停掉並移除舊登記再寫新的），等節點回答，成功 banner 是 `service.legacyReregistered`「背景服務已登記為 Agent Hallway，AgentHub 的登記已移除。」，
+  節點沒回答則是 `service.reregisteredNoAnswer`。**資料庫路徑讀不到**（`dbPathKnown` 為假，例如 Windows 不讀回工作排程器的定義）時不問、不裝，改開上面的安裝表單，由 `installService()` 在裝之前問。
+  `status.legacy` 時「重新啟動」鈕收起（`RestartNode()` 也拒絕，§2），首次設定精靈第 1 步遇到只有改名前的登記、而服務沒在跑時，不動手，直接到這個服務區。
+  字表裡 AgentHub 這個舊名只允許出現在這四個說明改名前登記的 key（`service.legacyRegistration`、`service.legacyAlsoInstalled`、`service.legacyReregisterConfirm`、`service.legacyReregistered`），其餘每個值都叫 Agent Hallway（`test/i18n.mjs` 檔尾的 gate）。
 - **連線設定**：對外位址、允許區網、`-discover`、視為私有網段、自動喚醒。`-discover` 的標籤說它做的兩件事（擁有者 2026-10-01）：
   `nodeSettings.discover`「在區網上搜尋其他機器（配對時也讓其他機器找到這台）」，下面一行 `nodeSettings.discoverWhy`
   照節點原始碼寫：開著時一直收聽區網通告（只收不送，`discovery.Listen`），只有配對視窗開著時才廣播名稱、位址、平台、指紋與節點 ID
@@ -870,7 +880,7 @@
 2. **`loopback` 看主機不看埠**，照 `nodeconfig.ValidateLoopback`。只比對 `127.0.0.1:7463` 會把
    `127.0.0.1:9999` 判成對外位址。
 3. **設定有沒有生效要用觀察的，不能用推論的。** 節點每次啟動都把命令列給的值寫回自己的資料庫
-   （`cmd/agenthub-node/main.go`），所以服務單元裡烘進去的旗標在重啟後同時是 running 也是 saved，
+   （`cmd/agenthallway-node/main.go`），所以服務單元裡烘進去的旗標在重啟後同時是 running 也是 saved，
    從來源欄位看不出任何異常。唯一可靠的辦法是比對「使用者要求的值」與「重啟後節點實際持有的值」。
 4. **表單不替使用者做選擇。** 早期版本會因為選了區網位址就自動打開允許區網，而且綁在那個開關
    自己的事件上，結果它根本關不掉——節點最主要的行為從視窗裡無法觸發。表單只預測節點會怎麼做，
@@ -1047,7 +1057,7 @@ render 不寫任何表單欄位（`frontend/test/listen-addresses.mjs` 逐條反
 
 `收件匣 ｜ MCP 設定 ｜ resume` 改成 `收件匣 ｜ resume`。
 
-為什麼移除，而不是留著：MCP 那四個工具（`agent_list`、`agent_status`、`agent_send`、`agent_inbox`）在 `ah` 都有等價指令（`ah list`、`ah status`、`ah send`、`ah inbox`），而 `agenthub-watch` skill 本來就是走 `ah` 而不是 MCP。所以沒有設定 MCP 的新使用者，功能上不缺任何東西。一個 owner 可能一輩子用一次的設定，不該出現在一千列的每一列上。
+為什麼移除，而不是留著：MCP 那四個工具（`agent_list`、`agent_status`、`agent_send`、`agent_inbox`）在 `ah` 都有等價指令（`ah list`、`ah status`、`ah send`、`ah inbox`），而 `agenthallway-watch` skill 本來就是走 `ah` 而不是 MCP。所以沒有設定 MCP 的新使用者，功能上不缺任何東西。一個 owner 可能一輩子用一次的設定，不該出現在一千列的每一列上。
 
 保留了什麼：`MCPConfig` 綁定、`openMCPConfig()`、`mcp-modal` 的 markup 與全部文案。放回入口只要在 `renderRows` 加一行 `rowActionButton`。
 
@@ -1087,15 +1097,15 @@ render 不寫任何表單欄位（`frontend/test/listen-addresses.mjs` 逐條反
 適用：`desktop/frontend/src/i18n/{zh-Hant,en}.js` 的每一個值、`index.html` 裡還沒進字表的英文字面（`SESSION`、`PROVIDER`）、`dev/mock.js` 不受影響（它只放節點送來的英文資料）。
 節點送來的字串（`nextStep`、`notice`、錯誤原文）是資料，不改。i18n 的 **key 名一律不改**（key 是程式與測試的介面）。
 三條總則：
-1. **使用者只看到三種東西**：機器（一台裝了 AgentHub 的電腦）、AgentHub（在機器上跑的那支程式）、背景服務（讓 AgentHub 登入就啟動的系統登記）。「節點」一詞不再出現在畫面上。
+1. **使用者只看到三種東西**：機器（一台裝了 Agent Hallway 的電腦）、Agent Hallway（在機器上跑的那支程式）、背景服務（讓 Agent Hallway 登入就啟動的系統登記）。「節點」一詞不再出現在畫面上。
 2. **分享**取代公開／publish／audience；精靈與主畫面同一套字。
-3. 程式碼與指令原樣保留，不算違規：`agenthub-node`、`ah node`、`ah nodes`、`node.key`、`node_…` 開頭的 ID、`-discover` 等旗標、`--db`、`.mcp.json`。
+3. 程式碼與指令原樣保留，不算違規：`agenthallway-node`、`ah node`、`ah nodes`、`node.key`、`node_…` 開頭的 ID、`-discover` 等旗標、`--db`、`.mcp.json`。
 
 | 概念 | zh-Hant | en | 目前出現的各種寫法 | 出處檔案（key 前綴） |
 |---|---|---|---|---|
-| 另一台裝了 AgentHub 的電腦 | 機器（另一台機器、已配對的機器） | machine (the other machine, paired machines) | 電腦、另一台電腦、節點、對方的節點、node、computer、peer | zh-Hant.js / en.js：`firstRun.*`、`nodeSettings.discover*`、`pair.*`、`network.*`、`why.*` |
+| 另一台裝了 Agent Hallway 的電腦 | 機器（另一台機器、已配對的機器） | machine (the other machine, paired machines) | 電腦、另一台電腦、節點、對方的節點、node、computer、peer | zh-Hant.js / en.js：`firstRun.*`、`nodeSettings.discover*`、`pair.*`、`network.*`、`why.*` |
 | 這台電腦 | 這台機器（句中已有主詞時可簡寫「這台」） | this machine | 這台電腦、本機節點、這個節點、這台節點、本機、this node、this computer、the local node | `firstRun.*`、`pair.*`、`audience.autoWakeNodeOff`、`network.presenceUnreadable` |
-| 在機器上跑的程式（agenthub-node 行程） | AgentHub | AgentHub | 節點、the node、a node、本機節點 | `service.*`、`nodeSettings.*`、`app.notConnected`、`attention.nodeDown.*`、`pair.nodeSaid*`、`wake.caveat` |
+| 在機器上跑的程式（agenthallway-node 行程） | Agent Hallway | Agent Hallway | 節點、the node、a node、本機節點 | `service.*`、`nodeSettings.*`、`app.notConnected`、`attention.nodeDown.*`、`pair.nodeSaid*`、`wake.caveat` |
 | 登入時自動啟動的系統登記 | 背景服務 | background service | 服務、service（保留，不改） | `service.*`、`attention.service.*` |
 | `node_…` 識別碼 | 機器 ID | machine ID（標籤句首 Machine ID） | 節點 ID、Node ID、node ID、node id | `identity.nodeId`、`pairManual.nodeId`、`firstRun.pair.nodeIdLabel`、`inbox.warningAfter`、`nodeSettings.discoverWhy` |
 | 換資料庫就會換掉的那組金鑰 | 機器身分 | machine identity | 節點身分、node identity | `service.db*`、`service.*Confirm`、`service.uninstallConfirm` |
@@ -1124,27 +1134,27 @@ render 不寫任何表單欄位（`frontend/test/listen-addresses.mjs` 逐條反
 ## 替換規則（照順序套用；前面的規則先吃掉較長的片語）
 
 zh-Hant（每條是「找」→「換成」，在一個值裡全部出現處都換）：
-Z1 `節點 ID`→`機器 ID`；Z2 `節點身分`→`機器身分`；Z3 `節點設定`→`連線設定`；Z4 `重新啟動節點`→`重新啟動 AgentHub`；Z5 `啟動節點`→`啟動 AgentHub`；
-Z6 `本機節點`→`AgentHub`；Z7 `對方的節點`→`對方的 AgentHub`；Z8 `這個節點`、`這台節點`→`這台機器的 AgentHub`；Z9 `一個節點`→`一個 AgentHub`；Z10 其餘 `節點`→`AgentHub`；
+Z1 `節點 ID`→`機器 ID`；Z2 `節點身分`→`機器身分`；Z3 `節點設定`→`連線設定`；Z4 `重新啟動節點`→`重新啟動 Agent Hallway`；Z5 `啟動節點`→`啟動 Agent Hallway`；
+Z6 `本機節點`→`Agent Hallway`；Z7 `對方的節點`→`對方的 Agent Hallway`；Z8 `這個節點`、`這台節點`→`這台機器的 Agent Hallway`；Z9 `一個節點`→`一個 Agent Hallway`；Z10 其餘 `節點`→`Agent Hallway`；
 Z11 `另一台電腦`→`另一台機器`、`這台電腦`→`這台機器`、其餘 `電腦`→`機器`；
 Z12 `不公開`→`不分享`；Z13 `收回公開`→`停止分享`；Z14 `公開對象`→`分享對象`；Z15 `已公開給`→`已分享給`；Z16 其餘 `公開`→`分享`；
 Z17 `配對視窗開著`→`配對開放中`；Z18 `通告`→`廣播`。
-替換後若「AgentHub」緊貼中文字，前後各留一個半形空白（例：`AgentHub 已重新啟動。`），句首與標點旁不加。
+替換後若「Agent Hallway」緊貼中文字，前後各留一個半形空白（例：`Agent Hallway 已重新啟動。`），句首與標點旁不加。
 
 en（大小寫各自對應；句首大寫保留）：
 E1 `node ID`→`machine ID`、`Node ID`→`Machine ID`；E2 `node identity`→`machine identity`；E3 `Node settings`／`node settings`→`Connection settings`／`connection settings`；
-E4 `Restart the node`→`Restart AgentHub`、`restart the node`→`restart AgentHub`、`restarting the node`→`restarting AgentHub`；E5 `Start the node`→`Start AgentHub`；
-E6 `paired node(s)`→`paired machine(s)`、`other node`→`other machine`、`the node on the other side`→`AgentHub on the other machine`；
-E7 `the local node`、`this node`、`This node`→`AgentHub on this machine`（句首 `AgentHub on this machine`）；E8 `the node's`→`AgentHub's`；E9 `the node`／`The node`→`AgentHub`；
-E10 `a node`／`A node`→`an AgentHub`／`An AgentHub`；E11 其餘 `nodes`→`machines`；E12 其餘 `node`→`AgentHub`；
+E4 `Restart the node`→`Restart Agent Hallway`、`restart the node`→`restart Agent Hallway`、`restarting the node`→`restarting Agent Hallway`；E5 `Start the node`→`Start Agent Hallway`；
+E6 `paired node(s)`→`paired machine(s)`、`other node`→`other machine`、`the node on the other side`→`Agent Hallway on the other machine`；
+E7 `the local node`、`this node`、`This node`→`Agent Hallway on this machine`（句首 `Agent Hallway on this machine`）；E8 `the node's`→`Agent Hallway's`；E9 `the node`／`The node`→`Agent Hallway`；
+E10 `a node`／`A node`→`an Agent Hallway`／`An Agent Hallway`；E11 其餘 `nodes`→`machines`；E12 其餘 `node`→`Agent Hallway`；
 E13 `computer(s)`→`machine(s)`；E14 `Not published`→`Not shared`、`not published`→`not shared`、`unpublished`→`not shared`；E15 `Unpublish`→`Stop sharing`；
 E16 `published to`→`shared with`、`Publish to`→`Share with`、`publish to`→`share with`；E17 `published`→`shared`、`Published`→`Shared`、`publishes`→`shares`、`Publishing`→`Sharing`、`publishing`→`sharing`、`Publish`→`Share`、`publish`→`share`；E18 `Audience`→`Shared with`、`AUDIENCE`→`SHARED WITH`、其餘 `audience`→`sharing settings`；
 E19 `pairing window is open`→`pairing is open`；E20 `announcements`→`broadcasts`、`announcement`→`broadcast`、`announced`→`broadcast`、`announces`→`broadcasts`、`announce`→`broadcast`。
-替換後動詞一致性照英文文法修（`AgentHub` 是單數）；這是唯一允許的手改，不得改句意。
+替換後動詞一致性照英文文法修（`Agent Hallway` 是單數）；這是唯一允許的手改，不得改句意。
 
 ## 完成判準（`test/i18n.mjs` 的 gate）
 
-去掉保留字（`/agenthub-node|ah nodes?\b|node\.key|node_\w*/g`）之後：zh 值不得含 `節點`、`電腦`、`公開`、`配對視窗`、`通告`；en 值不得含 `/\bnodes?\b|\bpublish\w*|\bcomputers?\b|\baudience\b|\bannounc\w*|pairing window/i`。gate 在 `test/i18n.mjs` 檔尾；`{node}` 這個佔位符是程式的介面，也一併略過。
+去掉保留字（`/agenthallway-node|agenthub-node|local\.agenthallway\.node|local\.agenthub\.node|ah nodes?\b|node\.key|node_\w*|\{node\}/g`）之後：zh 值不得含 `節點`、`電腦`、`公開`、`配對視窗`、`通告`；en 值不得含 `/\bnodes?\b|\bpublish\w*|\bcomputers?\b|\baudience\b|\bannounc\w*|pairing window/i`。gate 在 `test/i18n.mjs` 檔尾；`{node}` 這個佔位符是程式的介面，也一併略過。
 
 **文案規則。** 每個狀態一句主文；「為什麼」與操作細節收進可聚焦的 `<details class="why">`（摘要「說明」／Details，
 app.js 的 `whyDetails(key)`，靜態頁面的各段在 index.html），內文是那一兩句本身。視窗裡**不指名 repo 檔案**
