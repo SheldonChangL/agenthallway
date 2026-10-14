@@ -27,9 +27,11 @@ package datadir
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"agenthub.local/agenthub/internal/product"
 )
@@ -104,8 +106,11 @@ func DefaultLayout() (Layout, error) {
 // the same directory, such as a symlink or a different case on a
 // case-insensitive volume — is the default too: a v0.1.x service unit carries
 // the old default as an explicit -db, and opening it as given would leave the
-// identity in the old directory forever. Any other -db is used exactly as
-// given and never migrated, which is what v0.1.x did with it.
+// identity in the old directory forever. It stays the default after the
+// identity has moved and the old directory is gone (missingDefault), because
+// the unit is not rewritten and every later start is given the same spelling.
+// Any other -db is used exactly as given and never migrated, which is what
+// v0.1.x did with it.
 func Resolve(l Layout, given string, wasGiven bool, logf func(string, ...any)) (string, bool, error) {
 	if logf == nil {
 		logf = log.Printf
@@ -132,7 +137,89 @@ func Resolve(l Layout, given string, wasGiven bool, logf func(string, ...any)) (
 		// starting a new one beside it.
 		return l.NewDB, true, nil
 	}
+	if base == legacyDBName || base == dbName {
+		isDefault, err := missingDefault(l, directory, base == legacyDBName)
+		if err != nil {
+			return "", false, fmt.Errorf("-db %s: %w", given, err)
+		}
+		if isDefault {
+			if base == legacyDBName {
+				logf("-db %s is the pre-rename default location; using %s", given, l.NewDB)
+			}
+			return l.NewDB, true, nil
+		}
+	}
 	return given, false, nil
+}
+
+// maxLinks bounds how many symbolic links missingDefault follows, as the
+// kernel bounds a lookup.
+const maxLinks = 40
+
+// missingDefault reports whether directory — where a -db named after a
+// default database (the pre-rename one when legacy) is — is that default's
+// directory spelled another way, at a time when the directory does not exist,
+// so that sameDirectory has nothing to compare.
+//
+// That is every start after the first under a unit that spells the old
+// default through a link, in another case, or by its physical path: the start
+// that moved the identity removed the emptied old directory, and the path
+// opened as given would be a new, empty database in a directory created for
+// it — a new node, with nothing said.
+//
+// Only that directory can have gone (nothing above it is removed), so once
+// links are followed the name that is missing is one in the configuration
+// directory. If it is the default's name, it is the default. If it differs
+// only in case, it is the default where the configuration directory ignores
+// case and another directory where it does not, which a default directory
+// that exists there answers; with none there to ask, that is an error rather
+// than a guess, because each guess would make a database the other one
+// would not open.
+func missingDefault(l Layout, directory string, legacy bool) (bool, error) {
+	if _, err := os.Stat(directory); !errors.Is(err, fs.ErrNotExist) {
+		// There, and so for the cases above to judge; or not a question of
+		// a missing directory at all, which opening it will say.
+		return false, nil
+	}
+	slug, defaultDirectory := product.Slug, l.New
+	if legacy {
+		slug, defaultDirectory = product.LegacySlug, l.Old
+	}
+	missing := directory
+	for hops := 0; ; hops++ {
+		info, err := os.Lstat(missing)
+		if errors.Is(err, fs.ErrNotExist) {
+			break
+		}
+		if err != nil || info.Mode()&fs.ModeSymlink == 0 || hops == maxLinks {
+			return false, nil
+		}
+		target, err := os.Readlink(missing)
+		if err != nil {
+			return false, nil
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(missing), target)
+		}
+		missing = filepath.Clean(target)
+	}
+	name := filepath.Base(missing)
+	if !strings.EqualFold(name, slug) || !sameDirectory(filepath.Dir(missing), l.Config) {
+		return false, nil
+	}
+	if name == slug {
+		return true, nil
+	}
+	for _, probe := range []string{l.New, l.Old} {
+		if info, err := os.Stat(probe); err == nil && info.IsDir() {
+			return sameDirectory(filepath.Join(l.Config, strings.ToUpper(filepath.Base(probe))), probe), nil
+		}
+	}
+	return false, fmt.Errorf("%s does not exist and differs from the default directory %s only in case: "+
+		"where the volume ignores case it is that directory, where it does not it is another, and with neither "+
+		"%s nor %s there this node cannot tell which, so it opened and created nothing. Use -db %s for the "+
+		"default database, or create %s first for a database of its own there",
+		missing, defaultDirectory, l.Old, l.New, l.NewDB, missing)
 }
 
 // sameDirectory reports whether two paths name one existing directory.

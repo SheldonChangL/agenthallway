@@ -1,11 +1,14 @@
 package datadir
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"agenthub.local/agenthub/internal/datadir/datadirtest"
 )
 
 func TestLayoutForNamesBothDirectories(t *testing.T) {
@@ -159,5 +162,156 @@ func TestResolveTreatsTheNewDirectorySpelledThroughASymlinkAsTheDefault(t *testi
 	db, managed, err := Resolve(l, filepath.Join(link, "agenthallway.db"), true, nil)
 	if err != nil || db != l.NewDB || !managed {
 		t.Fatalf("a symlinked spelling of the new default = %q, %v, %v", db, managed, err)
+	}
+}
+
+// symlink makes link name target, or skips where links need privileges.
+func symlink(t *testing.T, target, link string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on Windows")
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// startAs is one start of the node with -db given, as run() takes it:
+// Resolve, Migrate when the answer is the default, then open what Resolve
+// chose and check it is still the node the fixture made.
+func startAs(t *testing.T, l Layout, given string, want datadirtest.Legacy) {
+	t.Helper()
+	var logs logBuffer
+	db, managed, err := Resolve(l, given, true, logs.printf)
+	if err != nil {
+		t.Fatalf("Resolve(-db %s): %v", given, err)
+	}
+	if db != l.NewDB || !managed {
+		t.Errorf("Resolve(-db %s) = %q, managed %v; want %q, managed", given, db, managed, l.NewDB)
+	}
+	if managed {
+		if err := Migrate(context.Background(), l, Options{LegacyRegistrations: none, Logf: logs.printf}); err != nil {
+			t.Fatalf("Migrate: %v", err)
+		}
+	}
+	datadirtest.RequireIdentity(t, db, want)
+}
+
+// D3 after the move. The start that moved the identity removed the emptied
+// old directory, and a unit is never rewritten, so every later start is given
+// the same spelling of a directory that is no longer there — where the old
+// rule found nothing to compare, opened the path as given, and the database
+// and key made for it there were a new node, with nothing said.
+func TestASpellingOfTheLegacyDefaultIsStillTheDefaultAfterTheMove(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// spell returns the layout and the -db the unit carries; the old
+		// directory does not exist yet.
+		spell func(t *testing.T) (Layout, string)
+	}{
+		{"another case", func(t *testing.T) (Layout, string) {
+			l := tempLayout(t)
+			return l, filepath.Join(l.Config, "AgentHub", "agenthub.db")
+		}},
+		{"the configuration directory through a symlink", func(t *testing.T) (Layout, string) {
+			l := tempLayout(t)
+			link := filepath.Join(t.TempDir(), "config")
+			symlink(t, l.Config, link)
+			return l, filepath.Join(link, "agenthub", "agenthub.db")
+		}},
+		{"the physical path, where the home is named through a symlink", func(t *testing.T) (Layout, string) {
+			// HOME=/home/u where /home is a link to /var/home, and a unit
+			// written with /var/home/u: the configuration directory is the
+			// link's spelling, the -db the physical one.
+			physical := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(physical, "config"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			link := filepath.Join(t.TempDir(), "home")
+			symlink(t, physical, link)
+			l := LayoutFor(filepath.Join(link, "config"))
+			datadirtest.RequireConfined(t, l.Config)
+			return l, filepath.Join(physical, "config", "agenthub", "agenthub.db")
+		}},
+		{"a symlink to the old directory itself", func(t *testing.T) (Layout, string) {
+			l := tempLayout(t)
+			link := filepath.Join(t.TempDir(), "data")
+			symlink(t, l.Old, link)
+			return l, filepath.Join(link, "agenthub.db")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l, given := tc.spell(t)
+			legacy := datadirtest.WriteLegacy(t, l.Old, true)
+			if _, err := os.Stat(filepath.Dir(given)); err != nil {
+				t.Skipf("%s is not the old directory on this volume (%v)", filepath.Dir(given), err)
+			}
+
+			startAs(t, l, given, legacy)
+			requireAbsent(t, l.Old)
+
+			// The next start, under the same unit, with the old directory gone.
+			startAs(t, l, given, legacy)
+			requireAbsent(t, l.Old)
+			// Nor was the spelling's own directory made again. (A link to
+			// the old directory is left as it was, leading nowhere.)
+			if info, err := os.Lstat(filepath.Dir(given)); err == nil && info.Mode()&os.ModeSymlink == 0 {
+				t.Errorf("%s was made again", filepath.Dir(given))
+			}
+		})
+	}
+}
+
+// The new default spelled another way, before the new directory exists — the
+// first start after an upgrade, under a unit written for the new name through
+// a symlink. It is the default, so the identity in the old directory moves
+// into it instead of a new one starting beside it.
+func TestASpellingOfTheNewDefaultIsTheDefaultBeforeItExists(t *testing.T) {
+	l := tempLayout(t)
+	legacy := datadirtest.WriteLegacy(t, l.Old, true)
+	link := filepath.Join(t.TempDir(), "config")
+	symlink(t, l.Config, link)
+	given := filepath.Join(link, "agenthallway", "agenthallway.db")
+
+	startAs(t, l, given, legacy)
+	requireAbsent(t, l.Old)
+	startAs(t, l, given, legacy)
+}
+
+// A name that differs from the old directory's only in case is that directory
+// only where the volume ignores case. Here it does not: another directory,
+// used as given, exactly as v0.1.x did.
+func TestACaseVariantIsAnotherDirectoryWhereTheVolumeHonoursCase(t *testing.T) {
+	l := tempLayout(t)
+	datadirtest.WriteLegacy(t, l.Old, false)
+	variant := filepath.Join(l.Config, "AgentHub")
+	if _, err := os.Stat(variant); err == nil {
+		t.Skip("this volume ignores case, so the variant is the old directory")
+	}
+	given := filepath.Join(variant, "agenthub.db")
+	db, managed, err := Resolve(l, given, true, nil)
+	if err != nil || db != given || managed {
+		t.Errorf("Resolve(-db %s) = %q, %v, %v; want it as given, unmanaged", given, db, managed, err)
+	}
+}
+
+// With neither default directory there, nothing says whether the volume
+// ignores case, and each answer would open a database the other would not:
+// refused, and nothing created.
+func TestACaseVariantThatCannotBePlacedIsRefused(t *testing.T) {
+	l := tempLayout(t)
+	given := filepath.Join(l.Config, "AgentHub", "agenthub.db")
+	db, managed, err := Resolve(l, given, true, nil)
+	if err == nil {
+		t.Fatalf("Resolve(-db %s) = %q, %v; want a refusal", given, db, managed)
+	}
+	for _, want := range []string{"only in case", l.NewDB} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not say %q: %v", want, err)
+		}
+	}
+	entries, err := os.ReadDir(l.Config)
+	if err != nil || len(entries) != 0 {
+		t.Errorf("the configuration directory holds %v (%v); nothing should have been made", entries, err)
 	}
 }
