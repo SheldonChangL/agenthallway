@@ -29,6 +29,9 @@ env:
   # Pinned so a scanner version bump is a reviewed commit, not a silent change
   # in what "green" means.
   GOSEC_VERSION: v2.29.0
+  # gosec is built against this x/tools so it can read go1.27.2 export data;
+  # see .github/scripts/install-gosec.sh.
+  GOSEC_XTOOLS_VERSION: v0.52.0
   GOVULNCHECK_VERSION: v1.7.0
 
 jobs:
@@ -143,7 +146,7 @@ jobs:
       - name: gosec (desktop module)
         working-directory: desktop
         run: |
-          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          ../.github/scripts/install-gosec.sh
           gosec -fmt=text ./...
 
   # The desktop restart reads the running node's command line, environment and
@@ -325,7 +328,7 @@ jobs:
       - name: install scanners
         run: |
           go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
-          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          ./.github/scripts/install-gosec.sh
       - name: govulncheck (root module)
         run: govulncheck ./...
       # Any finding fails the job. Reviewed false positives carry a reasoned
