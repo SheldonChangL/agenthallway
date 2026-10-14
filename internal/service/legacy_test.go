@@ -264,6 +264,62 @@ func TestInstallOnDarwinRetiresTheLegacyJobBeforeBootstrapping(t *testing.T) {
 	}
 }
 
+// launchd answers a bootout of a job that is still being torn down with
+// EINPROGRESS. That job is on its way out: the install waits for it as for any
+// bootout and carries on, rather than stopping with the old plist in place.
+// Any other failure still stops it before anything is removed or written.
+func TestInstallOnDarwinWaitsOutALegacyBootoutInProgress(t *testing.T) {
+	legacyTarget := "gui/501/" + LegacyLabel
+	t.Run("in progress", func(t *testing.T) {
+		home := t.TempDir()
+		legacy := legacyPlistAt(t, home, "/old/agenthub-node")
+		runner := &scriptedRunner{answers: map[string][]scriptedAnswer{
+			"launchctl bootout " + legacyTarget: {{out: "Boot-out failed: 36: Operation now in progress\n", err: errors.New("exit status 36")}},
+			"launchctl print " + legacyTarget:   {{out: "state = running"}, notFound},
+		}}
+		manager := Manager{GOOS: "darwin", Home: home, UID: "501", Runner: runner, Sleep: noSleep}
+		unitPath, _ := manager.UnitPath()
+		if _, err := manager.Install(context.Background(), Config{NodeBinary: writeFakeNode(t)}); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{
+			"launchctl bootout " + legacyTarget,
+			"launchctl print " + legacyTarget,
+			"launchctl print " + legacyTarget,
+			"launchctl bootout gui/501/" + Label,
+			"launchctl print gui/501/" + Label,
+			"launchctl bootstrap gui/501 " + unitPath,
+		}
+		if strings.Join(runner.calls, "\n") != strings.Join(want, "\n") {
+			t.Errorf("calls:\n%s\nwant:\n%s", strings.Join(runner.calls, "\n"), strings.Join(want, "\n"))
+		}
+		if !gone(t, legacy) {
+			t.Error("the pre-rename plist is still there")
+		}
+	})
+	t.Run("any other failure", func(t *testing.T) {
+		home := t.TempDir()
+		legacy := legacyPlistAt(t, home, "/old/agenthub-node")
+		runner := &scriptedRunner{answers: map[string][]scriptedAnswer{
+			"launchctl bootout " + legacyTarget: {{out: "Boot-out failed: 1: Operation not permitted\n", err: errors.New("exit status 1")}},
+		}}
+		manager := Manager{GOOS: "darwin", Home: home, UID: "501", Runner: runner, Sleep: noSleep}
+		_, err := manager.Install(context.Background(), Config{NodeBinary: writeFakeNode(t)})
+		if err == nil || !strings.Contains(err.Error(), "Operation not permitted") {
+			t.Fatalf("err = %v, want the bootout's own failure", err)
+		}
+		if gone(t, legacy) {
+			t.Error("the pre-rename plist was removed after a bootout that failed")
+		}
+		if unitPath, _ := manager.UnitPath(); !gone(t, unitPath) {
+			t.Error("the new plist was written after a bootout that failed")
+		}
+		if want := []string{"launchctl bootout " + legacyTarget}; !slices.Equal(runner.calls, want) {
+			t.Errorf("calls = %q, want only %q", runner.calls, want)
+		}
+	})
+}
+
 // S2. systemd: the old unit is disabled and stopped, and its file removed,
 // before the daemon-reload that the new unit's registration starts with.
 func TestInstallOnLinuxRetiresTheLegacyUnitFirst(t *testing.T) {

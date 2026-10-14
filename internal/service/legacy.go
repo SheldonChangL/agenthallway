@@ -175,11 +175,13 @@ func (m Manager) unregisterLegacy(ctx context.Context) ([]string, error) {
 	switch m.GOOS {
 	case "darwin":
 		domain := "gui/" + m.UID
-		if out, err := m.Runner.Run(ctx, "launchctl", "bootout", domain+"/"+LegacyLabel); err != nil && !notLoaded(out, err) {
+		out, err := m.Runner.Run(ctx, "launchctl", "bootout", domain+"/"+LegacyLabel)
+		if err != nil && !notLoaded(out, err) && !bootoutInProgress(out, err) {
 			return steps, fmt.Errorf("launchctl bootout %s: %w: %s", LegacyLabel, err, strings.TrimSpace(out))
 		}
 		// bootout returns before the job is gone, and the old node is still
-		// shutting down until it is.
+		// shutting down until it is. The same wait covers a job that an
+		// earlier bootout is still taking down.
 		m.waitUntilUnloaded(ctx, domain, LegacyLabel)
 	case "linux":
 		// --now waits for the stop job, so the old node has exited when this
@@ -230,6 +232,15 @@ func (m Manager) unregisterLegacy(ctx context.Context) ([]string, error) {
 		steps = append(steps, "stopped and removed the pre-rename service "+m.LegacyName()+ran)
 	}
 	return steps, nil
+}
+
+// bootoutInProgress recognises launchd answering a bootout with EINPROGRESS
+// ("Boot-out failed: 36: Operation now in progress"): the job is still being
+// torn down, by an earlier bootout or its own exit. It is on its way out, so
+// that is not a failure to stop it.
+func bootoutInProgress(out string, err error) bool {
+	text := out + " " + err.Error()
+	return strings.Contains(text, "Operation now in progress") || strings.Contains(text, "failed: 36:")
 }
 
 // removeIfPresent removes path and says whether there was anything to remove.
