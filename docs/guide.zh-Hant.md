@@ -43,7 +43,7 @@
 在終端機貼上這一行：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh
 ```
 
 腳本會下載適合這台機器的版本，在解開之前先用該版本自己的檢查碼清單（`SHA256SUMS`）
@@ -52,7 +52,7 @@ curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install
 讓這台機器上的 agent 知道怎麼用 `ah`（不要的話，把最後的 `sh` 換成 `sh -s -- --no-skill`）。
 它不會用 `sudo`，也不會要你輸入密碼。
 
-想先看過內容再執行：`curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | less`。
+想先看過內容再執行：`curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | less`。
 它會寫入的每個檔案、每個選項，都列在 [install-script.md](install-script.md)（英文）。
 
 Linux 的視窗需要 GTK 3 與 WebKit2GTK。腳本會自動挑對應的版本，缺套件時也會告訴你要裝哪一個。
@@ -65,10 +65,10 @@ Linux 的視窗需要 GTK 3 與 WebKit2GTK。腳本會自動挑對應的版本�
 ### Windows
 
 Agent Hallway 從未在真的 Windows 電腦上跑過。Windows 版只在 CI 建置與測試，實機驗收還沒做
-（[#21](https://github.com/SheldonChangL/agenthub/issues/21)、[verification.md](verification.md#build-matrix)（英文））。
+（[#21](https://github.com/SheldonChangL/agenthallway/issues/21)、[verification.md](verification.md#build-matrix)（英文））。
 下面寫的是安裝程式設計上會做的事。
 
-1. 打開 [Releases 頁面](https://github.com/SheldonChangL/agenthub/releases)，
+1. 打開 [Releases 頁面](https://github.com/SheldonChangL/agenthallway/releases)，
    下載 `agenthallway-desktop_<版本>_windows_amd64-installer.exe`（Windows 10 或 11，64 位元）。
 2. 執行它。Windows 會先跳警告，處理方式見下一節。
 3. 安裝程式會放好 app（預設在 `C:\Program Files\agenthallway-desktop\agenthallway-desktop`）、
@@ -533,7 +533,7 @@ Windows 在 `%LOCALAPPDATA%\agenthallway\node.log`。
 macOS 與 Linux 再執行一次安裝指令：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh
 ```
 
 它會換掉 app，保留 Agent Hallway 的資料庫與機器身分，並重新註冊服務，讓它指向新的那一份。
@@ -596,7 +596,7 @@ Agent Hallway 在 v0.1.11 以前叫 AgentHub。v0.2.0 改了名，是為了避�
 
 ```sh
 ah service uninstall
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --version v0.1.11 --no-service
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh -s -- --version v0.1.11 --no-service
 "<the v0.1.11 ah>" service install --db "<config>/agenthallway/agenthallway.db"
 ```
 
@@ -612,7 +612,7 @@ curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install
 完整指令：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh -s -- --uninstall
 ```
 
 不論哪一種，和這台配對過的機器都還會列著它，直到它們按**撤銷信任**（或執行 `ah revoke <node-id>`）。

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Agent Hallway one-line installer for macOS and Linux.
 #
-#     curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
+#     curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh
 #
 # It picks the one release asset for this machine, verifies it against the
 # release's own SHA256SUMS before anything is unpacked, puts it somewhere the
@@ -25,7 +25,7 @@
 # dash on Debian and Ubuntu, so no arrays, no [[, no local, no +=.
 set -eu
 
-REPO="SheldonChangL/agenthub"
+REPO="SheldonChangL/agenthallway"
 API_LATEST="https://api.github.com/repos/${REPO}/releases/latest"
 DOWNLOAD_BASE="https://github.com/${REPO}/releases/download"
 RAW_SELF="https://raw.githubusercontent.com/${REPO}/main/install.sh"
@@ -177,7 +177,7 @@ usage() {
 	cat <<'EOF'
 install.sh — install Agent Hallway (desktop app and command line) on macOS or Linux.
 
-  curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
+  curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh
 
 Options:
   --version vX.Y.Z   install this release instead of the latest one
@@ -210,7 +210,7 @@ Options:
 
 Through a pipe, flags go after `sh -s --`:
 
-  curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --no-service
+  curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh -s -- --no-service
 
 It never uses sudo. Read it before you run it: curl -fsSL <url> | less
 EOF

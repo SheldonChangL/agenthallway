@@ -2,14 +2,14 @@
 
 ## Supported versions
 
-Only the [latest release](https://github.com/SheldonChangL/agenthub/releases/latest)
+Only the [latest release](https://github.com/SheldonChangL/agenthallway/releases/latest)
 gets security fixes. A fix ships as a new release; older releases are not
 patched. If you build from source, build from `main` or the latest tag.
 
 ## Reporting a vulnerability
 
 Please report it privately through GitHub:
-**[open a private security advisory](https://github.com/SheldonChangL/agenthub/security/advisories/new)**.
+**[open a private security advisory](https://github.com/SheldonChangL/agenthallway/security/advisories/new)**.
 
 Do not open a public issue, pull request or discussion for a vulnerability
 until a fix has been released.

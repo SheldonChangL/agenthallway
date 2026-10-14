@@ -23,7 +23,7 @@ the maintainer.
 If someone's behaviour in this project's spaces is a problem, tell the
 maintainer privately. GitHub offers no direct messages, so the private channel
 on this repository is a
-[private advisory](https://github.com/SheldonChangL/agenthub/security/advisories/new):
+[private advisory](https://github.com/SheldonChangL/agenthallway/security/advisories/new):
 open one, say it is a conduct report rather than a vulnerability, and describe
 what happened. Only you and the repository's maintainers can see it.
 

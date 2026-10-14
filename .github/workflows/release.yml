@@ -818,7 +818,7 @@ jobs:
               echo
               echo '```sh'
               echo 'ah service uninstall'
-              echo 'curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --version v0.1.11 --no-service'
+              echo 'curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh -s -- --version v0.1.11 --no-service'
               echo '"<the v0.1.11 ah>" service install --db "<config>/agenthallway/agenthallway.db"   # the old node on the moved files: the same identity'
               echo '```'
               echo

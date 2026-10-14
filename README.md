@@ -22,7 +22,7 @@ and open source (MIT), and an early release: see [Status](#status).
 **macOS and Linux:**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthallway/main/install.sh | sh
 ```
 
 The script checks the download against the release's checksum and never asks
@@ -30,9 +30,9 @@ for your password. It also adds a Claude Code skill that teaches agents to use
 `ah`; put `sh -s -- --no-skill` in place of the last `sh` to leave it out.
 
 **Windows:** the installer is on the
-[Releases page](https://github.com/SheldonChangL/agenthub/releases). It has
+[Releases page](https://github.com/SheldonChangL/agenthallway/releases). It has
 never been run on a real Windows computer
-([#21](https://github.com/SheldonChangL/agenthub/issues/21)). The downloads are
+([#21](https://github.com/SheldonChangL/agenthallway/issues/21)). The downloads are
 not signed, so a file you download by hand gets a warning;
 [how to check it and let it through](docs/guide.md#if-your-computer-warns-about-the-download).
 
