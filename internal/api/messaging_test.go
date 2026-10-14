@@ -607,7 +607,7 @@ func openOutbound(t *testing.T, store *registry.Registry, handler http.Handler, 
 	return id
 }
 
-// The gate was checked only in agenthub-mcp, a client of this node. Any local
+// The gate was checked only in agenthallway-mcp, a client of this node. Any local
 // process could post here directly and bypass it — and this node cannot tell the
 // owner's CLI from an agent talked into calling it. So a message that leaves the
 // machine must be attributed to a local session, and that session's gate

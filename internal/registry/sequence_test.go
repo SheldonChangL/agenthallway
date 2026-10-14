@@ -25,7 +25,7 @@ func openAt(t *testing.T, path string) *Registry {
 // receiver would have to reject the restarted sender forever or stop checking.
 func TestOutboundSequenceSurvivesReopening(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 
 	store := openAt(t, path)
 	var last uint64
@@ -58,7 +58,7 @@ func TestOutboundSequenceSurvivesReopening(t *testing.T) {
 // the highest one it has seen.
 func TestOutboundSequenceNeverRepeatsUnderConcurrency(t *testing.T) {
 	ctx := context.Background()
-	store := openAt(t, filepath.Join(t.TempDir(), "agenthub.db"))
+	store := openAt(t, filepath.Join(t.TempDir(), "agenthallway.db"))
 
 	const workers, perWorker = 8, 16
 	var mutex sync.Mutex
@@ -97,7 +97,7 @@ func TestOutboundSequenceNeverRepeatsUnderConcurrency(t *testing.T) {
 // nothing on the way there.
 func TestOutboundSequenceMigratesFromZero(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 
 	store := openAt(t, path)
 	if _, err := store.db.ExecContext(ctx, `
@@ -136,7 +136,7 @@ DROP TABLE schema_markers;`); err != nil {
 // hand a receiver a sequence it has already seen.
 func TestOutboundSequenceFailsClosedWhenExhausted(t *testing.T) {
 	ctx := context.Background()
-	store := openAt(t, filepath.Join(t.TempDir(), "agenthub.db"))
+	store := openAt(t, filepath.Join(t.TempDir(), "agenthallway.db"))
 
 	if _, err := store.db.ExecContext(ctx,
 		`UPDATE heartbeat_sequence SET last_value = ? WHERE singleton = 1`, int64(math.MaxInt64)-1); err != nil {
@@ -181,7 +181,7 @@ func TestOutboundSequenceFailsClosedWhenExhausted(t *testing.T) {
 // other than this program, and the counter's real position is unknown.
 func TestMissingSequenceRowIsNotExhaustion(t *testing.T) {
 	ctx := context.Background()
-	store := openAt(t, filepath.Join(t.TempDir(), "agenthub.db"))
+	store := openAt(t, filepath.Join(t.TempDir(), "agenthallway.db"))
 
 	if _, err := store.db.ExecContext(ctx, `DELETE FROM heartbeat_sequence`); err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestMissingSequenceRowIsNotExhaustion(t *testing.T) {
 // refuse to open.
 func TestReopeningRefusesToRecreateADeletedSequenceRow(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 
 	store := openAt(t, path)
 	for range 3 {
@@ -240,7 +240,7 @@ func TestReopeningRefusesToRecreateADeletedSequenceRow(t *testing.T) {
 // An existing counter is left exactly as it was found. Opening is not a repair.
 func TestOpeningPreservesAnExistingSequenceRow(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 
 	store := openAt(t, path)
 	if _, err := store.db.ExecContext(ctx,
@@ -282,7 +282,7 @@ DROP TABLE heartbeat_sequence;
 CREATE TABLE heartbeat_sequence (something_else INTEGER);`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "agenthub.db")
+			path := filepath.Join(t.TempDir(), "agenthallway.db")
 			store := openAt(t, path)
 			// The CHECK constraint on a table this store created rejects a
 			// negative value, so it is written the only way it could arrive:
@@ -333,7 +333,7 @@ func countSequenceRows(t *testing.T, path string) int {
 // refuse to open and must recreate nothing.
 func TestReopeningRefusesToRecreateADroppedSequenceTable(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 
 	store := openAt(t, path)
 	for range 3 {
@@ -382,7 +382,7 @@ CREATE TABLE schema_markers (something_else TEXT);`,
 		"marker present, counter table gone": `DROP TABLE heartbeat_sequence;`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "agenthub.db")
+			path := filepath.Join(t.TempDir(), "agenthallway.db")
 			store := openAt(t, path)
 			if _, err := store.NextHeartbeatSequence(ctx); err != nil {
 				t.Fatal(err)
@@ -409,7 +409,7 @@ CREATE TABLE schema_markers (something_else TEXT);`,
 // fails partway must not leave a marker claiming a counter that is not there,
 // because that state is refused forever after.
 func TestTheMarkerAndTheCounterAppearTogether(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 	openAt(t, path)
 
 	if !tableExistsInFile(t, path, "heartbeat_sequence") || !tableExistsInFile(t, path, "schema_markers") {

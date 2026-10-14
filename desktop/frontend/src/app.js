@@ -456,7 +456,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
   // id, the thread id that `codex resume` takes and that the wake driver
   // resumes by (internal/adapter/codex.go, internal/codexdriver/driver.go).
   // A session without one falls back to what follows the first colon of its
-  // AgentHub id, which is the same value by construction: the node builds
+  // Agent Hallway id, which is the same value by construction: the node builds
   // the id as `<provider>:<providerSessionId>` (model.SessionID) and refuses
   // a stored session whose id does not match that (registry.validateSessionFields);
   // the provider session id itself may not contain a colon
@@ -703,7 +703,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     // session (#112) — but that is a thing an owner needs once, if ever,
     // while this button was on all thousand rows. Everything the four MCP
     // tools do, `ah` does too (list, status, send, inbox), and the
-    // agenthub-watch skill already goes through `ah` rather than MCP, so a
+    // agenthallway-watch skill already goes through `ah` rather than MCP, so a
     // new owner who never sees this loses nothing they were using.
     //
     // openMCPConfig and the mcp-modal it fills are still here and still
@@ -947,7 +947,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
   // native window takes its title from it, so writing it here is what a browser
   // does and the window follows. Guarded anyway: the node checks run this
   // module against a fake DOM that may not have a document title at all.
-  const BASE_TITLE = "AgentHub";
+  const BASE_TITLE = "Agent Hallway";
   function setDocumentTitle(total) {
     try {
       document.title = total > 0 ? `(${total}) ${BASE_TITLE}` : BASE_TITLE;
@@ -1221,7 +1221,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     // guesses over the top of it (pairHereState, §3.3).
     const here = state.nodeReachable ? pairHereState(state.pairing?.state) : { reachable: false, address: "", problem: "" };
     // Reachable is half of it. A node started without -discover — every node's
-    // default, cmd/agenthub-node — answers the pairing window and refuses the
+    // default, cmd/agenthallway-node — answers the pairing window and refuses the
     // candidate list (App.Pairing: off / openNotAnnouncing), so step 2's
     // 「同一個網路上找到的電腦」 stays empty on both machines. Observed from what
     // the running node answers, not from what is saved (§7.8 rule 3).
@@ -1329,6 +1329,12 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     if (!serviceOk) wizard.phase.login = true;
     renderFirstRun();
     const mark = state.notices[0];
+    if (managed && !serviceOk && status.legacy) {
+      // Registered under the pre-rename name: a restart would start the old
+      // program again. The panel says what it is and offers what replaces it.
+      goToService();
+      return false;
+    }
     if (managed && !serviceOk && !status.installed && nodeRunningNotAService(status)) {
       // Started by hand, on a database this window cannot see. The form says
       // what to type and asks before a blank; the wizard gets out of its way.
@@ -3771,7 +3777,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     // that actually REACHED the node — an empty list from a read that did not
     // is not a fact about this machine (#114) — and the result goes to the
     // banner discoverSessions already writes, which now also says where
-    // AgentHub looks when it finds nothing.
+    // Agent Hallway looks when it finds nothing.
     //
     // Not while something else holds the window: discoverSessions goes through
     // withBusy, which drops a call made while busy, so spending the flag then
@@ -5568,7 +5574,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
   }
 
   // renderPairingSubtitle keeps the drawer's own heading honest. "開啟後同網段
-  // 的人都會知道這台機器在跑 AgentHub" is true of a node that announces, and a
+  // 的人都會知道這台機器在跑 Agent Hallway" is true of a node that announces, and a
   // plain falsehood at the top of the panel on one that does not — which is
   // exactly the node whose owner has to read the rest of this panel carefully.
   function renderPairingSubtitle(pairing) {
@@ -6542,7 +6548,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
   //
   // 「可留訊息」 is both directions: a conversation is two-way, and without
   // allowOutbound the node refuses the reply a woken agent is told to send
-  // (AGENTS.md, "When AgentHub wakes you"). So `messages` writes acceptMessages
+  // (AGENTS.md, "When Agent Hallway wakes you"). So `messages` writes acceptMessages
   // and allowOutbound together, and the GUI no longer sets only one of them
   // (owner's decision, 2026-10). 「只看得到」 is every flag off: the other machine
   // sees the session and can do nothing with it.
@@ -6840,7 +6846,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
       mcpApplied = sequence;
       // Shown here rather than in a banner: this dialog covers the banner, so an
       // error there is an error nobody reads. The most likely one is that
-      // agenthub-mcp was not found, and the message says where it looked.
+      // agenthallway-mcp was not found, and the message says where it looked.
       renderMCPStatus({ kind: "failed", error: String(failure) });
       return;
     }
@@ -7185,6 +7191,10 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     let words;
     if (status.toolError) words = t("service.pillNoAh");
     else if (!status.supported) { tone = ""; words = t("service.pillUnsupported"); }
+    // Registered under the pre-rename name: whatever it is doing, it is the
+    // old program, and the press goes to the panel that offers what replaces
+    // it (serviceQuickAction).
+    else if (status.legacy) words = t("service.pillLegacy");
     // Running is the service manager's word, not the node's: a service whose
     // process is up while the node answers nothing is not green. The press is
     // the same quick action, which reads the status again and goes from there.
@@ -7210,6 +7220,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     line.className = "line";
     // Shown only where this panel says it is; every branch below decides.
     restart.classList.add("hidden");
+    renderServiceLegacy(status);
     if (status.toolError) {
       line.textContent = t("service.lineNoAh", { error: status.toolError });
       line.classList.add("warn");
@@ -7259,6 +7270,9 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
       line.classList.add("warn");
       open.textContent = t("service.install");
     }
+    // The pre-rename registration starts the old program: a restart would
+    // start it again, so the banner's re-registration is offered instead.
+    if (status.legacy) restart.classList.add("hidden");
     open.classList.remove("hidden");
     uninstall.classList.toggle("hidden", !status.installed);
     renderServiceRepair(status);
@@ -7284,6 +7298,75 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     repair.append(
       element("div", "stale",
         t("service.pinnedSettings", { pinned: pinned.join(t("candidate.flagJoin")) })));
+  }
+
+  // renderServiceLegacy says that the background service is registered under
+  // the pre-rename name (desktop/service.go ServiceStatus.Legacy), or that the
+  // pre-rename registration is still on disk beside this one
+  // (LegacyAlsoInstalled), and offers the one step that replaces it.
+  //
+  // Either way it starts the old program at login, and the node does not move
+  // its identity out of the old directory while it is there; a restart would
+  // only start the old program again (RestartNode refuses it).
+  function renderServiceLegacy(status) {
+    const box = el("service-legacy");
+    box.replaceChildren();
+    if (!status?.supported || !status.installed || !(status.legacy || status.legacyAlsoInstalled)) return;
+    const note = element("div", "stale", status.legacy
+      ? t("service.legacyRegistration", { unit: status.unitPath ?? "" })
+      : t("service.legacyAlsoInstalled"));
+    const action = element("button", "ghost", t("service.legacyReregister"));
+    action.onclick = () => reregisterLegacy(state.service ?? status, { button: action }).catch(() => {});
+    box.append(note, action);
+  }
+
+  // reregisterLegacy replaces the pre-rename registration with this product's,
+  // on the database the old one ran on: `ah service install --db <that>`,
+  // which stops and removes the old registration before it writes the new one
+  // (internal/service). The path is carried over for the reason
+  // reinstallWithoutPinnedSettings carries it: a reinstall that dropped it
+  // would put the node on another database, which is a new identity and no
+  // pairings. The node moves the old default database to its own when it
+  // first starts; a path the old registration named is kept as it is.
+  //
+  // Where the old registration's database cannot be read (Windows, whose task
+  // definition is not read back) there is nothing to carry over, so the form
+  // opens instead, where installService asks before it installs on a
+  // database it cannot compare.
+  //
+  // Answers whether it registered, as reinstallWithoutPinnedSettings does.
+  async function reregisterLegacy(status = state.service, { button = null } = {}) {
+    if (!status?.dbPathKnown) {
+      await openServiceForm();
+      return false;
+    }
+    const ok = await askConfirm({
+      title: t("service.legacyReregisterConfirmTitle"),
+      body: t("service.legacyReregisterConfirm", { path: status.dbPath || t("service.nodeDefaultLocation") }),
+      confirmLabel: t("service.legacyReregisterConfirmAction"),
+    });
+    if (!ok) return false;
+    const previousPid = state.service?.pid ?? 0;
+    let reregistered = false;
+    await withBusy(t("service.busyReregister"), async () => {
+      let result;
+      try {
+        result = await api.InstallService({ dbPath: status.dbPath });
+      } catch (error) {
+        // ah's own words — a --db the old registration named and this one
+        // would drop, say — go where the output goes.
+        const output = el("service-output");
+        output.textContent = String(error);
+        output.classList.remove("hidden");
+        throw error;
+      }
+      reregistered = true;
+      showServiceOutput(result);
+      const up = await waitForNode({ previousPid });
+      await load();
+      banner(up.answering ? t("service.legacyReregistered") : t("service.reregisteredNoAnswer"), up.answering);
+    }, { button });
+    return reregistered;
   }
 
   // reinstallWithoutPinnedSettings re-registers the service with the database it
@@ -7531,6 +7614,9 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
   // page — no ah, no service manager, a status not read yet, or nothing to fix.
   function serviceQuickAction(status = state.service) {
     if (!status || status.toolError || status.supported !== true) return "settings";
+    // The pre-rename registration is replaced from the panel, which says what
+    // it is and asks before re-registering; one press is not that.
+    if (status.legacy) return "settings";
     if (status.installed && status.running) return "settings";
     return status.installed ? "restart" : "install";
   }
@@ -7789,9 +7875,9 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
       const skipped = counts.skipped ?? 0;
       const total = counts.total ?? 0;
       // A scan that found nothing carries the explanation that used to be a
-      // checklist step: AgentHub reads what those two tools leave on disk, so
+      // checklist step: Agent Hallway reads what those two tools leave on disk, so
       // an empty answer is a fact about this machine's disk rather than about
-      // AgentHub. Said once, here, where the answer is.
+      // Agent Hallway. Said once, here, where the answer is.
       banner(t("app.rescanned", {
         claude: counts.claude, codex: counts.codex, total: counts.total,
       }) + (skipped > 0 ? t("app.rescanSkipped", { skipped }) : "")
@@ -8724,7 +8810,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
   }
 
   // broadcastFrom is the address this node's announcements go out from, judged
-  // as the node judges it (pairing.ListenerEndpoint in cmd/agenthub-node): none
+  // as the node judges it (pairing.ListenerEndpoint in cmd/agenthallway-node): none
   // unless the running node was started with -discover, and then the first
   // network address it reports bound, in its own order — not the first one
   // ticked, which may be an address the node failed to bind or has not been
@@ -9312,7 +9398,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
   //
   // Observed, not inferred. The obvious cause is a flag baked into the service
   // unit — it is given on every start and the node writes what it was given
-  // back into its own store (cmd/agenthub-node/main.go), so after the restart
+  // back into its own store (cmd/agenthallway-node/main.go), so after the restart
   // the stored value IS the unit's and nothing in the answer distinguishes it
   // from a value the owner saved. An earlier version tried to spot it by
   // comparing the running value against the stored one and could never fire,
@@ -9586,6 +9672,7 @@ export function boot({ start = true, backdropUrl = "" } = {}) {
     didNotStick, sameSettingValue, paintAfterSave,
     serviceStatusOrUnknown, loadService, renderService, restartNode, waitForNode,
     openServiceForm, installService, renderServiceRepair, reinstallWithoutPinnedSettings,
+    renderServiceLegacy, reregisterLegacy,
     renderPeerListenProblem, peerListenRepairs, applyPeerListenRepair, applyPeerListenRepairFromCard,
     loadNodeSettings, saveNodeSettings, applyNodeSettings, readNodeSettingsPatch,
     renderNodeLine, relabelNodeSettings, repaintFromState, renderMCPStatus,

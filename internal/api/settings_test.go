@@ -20,7 +20,7 @@ func settingsServer(t *testing.T, running nodeconfig.Settings, sources map[strin
 	extra ...Option) (*registry.Registry, http.Handler) {
 	t.Helper()
 	ctx := context.Background()
-	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +348,7 @@ func TestNamingALANListenerWhileClosingTheSwitchIsRefusedNotQuietlyWithdrawn(t *
 // next start finds the default in the database and calls it remembered.
 func TestAWithdrawnPeerListenerIsReportedBesideItsDefaultSource(t *testing.T) {
 	ctx := context.Background()
-	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -15,11 +15,11 @@ import (
 //
 // This is what the scheduled task's action ends up doing: Task Scheduler runs
 // ah, ah runs this, and the node is left running with its output on a file.
-// The alternative — pointing the task straight at agenthub-node.exe — gives a
+// The alternative — pointing the task straight at agenthallway-node.exe — gives a
 // console window that sits in the taskbar for as long as the node runs, for
 // every owner, forever. DETACHED_PROCESS is how that window never exists,
 // without touching the node's own subsystem: run by hand from a terminal,
-// agenthub-node.exe still prints, which is the only diagnosis available to
+// agenthallway-node.exe still prints, which is the only diagnosis available to
 // someone whose node will not start.
 func StartDetached(binary string, args []string, logPath string) (int, error) {
 	log, err := openLog(logPath)

@@ -12,16 +12,22 @@ import (
 )
 
 // nodeExecutable is what the running node is called in the task list.
-const nodeExecutable = "agenthub-node.exe"
+const nodeExecutable = productNodeBinary + ".exe"
 
-// stopNodeProcesses ends every agenthub-node on this machine.
+// legacyNodeExecutable is what the pre-rename node is called there.
+const legacyNodeExecutable = productLegacyNodeBinary + ".exe"
+
+// stopNodeProcesses ends every node on this machine: agenthallway-node.exe
+// and the pre-rename agenthub-node.exe, which an upgraded machine can still be
+// running on the same port. Windows keeps an image's whole name, so taskkill
+// by name stops exactly these.
 //
 // /F because the node has no window to close politely and no unflushed state
 // of its own: every write it makes is a committed SQLite transaction. This is
 // the same thing the installer does before overwriting the binary
 // (desktop/build/windows/installer/project.nsi).
 func stopNodeProcesses(ctx context.Context) (string, error) {
-	return runCommand(ctx, "taskkill", "/F", "/IM", nodeExecutable)
+	return runCommand(ctx, "taskkill", "/F", "/IM", nodeExecutable, "/IM", legacyNodeExecutable)
 }
 
 // startNodeDetached starts the node so that it outlives this window.
@@ -67,5 +73,5 @@ func nodeLogDir() (string, error) {
 		}
 		base = filepath.Join(home, "AppData", "Local")
 	}
-	return filepath.Join(base, "agenthub"), nil
+	return filepath.Join(base, "agenthallway"), nil
 }

@@ -97,7 +97,7 @@ func (r runner) service(ctx context.Context, args []string) error {
 // This is what the Windows scheduled task runs. It exists so that the task's
 // own process is this one — short-lived, its console window a flicker at logon
 // — rather than the node, whose console window would otherwise sit in the
-// taskbar for as long as the node runs. agenthub-node.exe keeps its console
+// taskbar for as long as the node runs. agenthallway-node.exe keeps its console
 // subsystem, so running it by hand to find out why it will not start still
 // prints; that diagnosis is the only one a Windows owner has.
 //
@@ -108,7 +108,7 @@ func (r runner) service(ctx context.Context, args []string) error {
 func (r runner) serviceRunNode(args []string) error {
 	flags := flag.NewFlagSet("ah service run-node", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	nodeBinary := flags.String("node-binary", "", "path to agenthub-node (default: beside ah, then PATH)")
+	nodeBinary := flags.String("node-binary", "", "path to agenthallway-node (default: beside ah, then PATH)")
 	logPath := flags.String("log", "", "file the node's output is appended to")
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("ah service run-node: %w", err)
@@ -134,7 +134,7 @@ func (r runner) serviceRunNode(args []string) error {
 func (r runner) serviceInstall(ctx context.Context, manager service.Manager, args []string) error {
 	flags := flag.NewFlagSet("ah service install", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	nodeBinary := flags.String("node-binary", "", "path to agenthub-node (default: beside ah, then PATH)")
+	nodeBinary := flags.String("node-binary", "", "path to agenthallway-node (default: beside ah, then PATH)")
 	// The node's flags, by the node's names. Only those the owner set are
 	// carried, so the node's own defaults apply to the rest.
 	dbPath := flags.String("db", "", "SQLite database path (relative paths are made absolute)")
@@ -150,7 +150,7 @@ func (r runner) serviceInstall(ctx context.Context, manager service.Manager, arg
 	flags.Var(&declaredPrivate, "treat-as-private", "CIDR block to treat as a private network, repeatable")
 	// --display-name is deliberately not here. The node persists a chosen
 	// name, and a flag on every start would pin the installed name over any
-	// later rename; set it once with `agenthub-node --display-name`.
+	// later rename; set it once with `agenthallway-node --display-name`.
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("ah service install: %w", err)
 	}
@@ -317,7 +317,7 @@ func wasGiven(flags *flag.FlagSet, name string) bool {
 	return given
 }
 
-// resolveNodeBinary finds agenthub-node: the path given, else beside this
+// resolveNodeBinary finds agenthallway-node: the path given, else beside this
 // executable, else on PATH. Always returned absolute, because the service
 // runs without the owner's PATH or working directory.
 func resolveNodeBinary(given string) (string, error) {
@@ -329,7 +329,7 @@ func resolveNodeBinary(given string) (string, error) {
 		return absolute, nil
 	}
 	if self, err := os.Executable(); err == nil {
-		candidate := filepath.Join(filepath.Dir(self), "agenthub-node")
+		candidate := filepath.Join(filepath.Dir(self), "agenthallway-node")
 		if runtime.GOOS == "windows" {
 			candidate += ".exe"
 		}
@@ -337,10 +337,10 @@ func resolveNodeBinary(given string) (string, error) {
 			return filepath.Abs(candidate)
 		}
 	}
-	if found, err := exec.LookPath("agenthub-node"); err == nil {
+	if found, err := exec.LookPath("agenthallway-node"); err == nil {
 		return filepath.Abs(found)
 	}
-	return "", errors.New("agenthub-node not found beside ah or on PATH; pass --node-binary /absolute/path/to/agenthub-node")
+	return "", errors.New("agenthallway-node not found beside ah or on PATH; pass --node-binary /absolute/path/to/agenthallway-node")
 }
 
 // waitForNode polls the owner's API until it answers or the budget is spent.
@@ -391,6 +391,16 @@ func (r runner) serviceStatus(ctx context.Context, manager service.Manager) erro
 	} else {
 		state := "not installed"
 		switch {
+		case status.Legacy:
+			// Only the pre-rename registration, which starts the old node.
+			// Said as what it is and what replaces it, not as "installed":
+			// restart refuses it, and the node will not move its identity
+			// while it is there.
+			state = "registered under the pre-rename name " + manager.LegacyName()
+			if status.Program != "" {
+				state += " (runs " + status.Program + ")"
+			}
+			state += ` — "ah service install" replaces it and keeps its database`
 		case status.Installed && status.Running:
 			state = fmt.Sprintf("installed and running (pid %d)", status.PID)
 		case status.Installed:
@@ -402,6 +412,10 @@ func (r runner) serviceStatus(ctx context.Context, manager service.Manager) erro
 		fmt.Fprintln(r.stdout, "unit:", status.UnitPath)
 		if status.LogHint != "" {
 			fmt.Fprintln(r.stdout, "log:", status.LogHint)
+		}
+		if status.LegacyAlsoInstalled {
+			fmt.Fprintln(r.stdout, "note: the pre-rename service "+manager.LegacyName()+
+				` is still registered beside this one and starts the old node; "ah service install" removes it`)
 		}
 	}
 	if answer != "" {

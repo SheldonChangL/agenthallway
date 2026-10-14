@@ -13,7 +13,7 @@ import (
 // for.
 var ErrNoBinding = errors.New("this server must be told which session it acts for")
 
-// Binding is the one session an agenthub-mcp process may act as.
+// Binding is the one session an agenthallway-mcp process may act as.
 //
 // A stdio MCP server is launched by the agent as a child process, and the MCP
 // protocol carries nothing that says which session made the call. If the server

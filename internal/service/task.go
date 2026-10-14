@@ -36,7 +36,7 @@ import (
 // TaskName is what the task is called in the owner's Task Scheduler library.
 // A person reading a list of tasks is the audience: it is not the label the
 // other platforms use, because nothing on Windows keys off that.
-const TaskName = "AgentHub Node"
+const TaskName = "Agent Hallway Node"
 
 // TaskXML renders the task definition.
 //
@@ -47,8 +47,8 @@ const TaskName = "AgentHub Node"
 // since Monday, and MultipleInstancesPolicy decides what a second logon does.
 //
 // The action is the launcher, not the node. `ah service run-node` starts
-// agenthub-node detached, with its output on a file, and exits — so the node
-// gets no console window of its own, while agenthub-node.exe keeps its console
+// agenthallway-node detached, with its output on a file, and exits — so the node
+// gets no console window of its own, while agenthallway-node.exe keeps its console
 // subsystem and still prints when an owner runs it by hand to find out why it
 // will not start. That diagnosis is the only one available to them, and a
 // GUI-subsystem node would have traded it for a log file nobody can find.
@@ -67,7 +67,7 @@ func TaskXML(config Config, userName string) ([]byte, error) {
 	document.WriteString(`<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>Runs the AgentHub node for this user, starting at logon.</Description>
+    <Description>Runs the Agent Hallway node for this user, starting at logon.</Description>
     <URI>\` + TaskName + `</URI>
   </RegistrationInfo>
   <Triggers>
@@ -118,7 +118,7 @@ func TaskXML(config Config, userName string) ([]byte, error) {
 // being read as the launcher's.
 func taskArguments(config Config) (string, error) {
 	if strings.TrimSpace(config.NodeBinary) == "" {
-		return "", fmt.Errorf("the scheduled task needs the path to agenthub-node")
+		return "", fmt.Errorf("the scheduled task needs the path to agenthallway-node")
 	}
 	parts := []string{"service", "run-node", "--node-binary", quoteArgument(config.NodeBinary)}
 	if config.LogPath != "" {

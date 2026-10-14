@@ -31,7 +31,7 @@ func TestTheDatabaseIsNotLinkedIntoTheServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no go toolchain on PATH, so this boundary cannot be checked: %v", err)
 	}
-	command := exec.Command(goTool, "list", "-deps", "agenthub.local/agenthub/cmd/agenthub-mcp")
+	command := exec.Command(goTool, "list", "-deps", "agenthub.local/agenthub/cmd/agenthallway-mcp")
 	var stderr strings.Builder
 	command.Stderr = &stderr
 	output, err := command.Output()
@@ -50,10 +50,10 @@ func TestTheDatabaseIsNotLinkedIntoTheServer(t *testing.T) {
 	}
 	for _, dep := range deps {
 		if reason, bad := forbidden[dep]; bad {
-			t.Errorf("agenthub-mcp links %s: %s", dep, reason)
+			t.Errorf("agenthallway-mcp links %s: %s", dep, reason)
 		}
 		if strings.Contains(dep, "sqlite") {
-			t.Errorf("agenthub-mcp links %s; it must reach the node over HTTP", dep)
+			t.Errorf("agenthallway-mcp links %s; it must reach the node over HTTP", dep)
 		}
 	}
 }
@@ -65,7 +65,7 @@ func TestTheDatabaseIsNotLinkedIntoTheServer(t *testing.T) {
 func TestTheServerRunsNoCommands(t *testing.T) {
 	for _, name := range []string{
 		"agenthub.local/agenthub/internal/mcpserver",
-		"agenthub.local/agenthub/cmd/agenthub-mcp",
+		"agenthub.local/agenthub/cmd/agenthallway-mcp",
 		"agenthub.local/agenthub/internal/address",
 	} {
 		pkg, err := build.Import(name, "", 0)

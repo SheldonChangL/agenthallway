@@ -36,7 +36,7 @@ func newTestAnnouncer(t *testing.T) (*Announcer, *Mode, *recorder, *testClock) {
 	t.Helper()
 	mode, clock := newTestMode()
 	sink := &recorder{}
-	a := NewAnnouncer(mode, "224.0.0.251:5353", "node_local0000000000", "agenthub-test",
+	a := NewAnnouncer(mode, "224.0.0.251:5353", "node_local0000000000", "agenthallway-test",
 		Endpoint{
 			Port:      7463,
 			Addresses: func() []netip.Addr { return []netip.Addr{netip.MustParseAddr("192.168.1.9")} },

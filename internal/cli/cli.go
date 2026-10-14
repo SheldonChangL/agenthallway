@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"agenthub.local/agenthub/internal/buildinfo"
 	"agenthub.local/agenthub/internal/model"
 	"agenthub.local/agenthub/internal/pairing"
+	"agenthub.local/agenthub/internal/product"
 )
 
 type runner struct {
@@ -29,14 +29,19 @@ type runner struct {
 	stdout  io.Writer
 }
 
+// defaultNodeURL is where ah looks for the node when -url is not given:
+// AGENTHALLWAY_URL, else the older AGENTHUB_URL, else the loopback default.
+func defaultNodeURL() string {
+	if given := product.Getenv("URL"); given != "" {
+		return given
+	}
+	return "http://127.0.0.1:7462"
+}
+
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("ah", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	defaultURL := os.Getenv("AGENTHUB_URL")
-	if defaultURL == "" {
-		defaultURL = "http://127.0.0.1:7462"
-	}
-	baseURL := flags.String("url", defaultURL, "AgentHub node URL")
+	baseURL := flags.String("url", defaultNodeURL(), "Agent Hallway node URL")
 	jsonOutput := flags.Bool("json", false, "print JSON")
 	showVersion := flags.Bool("version", false, "print the build version and exit")
 	flags.Usage = func() { printUsage(stderr) }
@@ -187,7 +192,7 @@ func (r runner) command(ctx context.Context, args []string) error {
 				map[string][]string{"addresses": args[3:]})
 			if routeMissing(err) {
 				return fmt.Errorf("this node is too old for more than one address per peer: it has no "+
-					"PUT /v1/nodes/{id}/addresses. Update agenthub-node, or give one address (%w)", err)
+					"PUT /v1/nodes/{id}/addresses. Update agenthallway-node, or give one address (%w)", err)
 			}
 			return err
 		default:

@@ -19,9 +19,11 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// nodeProcessQuery lists agenthub-node.exe with its command line. Windows keeps
-// a process's command line as the one string it was started with; WMI is the
-// supported way to read another process's.
+// nodeProcessQuery lists agenthallway-node.exe, and the pre-rename
+// agenthub-node.exe, each with its name and command line. Windows keeps an
+// image's whole name, so the names are matched exactly. It keeps a process's
+// command line as the one string it was started with; WMI is the supported
+// way to read another process's.
 //
 // Progress records off first: PowerShell reports Get-CimInstance's progress on
 // stderr, serialised as `#< CLIXML`, and although only stdout is read as the
@@ -31,13 +33,14 @@ import (
 // path is a different database.
 const nodeProcessQuery = `$ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$found = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.Name -eq 'agenthub-node.exe' } |
-  ForEach-Object { [pscustomobject]@{ pid = [int]$_.ProcessId; commandLine = $_.CommandLine } })
+$found = @(Get-CimInstance -ClassName Win32_Process |
+  Where-Object { $_.Name -eq 'agenthallway-node.exe' -or $_.Name -eq 'agenthub-node.exe' } |
+  ForEach-Object { [pscustomobject]@{ pid = [int]$_.ProcessId; name = $_.Name; commandLine = $_.CommandLine } })
 ConvertTo-Json -Compress -InputObject $found`
 
-// listNodeProcesses finds every agenthub-node.exe, the arguments each was
-// started with, and the environment it runs with: the same processes
-// `taskkill /IM agenthub-node.exe` ends.
+// listNodeProcesses finds every agenthallway-node.exe and pre-rename
+// agenthub-node.exe, the arguments each was started with, and the environment
+// it runs with: the same processes stopNodeProcesses' taskkill ends.
 func listNodeProcesses(ctx context.Context) ([]nodeProcess, error) {
 	// -EncodedCommand so the script reaches PowerShell as written: nothing in
 	// it has to survive a second round of command-line quoting.
@@ -45,7 +48,7 @@ func listNodeProcesses(ctx context.Context) ([]nodeProcess, error) {
 	stdout, stderr, err := runCommandOutput(ctx, powerShellPath(os.Getenv),
 		"-NoProfile", "-NonInteractive", "-EncodedCommand", encoded)
 	if err != nil {
-		return nil, fmt.Errorf("list agenthub-node.exe processes: %w: %s", err,
+		return nil, fmt.Errorf("list the node processes: %w: %s", err,
 			strings.TrimSpace(strings.TrimSpace(stdout)+"\n"+strings.TrimSpace(stderr)))
 	}
 	found, err := parseNodeProcessList(stdout)
@@ -80,6 +83,7 @@ func parseNodeProcessList(output string) ([]nodeProcess, error) {
 	}
 	var rows []struct {
 		PID         int     `json:"pid"`
+		Name        string  `json:"name"`
 		CommandLine *string `json:"commandLine"`
 	}
 	if err := json.Unmarshal([]byte(output), &rows); err != nil {
@@ -90,9 +94,14 @@ func parseNodeProcessList(output string) ([]nodeProcess, error) {
 		// Empty for a process this user may not read, which is another user's
 		// — one taskkill would also try to end.
 		if row.CommandLine == nil || strings.TrimSpace(*row.CommandLine) == "" {
-			return nil, fmt.Errorf("the command line of agenthub-node.exe (pid %d) is not readable by this user", row.PID)
+			return nil, fmt.Errorf("the command line of %s (pid %d) is not readable by this user", row.Name, row.PID)
 		}
-		found = append(found, nodeProcess{PID: row.PID, Argv: splitWindowsCommandLine(*row.CommandLine)})
+		// PowerShell's -eq ignores case, and so does Windows.
+		legacy := strings.EqualFold(row.Name, legacyNodeExecutable)
+		if !legacy && !strings.EqualFold(row.Name, nodeExecutable) {
+			return nil, fmt.Errorf("the process list named %q (pid %d), which is not a node", row.Name, row.PID)
+		}
+		found = append(found, nodeProcess{PID: row.PID, Argv: splitWindowsCommandLine(*row.CommandLine), Legacy: legacy})
 	}
 	return found, nil
 }

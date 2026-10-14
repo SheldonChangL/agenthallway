@@ -31,7 +31,7 @@ const localNodeID = "node_local000000000000"
 
 func openStore(t *testing.T) *registry.Registry {
 	t.Helper()
-	store, err := registry.Open(context.Background(), filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := registry.Open(context.Background(), filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -27,6 +27,10 @@ let restartCalls = 0;
 // does when it cannot start the node on the database it is running on.
 let restartRefusal = null;
 const questions = [];
+// What the confirmation dialog answers, and every form InstallService was
+// handed.
+let confirmAnswer = false;
+const installs = [];
 
 configure({
   Overview: async () => ({ reachable: true, node: {}, sessions: [], nodes: [], peers: [], counts: {} }),
@@ -34,18 +38,22 @@ configure({
   Pairing: async () => ({ availability: "unknown", candidates: [] }), OpenPairing: noop, ClosePairing: noop,
   Inbox: noop, ClearInbox: noop, MCPConfig: noop, CopyText: noop, Outbound: noop, Wakes: noop,
   ServiceStatus: async () => ({ supported: false, installed: false, running: false, pid: 0, unitPath: "", logHint: "" }),
-  InstallService: noop, UninstallService: noop, NodeSettings: noop, SaveNodeSettings: noop,
+  InstallService: async (form) => {
+    installs.push(form);
+    return { command: "ah service install", output: "stopped and removed the pre-rename service local.agenthub.node" };
+  },
+  UninstallService: noop, NodeSettings: noop, SaveNodeSettings: noop,
   LocalAddresses: async () => [],
   RestartNode: async () => {
     restartCalls += 1;
     if (restartRefusal) throw restartRefusal;
-    return { command: "agenthub-node（停止後重新啟動）", output: "節點在 http://127.0.0.1:7462 回應了" };
+    return { command: "agenthallway-node（停止後重新啟動）", output: "節點在 http://127.0.0.1:7462 回應了" };
   },
 });
 const app = boot({ start: false });
 answerConfirms(document, (question) => {
   questions.push(question);
-  return false;
+  return confirmAnswer;
 });
 const hidden = (id) => el(id).classList.contains("hidden");
 
@@ -57,7 +65,7 @@ app.renderService();
 if (hidden("service-restart")) {
   failures.push("no way to restart the node on a platform with no background service");
 }
-if (el("service-restart").textContent !== "重新啟動 AgentHub") {
+if (el("service-restart").textContent !== "重新啟動 Agent Hallway") {
   failures.push(`the button on a running node reads "${el("service-restart").textContent}"`);
 }
 if (!hidden("service-open") || !hidden("service-uninstall")) {
@@ -67,7 +75,7 @@ if (!hidden("service-open") || !hidden("service-uninstall")) {
 // 2. Same platform, node not running: the same button, named for what it does.
 app.state.nodeReachable = false;
 app.renderService();
-if (hidden("service-restart") || el("service-restart").textContent !== "啟動 AgentHub") {
+if (hidden("service-restart") || el("service-restart").textContent !== "啟動 Agent Hallway") {
   failures.push(`a stopped node was not offered a start: hidden=${hidden("service-restart")} text=${el("service-restart").textContent}`);
 }
 
@@ -149,6 +157,88 @@ for (const [language, text, condition, consequence, breaks] of [
     failures.push(`${language}: "${consequence}" is not said inside "${condition}": ${text}`);
   }
 }
+
+// 8. F1. The background service is registered under the pre-rename name
+//    (ServiceStatus.legacy). It starts the old program, so it is said what it
+//    is, by its own name, and the step that replaces it is offered: register
+//    again, on the same database. Not a restart, which would start the old
+//    program again.
+const legacyUnit = "/Users/me/Library/LaunchAgents/local.agenthub.node.plist";
+const legacyStatus = {
+  supported: true, installed: true, running: true, pid: 2062, unitPath: legacyUnit, logHint: "/l",
+  legacy: true, dbPath: "/data/agenthub.db", dbPathKnown: true,
+};
+app.state.service = { ...legacyStatus };
+app.state.nodeReachable = true;
+app.renderService();
+const legacyBox = el("service-legacy");
+if (!legacyBox.textContent.includes(ZH["service.legacyRegistration"].replace("{unit}", legacyUnit))) {
+  failures.push(`the pre-rename registration is not named: ${legacyBox.textContent}`);
+}
+const reregister = legacyBox.children.find((child) => child && child.tagName === "button");
+if (!reregister || reregister.textContent !== ZH["service.legacyReregister"]) {
+  failures.push(`no re-registration is offered beside it: ${legacyBox.textContent}`);
+}
+if (!hidden("service-restart")) failures.push("a restart was offered for the pre-rename registration");
+if (el("service-pill-text").textContent !== ZH["service.pillLegacy"]) {
+  failures.push(`the pill reads ${el("service-pill-text").textContent} for the pre-rename registration`);
+}
+for (const running of [true, false]) {
+  const action = app.serviceQuickAction({ ...legacyStatus, running });
+  if (action !== "settings") failures.push(`one press on the pill would ${action} the pre-rename registration (running ${running})`);
+}
+
+// Pressing it asks first, naming the database it keeps — and a no does nothing.
+questions.length = 0;
+installs.length = 0;
+confirmAnswer = false;
+await reregister.onclick();
+await new Promise((resolve) => setTimeout(resolve, 0));
+if (questions.length !== 1 || !questions[0].includes("/data/agenthub.db")) {
+  failures.push(`the re-registration did not ask, naming the database: ${JSON.stringify(questions)}`);
+}
+if (installs.length !== 0) failures.push("a re-registration the owner declined was carried out");
+
+// A yes registers again on exactly that database: the path the old
+// registration names, nothing else (a reinstall that dropped it would be a
+// new identity).
+confirmAnswer = true;
+questions.length = 0;
+app.state.service = { ...legacyStatus };
+const registered = await app.reregisterLegacy(app.state.service);
+if (!registered || installs.length !== 1 || JSON.stringify(installs[0]) !== JSON.stringify({ dbPath: "/data/agenthub.db" })) {
+  failures.push(`re-registration installed ${JSON.stringify(installs)}, answered ${registered}`);
+}
+confirmAnswer = false;
+
+// The old registration's database cannot be read (Windows reads no task back):
+// nothing to carry over, so the form opens, with the note that says so, and
+// nothing is installed from the banner.
+installs.length = 0;
+questions.length = 0;
+app.state.service = { ...legacyStatus, dbPath: "", dbPathKnown: false };
+el("service-form").classList.add("hidden");
+const unknown = await app.reregisterLegacy(app.state.service);
+if (unknown || installs.length !== 0 || questions.length !== 0) {
+  failures.push(`a re-registration with an unknown database went ahead: ${JSON.stringify(installs)}, ${questions.length} questions`);
+}
+if (hidden("service-form") || el("service-db-note").textContent !== ZH["service.dbNoteUnknown"]) {
+  failures.push(`the unknown database did not open the form with its note: ${el("service-db-note").textContent}`);
+}
+
+// Both registrations on disk: the current one is described, and the old one
+// is still offered its removal.
+app.state.service = { ...legacyStatus, legacy: false, legacyAlsoInstalled: true, unitPath: "/u/local.agenthallway.node.plist" };
+app.renderService();
+if (!el("service-legacy").textContent.includes(ZH["service.legacyAlsoInstalled"])) {
+  failures.push(`a leftover pre-rename registration was not mentioned: ${el("service-legacy").textContent}`);
+}
+if (hidden("service-restart")) failures.push("the current registration lost its restart because an old one is beside it");
+
+// Neither: nothing is said.
+app.state.service = { ...legacyStatus, legacy: false, unitPath: "/u/local.agenthallway.node.plist" };
+app.renderService();
+if (el("service-legacy").textContent !== "") failures.push(`a current registration was described as pre-rename: ${el("service-legacy").textContent}`);
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(failure);

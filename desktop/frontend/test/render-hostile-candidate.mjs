@@ -246,13 +246,13 @@ if (!el("pairing-note").serialize().includes('class="claimed"')) {
 // differs and the sentence beside it names one. A chosen name described as
 // "read from this machine" is the same defect the display name had, one level
 // down: follow the instruction and the panel's own next sentence is false.
-if (!beforeOpening.includes("AgentHub 從這台機器讀來的")) {
+if (!beforeOpening.includes("Agent Hallway 從這台機器讀來的")) {
   failures.push(`the warning does not say the name was read from the machine: ${beforeOpening}`);
 }
 scope.state.localNameIsChosen = true;
 renderPairing();
 const chosen = el("pairing-note").serialize();
-if (chosen.includes("AgentHub 從這台機器讀來的")) {
+if (chosen.includes("Agent Hallway 從這台機器讀來的")) {
   failures.push("a chosen name is still described as one read off the machine");
 }
 if (!chosen.includes("這個名稱是你指定的")) {

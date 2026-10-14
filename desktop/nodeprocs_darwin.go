@@ -12,15 +12,24 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// listNodeProcesses finds every agenthub-node running as this user, the
-// arguments each was started with, and the environment it runs with.
+// kernelNameLength is MAXCOMLEN: how much of an executable's name macOS keeps
+// as the process's p_comm (P_comm is [MAXCOMLEN+1]byte with its NUL).
+const kernelNameLength = 16
+
+// listNodeProcesses finds every node running as this user —
+// agenthallway-node, and the pre-rename agenthub-node — the arguments each was
+// started with, and the environment it runs with.
 //
-// The same processes stopNodeProcesses' `pkill -x agenthub-node` ends: matched
-// by the kernel's process name, exactly. Only this user's, because those are
-// the only ones pkill run from this app can end. A zombie is not listed: it has
-// exited, holds nothing open, and has no arguments left to read — and a node
-// this app started and then stopped stays one until the app exits, because the
-// app released it rather than waiting on it.
+// The kernel's process name is where it starts, and only where it starts:
+// p_comm keeps 16 bytes, and agenthallway-node is 17, so what matches it is
+// any process whose name begins agenthallway-nod. Each one that does is
+// confirmed by the executable path kern.procargs2 begins with, whose last
+// element has to be the whole name (confirmNode); one that is not a node is
+// left out. Only this user's, because those are the only ones this app can
+// stop. A zombie is not listed: it has exited, holds nothing open, and has no
+// arguments left to read — and a node this app started and then stopped stays
+// one until the app exits, because the app released it rather than waiting on
+// it.
 //
 // The arguments come from kern.procargs2, which keeps each one whole. `ps`
 // would join them with spaces, and the node's own default database lives under
@@ -36,19 +45,23 @@ func listNodeProcesses(context.Context) ([]nodeProcess, error) {
 		if end := bytes.IndexByte(name, 0); end >= 0 {
 			name = name[:end]
 		}
-		if string(name) != nodeExecutable || process.Proc.P_stat == zombie {
+		if !nodeKernelName(string(name), kernelNameLength) || process.Proc.P_stat == zombie {
 			continue
 		}
 		pid := int(process.Proc.P_pid)
 		raw, err := unix.SysctlRaw("kern.procargs2", pid)
 		if err != nil {
-			return nil, fmt.Errorf("read the command line of agenthub-node (pid %d): %w", pid, err)
+			return nil, fmt.Errorf("read the command line of %s (pid %d): %w", name, pid, err)
 		}
-		argv, env, err := parseProcargs2(raw)
+		executable, argv, env, err := parseProcargs2(raw)
 		if err != nil {
-			return nil, fmt.Errorf("read the command line of agenthub-node (pid %d): %w", pid, err)
+			return nil, fmt.Errorf("read the command line of %s (pid %d): %w", name, pid, err)
 		}
-		found = append(found, nodeProcess{PID: pid, Argv: argv, Env: env})
+		legacy, ok := confirmNode(executable)
+		if !ok {
+			continue // someone else's program, whose name starts the same way
+		}
+		found = append(found, nodeProcess{PID: pid, Argv: argv, Env: env, Legacy: legacy})
 	}
 	return found, nil
 }
@@ -57,8 +70,9 @@ func listNodeProcesses(context.Context) ([]nodeProcess, error) {
 // waited for.
 const zombie = 5
 
-// parseProcargs2 reads one process's argv and environment out of
-// kern.procargs2: a native int argc; the executable path, NUL-terminated and
+// parseProcargs2 reads one process's executable path, argv and environment
+// out of kern.procargs2: a native int argc; the executable path (the path the
+// process was exec'd by, whatever its argv[0] says), NUL-terminated and
 // padded with NULs to a multiple of the pointer size; argc NUL-terminated
 // arguments; then the environment and, straight after it, the kernel's own
 // "apple" strings (pfz=, stack_guard=, ptr_munge=, main_stack=,
@@ -83,28 +97,29 @@ const zombie = 5
 // that is the empty string is one NUL, the same byte as the padding, and
 // skipping every NUL after the path would swallow it and read the first
 // environment entry as the last argument.
-func parseProcargs2(raw []byte) (argv, env []string, err error) {
+func parseProcargs2(raw []byte) (executable string, argv, env []string, err error) {
 	if len(raw) < 4 {
-		return nil, nil, fmt.Errorf("kern.procargs2 answered %d bytes", len(raw))
+		return "", nil, nil, fmt.Errorf("kern.procargs2 answered %d bytes", len(raw))
 	}
 	argc := int(int32(binary.LittleEndian.Uint32(raw[:4]))) // #nosec G115 -- the kernel's int, read back as one
 	rest := raw[4:]
 	// Every argument is at least its NUL, so argc cannot exceed what is left.
 	if argc < 0 || argc > len(rest) {
-		return nil, nil, fmt.Errorf("kern.procargs2 says %d arguments in %d bytes", argc, len(rest))
+		return "", nil, nil, fmt.Errorf("kern.procargs2 says %d arguments in %d bytes", argc, len(rest))
 	}
 	end := bytes.IndexByte(rest, 0)
 	if end < 0 {
-		return nil, nil, fmt.Errorf("kern.procargs2 has no end to its executable path")
+		return "", nil, nil, fmt.Errorf("kern.procargs2 has no end to its executable path")
 	}
+	executable = string(rest[:end])
 	const word = 8 // the pointer size of every Mac this app runs on
 	padded := (end + 1 + word - 1) / word * word
 	if padded > len(rest) {
-		return nil, nil, fmt.Errorf("kern.procargs2 ends inside the padding after its executable path")
+		return "", nil, nil, fmt.Errorf("kern.procargs2 ends inside the padding after its executable path")
 	}
 	for _, b := range rest[end:padded] {
 		if b != 0 {
-			return nil, nil, fmt.Errorf("kern.procargs2 has no padding after its executable path")
+			return "", nil, nil, fmt.Errorf("kern.procargs2 has no padding after its executable path")
 		}
 	}
 	rest = rest[padded:]
@@ -112,7 +127,7 @@ func parseProcargs2(raw []byte) (argv, env []string, err error) {
 	for len(argv) < argc {
 		end := bytes.IndexByte(rest, 0)
 		if end < 0 {
-			return nil, nil, fmt.Errorf("kern.procargs2 ended after %d of %d arguments", len(argv), argc)
+			return "", nil, nil, fmt.Errorf("kern.procargs2 ended after %d of %d arguments", len(argv), argc)
 		}
 		argv = append(argv, string(rest[:end]))
 		rest = rest[end+1:]
@@ -123,5 +138,5 @@ func parseProcargs2(raw []byte) (argv, env []string, err error) {
 			env = append(env, string(entry))
 		}
 	}
-	return argv, env, nil
+	return executable, argv, env, nil
 }

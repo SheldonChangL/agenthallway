@@ -133,7 +133,7 @@ func TestAnAnnouncementIsHeardFromTheAddressItNames(t *testing.T) {
 			for len(heard) > 0 {
 				<-heard
 			}
-			err := AnnounceOffering(ctx, group, "node_egress00000000", "agenthub-egress", 7463,
+			err := AnnounceOffering(ctx, group, "node_egress00000000", "agenthallway-egress", 7463,
 				[]netip.Addr{address}, Offer{DisplayName: "egress", Platform: "test",
 					Fingerprint: "1223 03EA 5E96 543A 2DD8 BFEA"})
 			if err != nil {
@@ -173,7 +173,7 @@ func TestAnAnnouncementIsHeardFromTheAddressItNames(t *testing.T) {
 // address look like a successful announcement.
 func TestAnnouncingFromAnAddressThisMachineDoesNotHaveIsAnError(t *testing.T) {
 	err := AnnounceOffering(context.Background(), "224.0.0.251:15356",
-		"node_absent000000000", "agenthub-absent", 7463,
+		"node_absent000000000", "agenthallway-absent", 7463,
 		[]netip.Addr{netip.MustParseAddr("203.0.113.99")}, Offer{
 			DisplayName: "absent", Platform: "test",
 			Fingerprint: "1223 03EA 5E96 543A 2DD8 BFEA"})
@@ -221,7 +221,7 @@ func TestAnAnnouncementLeavesByTheInterfaceHoldingItsAddress(t *testing.T) {
 			defer func() { _ = listener.Close() }()
 
 			if err := AnnounceOffering(context.Background(), group,
-				"node_iface000000000", "agenthub-iface", 7463, []netip.Addr{address},
+				"node_iface000000000", "agenthallway-iface", 7463, []netip.Addr{address},
 				Offer{DisplayName: "iface", Platform: "test",
 					Fingerprint: "1223 03EA 5E96 543A 2DD8 BFEA"}); err != nil {
 				t.Fatalf("AnnounceOffering from %v: %v", address, err)
@@ -275,7 +275,7 @@ func TestAnAnnouncementRefusesWhatItCannotSendCorrectly(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := AnnounceOffering(context.Background(), "224.0.0.251:15359",
-				"node_refuse000000000", "agenthub-refuse", 7463, testCase.addresses,
+				"node_refuse000000000", "agenthallway-refuse", 7463, testCase.addresses,
 				Offer{DisplayName: "refuse", Platform: "test",
 					Fingerprint: "1223 03EA 5E96 543A 2DD8 BFEA"})
 			if err == nil {

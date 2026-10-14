@@ -25,8 +25,16 @@ func (m Manager) InstalledCommand() (string, []string) {
 	if err != nil {
 		return "", nil
 	}
-	// #nosec G304 -- the path is this manager's own unit path, built from the
-	// label and the user's home, and is the file this package writes.
+	return m.commandIn(path)
+}
+
+// commandIn is InstalledCommand for the unit at path, which is this package's
+// current unit or the one a pre-rename build wrote: the two are the same
+// format under different names.
+func (m Manager) commandIn(path string) (string, []string) {
+	// #nosec G304 -- the path is one of this manager's own unit paths, built
+	// from a constant label and the user's home, and is a file this package
+	// (or its pre-rename build) writes.
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return "", nil

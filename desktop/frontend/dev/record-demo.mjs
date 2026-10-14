@@ -103,7 +103,7 @@ await still("share-panel.png", "", async (page) => {
   await page.waitForSelector("#audience-modal:not(.hidden)");
 });
 
-const frameDir = mkdtempSync(join(tmpdir(), "agenthub-demo-"));
+const frameDir = mkdtempSync(join(tmpdir(), "agenthallway-demo-"));
 const context = await browser.newContext({ viewport: { width: W, height: H + STRIP }, colorScheme: "dark" });
 const page = await context.newPage();
 await page.goto(url());

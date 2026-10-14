@@ -10,10 +10,10 @@ import (
 	"testing"
 )
 
-// fakeMCPBinary puts a file where AGENTHUB_MCP points and returns its path.
+// fakeMCPBinary puts a file where AGENTHALLWAY_MCP points and returns its path.
 func fakeMCPBinary(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "agenthub-mcp")
+	path := filepath.Join(t.TempDir(), "agenthallway-mcp")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func watchClipboard(t *testing.T, err error) *[]string {
 
 func TestMCPConfigNamesTheBinaryAndTheSession(t *testing.T) {
 	binary := fakeMCPBinary(t)
-	t.Setenv("AGENTHUB_MCP", binary)
+	t.Setenv("AGENTHALLWAY_MCP", binary)
 	written := watchClipboard(t, nil)
 
 	app := &App{ctx: context.Background(), client: newClient(defaultNodeURL), url: defaultNodeURL}
@@ -55,9 +55,9 @@ func TestMCPConfigNamesTheBinaryAndTheSession(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Text), &decoded); err != nil {
 		t.Fatalf("the snippet is not JSON: %v\n%s", err, result.Text)
 	}
-	entry, ok := decoded.Servers["agenthub"]
+	entry, ok := decoded.Servers["agenthallway"]
 	if !ok {
-		t.Fatalf("no agenthub server in the snippet:\n%s", result.Text)
+		t.Fatalf("no agenthallway server in the snippet:\n%s", result.Text)
 	}
 	if !filepath.IsAbs(entry.Command) {
 		t.Errorf("command %q is not absolute; a config file is read from wherever the agent runs", entry.Command)
@@ -79,12 +79,12 @@ func TestMCPConfigNamesTheBinaryAndTheSession(t *testing.T) {
 	}
 }
 
-// The default is pinned too. `agenthub-mcp` reads AGENTHUB_URL before falling
+// The default is pinned too. `agenthallway-mcp` reads AGENTHALLWAY_URL before falling
 // back to its own default, so a snippet with no -url does not say "the default
 // node" — it says "whichever node the environment Claude Code inherited names",
 // which is how a config for a session on this node ends up dialling another.
 func TestMCPConfigAlwaysPinsTheNodeURL(t *testing.T) {
-	t.Setenv("AGENTHUB_MCP", fakeMCPBinary(t))
+	t.Setenv("AGENTHALLWAY_MCP", fakeMCPBinary(t))
 	watchClipboard(t, nil)
 
 	for _, nodeURL := range []string{"http://127.0.0.1:7999", defaultNodeURL} {
@@ -100,16 +100,16 @@ func TestMCPConfigAlwaysPinsTheNodeURL(t *testing.T) {
 }
 
 func TestMCPConfigSaysWhereItLookedForTheServer(t *testing.T) {
-	t.Setenv("AGENTHUB_MCP", filepath.Join(t.TempDir(), "not-here"))
+	t.Setenv("AGENTHALLWAY_MCP", filepath.Join(t.TempDir(), "not-here"))
 	t.Setenv("PATH", t.TempDir())
 	watchClipboard(t, nil)
 
 	app := &App{ctx: context.Background(), client: newClient(defaultNodeURL), url: defaultNodeURL}
 	_, err := app.MCPConfig("claude:x")
 	if err == nil {
-		t.Fatal("a missing agenthub-mcp produced a config anyway")
+		t.Fatal("a missing agenthallway-mcp produced a config anyway")
 	}
-	for _, want := range []string{"agenthub-mcp", "AGENTHUB_MCP", "looked"} {
+	for _, want := range []string{"agenthallway-mcp", "AGENTHALLWAY_MCP", "looked"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
@@ -149,7 +149,7 @@ func TestMCPConfigRefusesAnEmptySession(t *testing.T) {
 // own directory, so a relative name must not survive into it.
 func TestLocateBinaryAnswersAbsolutely(t *testing.T) {
 	directory := t.TempDir()
-	path := filepath.Join(directory, "agenthub-mcp")
+	path := filepath.Join(directory, "agenthallway-mcp")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -161,8 +161,8 @@ func TestLocateBinaryAnswersAbsolutely(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AGENTHUB_MCP", relative)
-	found, err := locateBinary("agenthub-mcp", "AGENTHUB_MCP")
+	t.Setenv("AGENTHALLWAY_MCP", relative)
+	found, err := locateBinary("agenthallway-mcp", "MCP")
 	if err != nil {
 		t.Fatal(err)
 	}

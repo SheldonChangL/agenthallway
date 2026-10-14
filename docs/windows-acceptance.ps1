@@ -1,10 +1,10 @@
 ﻿<#
-    AgentHub - Windows real-host acceptance (issue #21)
+    Agent Hallway - Windows real-host acceptance (issue #21)
 
     WHY THIS EXISTS
     ---------------
     On Windows a file mode is not a permission: Go's Chmod only sets the
-    read-only attribute and cannot produce an owner-only ACL. So AgentHub
+    read-only attribute and cannot produce an owner-only ACL. So Agent Hallway
     encrypts its Ed25519 node key with DPAPI, bound to the current Windows
     user. That code compiles in CI for windows/amd64 and windows/arm64, but it
     has never once run on a real Windows machine. A cross-build proves the
@@ -130,7 +130,7 @@ if ($null -eq $git.Code -or $git.Code -ne 0) {
 }
 Write-Host "  Git        : $($git.Output)"
 
-$work = Join-Path $env:TEMP ("agenthub-acceptance-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$work = Join-Path $env:TEMP ("agenthallway-acceptance-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 Write-Host "  Workspace  : $work"
 
@@ -153,7 +153,7 @@ $emptyCodex = Join-Path $work 'empty-codex'
 New-Item -ItemType Directory -Path $emptyClaude -Force | Out-Null
 New-Item -ItemType Directory -Path $emptyCodex -Force | Out-Null
 
-$keepDir = Join-Path ([Environment]::GetFolderPath('Desktop')) 'agenthub-acceptance'
+$keepDir = Join-Path ([Environment]::GetFolderPath('Desktop')) 'agenthallway-acceptance'
 
 try {
 
@@ -193,14 +193,14 @@ if ($race.Code -eq 0) {
     Show-Tail $race.Output
 }
 
-$exe = Join-Path $work 'agenthub-node.exe'
-$buildNode = Invoke-Native { go build -o $exe ./cmd/agenthub-node }
+$exe = Join-Path $work 'agenthallway-node.exe'
+$buildNode = Invoke-Native { go build -o $exe ./cmd/agenthallway-node }
 if ($null -eq $buildNode.Code -or $buildNode.Code -ne 0) {
-    Report 'build agenthub-node.exe' 'FAIL'
+    Report 'build agenthallway-node.exe' 'FAIL'
     Show-Tail $buildNode.Output
     throw 'cannot build the node; nothing further can run'
 }
-Report 'build agenthub-node.exe' 'PASS'
+Report 'build agenthallway-node.exe' 'PASS'
 
 # ------------------------------------------------------------- node control
 
@@ -265,7 +265,7 @@ function Start-NodeAndWait {
 Section 'The node key on disk'
 $dataDir = Join-Path $work 'data'
 New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
-$dbPath = Join-Path $dataDir 'agenthub.db'
+$dbPath = Join-Path $dataDir 'agenthallway.db'
 $keyPath = Join-Path $dataDir 'node.key'
 
 $first = Start-NodeAndWait -Db $dbPath -Port 17462
@@ -346,7 +346,7 @@ if (-not $haveProtectedData) {
     Report 'Windows can decrypt the payload' 'SKIP' `
         'System.Security.Cryptography.ProtectedData is unavailable here; please re-run under powershell.exe (5.1)'
     Report 'the plaintext seed is absent from the file' 'SKIP' 'depends on the check above'
-    Report 'the blob is bound to AgentHub-specific entropy' 'SKIP' 'depends on the check above'
+    Report 'the blob is bound to Agent Hallway-specific entropy' 'SKIP' 'depends on the check above'
 } else {
     # keyEntropy in keystore_windows.go
     $entropy = [System.Text.Encoding]::ASCII.GetBytes('agenthub.node.key.v1')
@@ -361,7 +361,7 @@ if (-not $haveProtectedData) {
 
     # CryptUnprotectData ignores the scope flag, so a blob protected for the
     # LOCAL_MACHINE scope would decrypt here too. What this proves is that the
-    # payload is a genuine DPAPI blob carrying AgentHub's entropy - that it is
+    # payload is a genuine DPAPI blob carrying Agent Hallway's entropy - that it is
     # bound to the USER is what manual check (a) at the end proves.
     $decrypted = $false
     if ($null -eq $seed) {
@@ -394,21 +394,21 @@ if (-not $haveProtectedData) {
     }
 
     # Entropy is what stops a blob lifted from this file being decrypted by a
-    # caller who does not know it came from AgentHub.
+    # caller who does not know it came from Agent Hallway.
     #
     # Gated on the decryption above having worked: if the payload is not a DPAPI
     # blob at all then decrypting it WITHOUT the entropy fails too, and an
     # ungated check would report that failure as a pass.
     if (-not $decrypted) {
-        Report 'the blob is bound to AgentHub-specific entropy' 'SKIP' `
+        Report 'the blob is bound to Agent Hallway-specific entropy' 'SKIP' `
             'nothing decrypted with the entropy, so binding to it cannot be tested'
     } else {
         $withoutEntropy = $null
         try { $withoutEntropy = [System.Security.Cryptography.ProtectedData]::Unprotect($payload, $null, $scope) } catch { }
         if ($null -eq $withoutEntropy) {
-            Report 'the blob is bound to AgentHub-specific entropy' 'PASS' 'decryption without the entropy is refused'
+            Report 'the blob is bound to Agent Hallway-specific entropy' 'PASS' 'decryption without the entropy is refused'
         } else {
-            Report 'the blob is bound to AgentHub-specific entropy' 'FAIL' `
+            Report 'the blob is bound to Agent Hallway-specific entropy' 'FAIL' `
                 'the payload decrypts with no entropy, so any process could read it'
             [Array]::Clear($withoutEntropy, 0, $withoutEntropy.Length)
         }
@@ -566,7 +566,7 @@ if ($filesystem -and $filesystem -ne 'NTFS') {
     $racePorts = 17492, 17494, 17496
     $raceNodes = @()
     foreach ($port in $racePorts) {
-        $raceNodes += New-Node -Db (Join-Path $raceDir "agenthub-$port.db") -Port $port
+        $raceNodes += New-Node -Db (Join-Path $raceDir "agenthallway-$port.db") -Port $port
     }
     $fingerprints = @()
     foreach ($node in $raceNodes) {
@@ -613,7 +613,7 @@ if (-not $ScanRealProviders) {
         "reading session metadata from $claudeRoot and $codexRoot (titles, working directories; no conversation content)"
     $scanDir = Join-Path $work 'scan'
     New-Item -ItemType Directory -Path $scanDir -Force | Out-Null
-    $node = Start-NodeAndWait -Db (Join-Path $scanDir 'agenthub.db') -Port 17502 `
+    $node = Start-NodeAndWait -Db (Join-Path $scanDir 'agenthallway.db') -Port 17502 `
         -ClaudeRoot $claudeRoot -CodexRoot $codexRoot
     if (-not $node.Alive) {
         Show-Tail (Stop-Node $node)
@@ -653,7 +653,7 @@ if (-not $ScanRealProviders) {
 Section 'Cross-user and cross-machine (manual)'
 New-Item -ItemType Directory -Path $keepDir -Force | Out-Null
 Copy-Item $keyPath (Join-Path $keepDir 'node.key') -Force
-Copy-Item $exe (Join-Path $keepDir 'agenthub-node.exe') -Force
+Copy-Item $exe (Join-Path $keepDir 'agenthallway-node.exe') -Force
 Report 'the files for the two manual checks were placed on your Desktop' 'INFO' $keepDir
 Write-Host @"
         These two checks are the whole point of DPAPI, and one machine with one
@@ -661,10 +661,10 @@ Write-Host @"
 
         (a) ANOTHER USER on this machine
             - log in as a different Windows user
-            - copy the folder 'agenthub-acceptance' from the first user's
+            - copy the folder 'agenthallway-acceptance' from the first user's
               Desktop to somewhere that user can read
             - open PowerShell there and run:
-                  .\agenthub-node.exe -db .\agenthub.db
+                  .\agenthallway-node.exe -db .\agenthallway.db
             - EXPECTED: it refuses to start, with a message containing
               "could not be decrypted for the current Windows user".
               If it starts and prints a fingerprint, that is a FAIL - please

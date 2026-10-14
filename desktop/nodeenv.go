@@ -10,8 +10,8 @@ import (
 
 // Where a node puts what it was not told where to put (#205).
 //
-// A node started without --db opens the database cmd/agenthub-node/main.go
-// defaultPaths names: os.UserConfigDir()/agenthub/agenthub.db, with the Claude
+// A node started without --db opens the database cmd/agenthallway-node/main.go
+// defaultPaths names: os.UserConfigDir()/agenthallway/agenthallway.db, with the Claude
 // and Codex roots under os.UserHomeDir(). Both read the node's own environment
 // — HOME on macOS; XDG_CONFIG_HOME, then HOME, on Linux; APPDATA and
 // USERPROFILE on Windows — and the node's environment is not this app's. A node
@@ -43,7 +43,7 @@ func (p nodePaths) pathFor(flag string) string {
 	return ""
 }
 
-// nodeDefaultPaths is cmd/agenthub-node/main.go defaultPaths, evaluated
+// nodeDefaultPaths is cmd/agenthallway-node/main.go defaultPaths, evaluated
 // against an environment that need not be this process's: os.UserHomeDir and
 // os.UserConfigDir as the Go standard library spells them for goos, with
 // getenv in place of os.Getenv.
@@ -57,10 +57,23 @@ func nodeDefaultPaths(goos string, getenv func(string) string) (nodePaths, error
 		return nodePaths{}, err
 	}
 	return nodePaths{
-		database: filepath.Join(config, "agenthub", "agenthub.db"),
+		database: filepath.Join(config, productSlug, productSlug+".db"),
 		claude:   filepath.Join(home, ".claude"),
 		codex:    filepath.Join(home, ".codex"),
 	}, nil
+}
+
+// legacyDatabase is where a pre-rename node (v0.1.x, agenthub-node) keeps its
+// database when its command line does not name one: os.UserConfigDir()/
+// agenthub/agenthub.db, under the same environment rules as nodeDefaultPaths.
+// A v0.2 node moves it to nodeDefaultPaths' database on its first start
+// (internal/datadir); until then, it is what a running legacy node has open.
+func legacyDatabase(goos string, getenv func(string) string) (string, error) {
+	config, err := userConfigDir(goos, getenv)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(config, productLegacySlug, productLegacySlug+".db"), nil
 }
 
 // userHomeDir is os.UserHomeDir for the platforms this app ships on.
@@ -130,6 +143,13 @@ func environmentLookup(goos string, environment []string) func(string) string {
 // environment — which the node this app starts does.
 func appDefaultPaths() (nodePaths, error) {
 	return nodeDefaultPaths(runtime.GOOS, os.Getenv)
+}
+
+// appDefaultLegacyDatabase is legacyDatabase for this app's environment: the
+// path a node started from here takes for the pre-rename default, and so
+// moves to its own default rather than opening it as a database of its own.
+func appDefaultLegacyDatabase() (string, error) {
+	return legacyDatabase(runtime.GOOS, os.Getenv)
 }
 
 // nodeEnvironmentFallback is whether, when the running node's environment

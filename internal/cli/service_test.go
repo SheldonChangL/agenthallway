@@ -45,7 +45,7 @@ func useFakeManager(t *testing.T, goos string) (home string, runner *recordingRu
 
 func fakeNodeBinary(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "agenthub-node")
+	path := filepath.Join(t.TempDir(), "agenthallway-node")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestServiceInstallCarriesTheNodesFlagsByTheNodesNames(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	args := []string{"--url", server.URL, "service", "install",
 		"--node-binary", node,
-		"--db", "data/agenthub.db", // relative on purpose
+		"--db", "data/agenthallway.db", // relative on purpose
 		"--peer-listen", "122.122.122.1:7463", "--peer-listen", "192.168.1.10:7463",
 		"--allow-lan", "--discover",
 		"--treat-as-private", "122.122.0.0/16", "--treat-as-private", "10.9.0.0/16",
@@ -86,7 +86,7 @@ func TestServiceInstallCarriesTheNodesFlagsByTheNodesNames(t *testing.T) {
 	wd, _ := os.Getwd()
 	wantArgs := []string{
 		node,
-		"--db", filepath.Join(wd, "data", "agenthub.db"),
+		"--db", filepath.Join(wd, "data", "agenthallway.db"),
 		"--peer-listen", "122.122.122.1:7463", "--peer-listen", "192.168.1.10:7463",
 		"--allow-lan=true", "--discover=true",
 		"--treat-as-private", "122.122.0.0/16", "--treat-as-private", "10.9.0.0/16",
@@ -309,7 +309,7 @@ func TestServiceUnknownSubcommandIsRefused(t *testing.T) {
 // this test rather than pass it.
 func TestServiceRunNodeStartsTheNodeAndReturns(t *testing.T) {
 	directory := t.TempDir()
-	node := filepath.Join(directory, "agenthub-node")
+	node := filepath.Join(directory, "agenthallway-node")
 	script := "#!/bin/sh\necho started with: \"$@\"\n"
 	if err := os.WriteFile(node, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -424,7 +424,7 @@ func TestServiceInstallSaysBakedInFlagsOverrideSavedSettings(t *testing.T) {
 	binary := fakeNodeBinary(t)
 	var stdout, stderr bytes.Buffer
 	code := Run(context.Background(), []string{"--url", node.URL, "service", "install",
-		"--db", filepath.Join(t.TempDir(), "agenthub.db"), "--node-binary", binary, "--discover"}, &stdout, &stderr)
+		"--db", filepath.Join(t.TempDir(), "agenthallway.db"), "--node-binary", binary, "--discover"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
 	}
@@ -439,10 +439,107 @@ func TestServiceInstallSaysBakedInFlagsOverrideSavedSettings(t *testing.T) {
 	// every install is a note nobody reads.
 	var plain, plainErr bytes.Buffer
 	if code := Run(context.Background(), []string{"--url", node.URL, "service", "install",
-		"--db", filepath.Join(t.TempDir(), "agenthub.db"), "--node-binary", binary}, &plain, &plainErr); code != 0 {
+		"--db", filepath.Join(t.TempDir(), "agenthallway.db"), "--node-binary", binary}, &plain, &plainErr); code != 0 {
 		t.Fatalf("exit = %d, stderr = %q", code, plainErr.String())
 	}
 	if strings.Contains(plain.String(), "overrides anything saved later") {
 		t.Errorf("a --db-only install still warned about baked-in flags:\n%s", plain.String())
+	}
+}
+
+// writeLegacyPlist puts a v0.1.x launchd job in the fake home: this package's
+// plist under the pre-rename label, starting the pre-rename node.
+func writeLegacyPlist(t *testing.T, home string, args ...string) {
+	t.Helper()
+	plist, err := service.LaunchdPlist(service.Config{NodeBinary: "/old/agenthub-node", Args: args, LogPath: "/old/node.log"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := strings.Replace(string(plist), service.Label, service.LegacyLabel, 1)
+	path := filepath.Join(home, "Library", "LaunchAgents", service.LegacyLabel+".plist")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// C1. A machine with only the pre-rename registration is told so, by the old
+// name and with what replaces it — not "installed", and not "not installed".
+func TestServiceStatusSaysWhenOnlyTheOldNameIsRegistered(t *testing.T) {
+	home, _ := useFakeManager(t, "darwin")
+	writeLegacyPlist(t, home, "--db", "/data/agenthub.db")
+	var stdout, stderr bytes.Buffer
+	if code := Run(context.Background(), []string{"--url", "http://127.0.0.1:1", "service", "status"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
+	}
+	want := `background service: registered under the pre-rename name local.agenthub.node (runs /old/agenthub-node) — "ah service install" replaces it and keeps its database`
+	if !strings.Contains(stdout.String(), want) {
+		t.Errorf("status output:\n%s\nwant the line:\n%s", stdout.String(), want)
+	}
+
+	stdout.Reset()
+	if code := Run(context.Background(), []string{"--url", "http://127.0.0.1:1", "--json", "service", "status"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
+	}
+	var decoded struct {
+		Service struct {
+			Installed bool
+			Legacy    bool
+			Arguments []string
+		} `json:"service"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatalf("json status is not JSON: %v\n%s", err, stdout.String())
+	}
+	// install.sh reads Installed and Arguments to carry --db into the
+	// reinstall that replaces the old registration.
+	if !decoded.Service.Installed || !decoded.Service.Legacy || service.ArgumentValue(decoded.Service.Arguments, "db") != "/data/agenthub.db" {
+		t.Errorf("json status:\n%s", stdout.String())
+	}
+
+	// Both: the current one is described, and the old one is a note. (A node
+	// that answers, so that the install does not wait out its budget.)
+	server := nodeThatAnswers(t)
+	if code := Run(context.Background(), []string{"--url", server.URL, "service", "install", "--node-binary", fakeNodeBinary(t),
+		"--db", "/data/agenthub.db"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("install exit = %d, stderr = %q", code, stderr.String())
+	}
+	writeLegacyPlist(t, home)
+	stdout.Reset()
+	if code := Run(context.Background(), []string{"--url", "http://127.0.0.1:1", "service", "status"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
+	}
+	if out := stdout.String(); !strings.Contains(out, "installed but not running") ||
+		!strings.Contains(out, "note: the pre-rename service local.agenthub.node is still registered") {
+		t.Errorf("status output with both registrations:\n%s", out)
+	}
+}
+
+// C2. A new ah never registers the pre-rename node: a stale binary in a fresh
+// unit is how an upgrade would end up running the old node under the new name.
+func TestServiceInstallLooksOnlyForTheNewNodeBinary(t *testing.T) {
+	useFakeManager(t, "darwin")
+	path := t.TempDir()
+	t.Setenv("PATH", path)
+	old := filepath.Join(path, "agenthub-node")
+	if err := os.WriteFile(old, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	beside := filepath.Join(filepath.Dir(self), "agenthub-node")
+	if err := os.WriteFile(beside, []byte("#!/bin/sh\n"), 0o755); err == nil {
+		t.Cleanup(func() { _ = os.Remove(beside) })
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Run(context.Background(), []string{"service", "install"}, &stdout, &stderr); code == 0 {
+		t.Fatalf("install registered something with only agenthub-node available:\n%s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "agenthallway-node not found") {
+		t.Errorf("stderr = %q, want it to name agenthallway-node", stderr.String())
 	}
 }

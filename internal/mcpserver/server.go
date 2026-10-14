@@ -1,4 +1,4 @@
-// Package mcpserver exposes one AgentHub session to the agent that launched it.
+// Package mcpserver exposes one Agent Hallway session to the agent that launched it.
 //
 // The surface is deliberately four read-and-message tools and nothing else.
 // There is no file, shell, or process tool here, and there never should be: the
@@ -103,10 +103,10 @@ func (s *server) MCPServer() *mcp.Server {
 	capabilities := &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}}
 	capabilities.Experimental = s.capabilities()
 	sdk := mcp.NewServer(
-		&mcp.Implementation{Name: "agenthub", Version: Version()},
+		&mcp.Implementation{Name: "agenthallway", Version: Version()},
 		&mcp.ServerOptions{
 			Capabilities: capabilities,
-			Instructions: "AgentHub exposes coding-agent sessions on this machine and on nodes " +
+			Instructions: "Agent Hallway exposes coding-agent sessions on this machine and on nodes " +
 				"paired with it. What it returns about another node is what that node sent: its " +
 				"owner chose which sessions to publish, and the sending node wrote the details. " +
 				"Fields are checked to be what they claim — a status is a status, a directory is a " +
@@ -238,7 +238,7 @@ func (s *server) pushWakes(ctx context.Context, transport *injectingTransport) {
 			// Somebody else is serving this session. Polling on would displace
 			// them in turn, and the two would take it from each other for as
 			// long as both ran.
-			log.Printf("agenthub: not waiting for messages: %v", err)
+			log.Printf("agenthallway: not waiting for messages: %v", err)
 			return
 		case errors.Is(err, ErrWakeUnavailable):
 			// The node has no wake support, or does not know this session.
@@ -246,7 +246,7 @@ func (s *server) pushWakes(ctx context.Context, transport *injectingTransport) {
 			// longer rather than giving up for the life of the process — a
 			// node brought back with -auto-wake would otherwise leave this
 			// server silent until the agent itself restarted.
-			log.Printf("agenthub: waiting for messages: %v", err)
+			log.Printf("agenthallway: waiting for messages: %v", err)
 			select {
 			case <-ctx.Done():
 				return
@@ -254,7 +254,7 @@ func (s *server) pushWakes(ctx context.Context, transport *injectingTransport) {
 			}
 			continue
 		case err != nil:
-			log.Printf("agenthub: waiting for messages: %v", err)
+			log.Printf("agenthallway: waiting for messages: %v", err)
 			select {
 			case <-ctx.Done():
 				return
@@ -271,7 +271,7 @@ func (s *server) pushWakes(ctx context.Context, transport *injectingTransport) {
 		}); err != nil {
 			// The message stays in the node's inbox: nothing here deletes it,
 			// and the node recorded the handoff, not the delivery.
-			log.Printf("agenthub: could not push message %s: %v", push.MessageID, err)
+			log.Printf("agenthallway: could not push message %s: %v", push.MessageID, err)
 		}
 	}
 }

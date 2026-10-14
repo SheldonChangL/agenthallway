@@ -1,9 +1,9 @@
 ---
-name: agenthub-watch
-description: Poll this session's AgentHub inbox on a schedule and handle what arrives from the agent on the other machine — answer questions and make proposals, never change code or the shared contract without the owner's approval. Use when the owner says to watch, poll, or sync with the other machine's agent, or invokes /agenthub-watch.
+name: agenthallway-watch
+description: Poll this session's Agent Hallway inbox on a schedule and handle what arrives from the agent on the other machine — answer questions and make proposals, never change code or the shared contract without the owner's approval. Use when the owner says to watch, poll, or sync with the other machine's agent, or invokes /agenthallway-watch.
 ---
 
-# agenthub-watch
+# agenthallway-watch
 
 Messages between machines do not wake a Claude Code session; they wait in an inbox. This
 skill turns that inbox into a scheduled loop with a fixed protocol, so the two sides run the
@@ -11,7 +11,7 @@ same rules from version control instead of a prompt somebody typed once.
 
 ## 0. Locate `ah`
 
-`AGENTHUB_AH` if set, else `ah` on PATH, else `<agenthub repo>/bin/ah`. If none exists, stop
+`AGENTHALLWAY_AH` (or the older `AGENTHUB_AH`) if set, else `ah` on PATH, else `<repo>/bin/ah`. If none exists, stop
 and say so; do not build it silently.
 
 ## 1. Identify this session (once)

@@ -70,6 +70,34 @@ type ServiceStatus struct {
 	// healthy shape: the node remembers its own configuration and the unit says
 	// only where the database is.
 	PinnedSettings []string `json:"pinnedSettings,omitempty"`
+
+	// Legacy is true when the registration described is the pre-rename one
+	// (local.agenthub.node, agenthub-node, "AgentHub Node") and there is no
+	// current one: UnitPath, DBPath and the running state are the old
+	// registration's, which starts the old node. Re-registering — `ah service
+	// install` with the same database — replaces it.
+	Legacy bool `json:"legacy"`
+	// LegacyAlsoInstalled is true when the current registration is described
+	// and the pre-rename one is still on disk beside it.
+	LegacyAlsoInstalled bool `json:"legacyAlsoInstalled"`
+}
+
+// legacyServiceNames are internal/service's LegacyLabel, LegacyUnitName and
+// LegacyTaskName: what each platform's service manager calls the pre-rename
+// registration. Copied, because this module cannot import that one;
+// TestLegacyServiceNamesMatchTheServicePackage reads the original.
+var legacyServiceNames = map[string]string{
+	"darwin":  "local.agenthub.node",
+	"linux":   "agenthub-node",
+	"windows": "AgentHub Node",
+}
+
+// legacyRegistrationError is what a restart says on a machine whose only
+// registration is the pre-rename one: the words internal/service's Restart
+// uses for the same refusal.
+func legacyRegistrationError(goos string) error {
+	return fmt.Errorf("the background service is registered under the pre-rename name %s; "+
+		"`ah service install` replaces it and keeps its database (pass --db if it had one)", legacyServiceNames[goos])
 }
 
 // ServiceResult is what an install or uninstall said.
@@ -117,26 +145,28 @@ var findTool = func() (string, error) {
 }
 
 func locateTool() (string, error) {
-	return locateBinary("ah", "AGENTHUB_AH")
+	return locateBinary("ah", "AH")
 }
 
-// findNode locates the agenthub-node the installed service should run, the same
+// findNode locates the agenthallway-node the installed service should run, the same
 // way and in the same places as ah. A variable so tests can stand in for it.
 //
 // The install has to name it. Left to itself `ah service install` falls back to
-// exec.LookPath("agenthub-node") and writes whatever that finds into the
+// exec.LookPath("agenthallway-node") and writes whatever that finds into the
 // ExecStart of a launchd job or a systemd unit — started at boot, every boot.
 // Taking PATH out of this file only moved that decision one hop down; the GUI
-// already knows which agenthub-node it means, because the packaging step put it
+// already knows which agenthallway-node it means, because the packaging step put it
 // beside this executable, so it says so.
 var findNode = func() (string, error) {
-	return locateBinary("agenthub-node", "AGENTHUB_NODE")
+	return locateBinary(productNodeBinary, "NODE")
 }
 
-// locateBinary is that search, with the binary's name and the environment
-// variable that overrides it as parameters: ah, agenthub-node and agenthub-mcp
-// ship side by side and are found the same way, and a second copy of this list
-// would be a second thing to keep in step with how the app is packaged.
+// locateBinary is that search, with the binary's name and the suffix of the
+// environment variable that overrides it as parameters: ah, agenthallway-node
+// and agenthallway-mcp ship side by side and are found the same way, and a
+// second copy of this list would be a second thing to keep in step with how the
+// app is packaged. The suffix AH is read as AGENTHALLWAY_AH, then as the older
+// AGENTHUB_AH.
 //
 // PATH is deliberately not one of the places. What this finds is run to install
 // a launchd job or a systemd unit; anything named ah that happened to come
@@ -148,12 +178,12 @@ var findNode = func() (string, error) {
 // The answer is always absolute. A relative path works for exec, which resolves
 // it against this process's working directory, but the caller may be writing it
 // into a config file that another program will read from somewhere else.
-func locateBinary(name, envName string) (string, error) {
+func locateBinary(name, envSuffix string) (string, error) {
 	self, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("find %s: locating this executable: %w", name, err)
 	}
-	return locateBinaryNear(filepath.Dir(self), name, envName)
+	return locateBinaryNear(filepath.Dir(self), name, envSuffix)
 }
 
 // executableName is what the file is actually called on this operating system.
@@ -171,9 +201,10 @@ func executableName(name string) string {
 // a text file, would otherwise be handed back as the tool and fail later with a
 // message about exec rather than about the path being wrong.
 func runnable(path string) bool {
-	// #nosec G703 -- the taint gosec follows is AGENTHUB_AH / AGENTHUB_NODE /
-	// AGENTHUB_MCP, set by the person this app runs as to name a binary they
-	// want run instead of the bundled one; every other path here is built from
+	// #nosec G703 -- the taint gosec follows is AGENTHALLWAY_AH / AGENTHALLWAY_NODE /
+	// AGENTHALLWAY_MCP (or their AGENTHUB_ forerunners), set by the person this
+	// app runs as to name a binary they want run instead of the bundled one;
+	// every other path here is built from
 	// this executable's own location. Nothing the window or the network
 	// supplies reaches it, and "traversal" into one's own account is not a
 	// boundary crossed.
@@ -191,14 +222,14 @@ func runnable(path string) bool {
 // locateBinaryNear is that search with the executable's directory given rather
 // than asked for, so a test can lay out a bundle or a checkout in a temporary
 // directory and watch which of them the search will and will not accept.
-func locateBinaryNear(dir, name, envName string) (string, error) {
+func locateBinaryNear(dir, name, envSuffix string) (string, error) {
 	file := executableName(name)
 	looked := make([]string, 0, 4)
-	if given := os.Getenv(envName); given != "" {
+	if given, variable := lookupEnvCompat(envSuffix); given != "" {
 		if runnable(given) {
 			return absolute(given)
 		}
-		looked = append(looked, "$"+envName+"="+given)
+		looked = append(looked, "$"+variable+"="+given)
 	}
 	// Where the packaging step puts them: beside this executable, which is
 	// Contents/MacOS in a bundle and the unpacked directory on Linux, and
@@ -220,8 +251,8 @@ func locateBinaryNear(dir, name, envName string) (string, error) {
 		}
 		looked = append(looked, candidate)
 	}
-	return "", fmt.Errorf("%s was not found (looked: %s); set %s to its path",
-		name, strings.Join(looked, ", "), envName)
+	return "", fmt.Errorf("%s was not found (looked: %s); set %s%s to its path",
+		name, strings.Join(looked, ", "), productEnvPrefix, envSuffix)
 }
 
 // modulePath is this project's Go module. A directory whose go.mod declares it
@@ -317,6 +348,10 @@ func (a *App) ServiceStatus() ServiceStatus {
 			LogHint   string
 			Program   string
 			Arguments []string
+			// Absent from an ah built before the rename, which is read as
+			// false: that ah knows only one registration.
+			Legacy              bool
+			LegacyAlsoInstalled bool
 		} `json:"service"`
 		NodeAnswering bool   `json:"nodeAnswering"`
 		Node          string `json:"node"`
@@ -328,6 +363,7 @@ func (a *App) ServiceStatus() ServiceStatus {
 		Tool: tool, Supported: decoded.Service.Supported, Installed: decoded.Service.Installed,
 		Running: decoded.Service.Running, PID: decoded.Service.PID, UnitPath: decoded.Service.UnitPath,
 		LogHint: decoded.Service.LogHint, NodeAnswering: decoded.NodeAnswering, Node: decoded.Node,
+		Legacy: decoded.Service.Legacy, LegacyAlsoInstalled: decoded.Service.LegacyAlsoInstalled,
 	}
 	if decoded.Service.Installed && decoded.Service.Program != "" {
 		// Known because the unit was read, whatever it turned out to say. A

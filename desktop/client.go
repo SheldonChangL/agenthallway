@@ -14,7 +14,7 @@ import (
 )
 
 // Session mirrors the node's public JSON contract. The desktop app is an HTTP
-// client of agenthub-node and never reads provider files or SQLite directly.
+// client of agenthallway-node and never reads provider files or SQLite directly.
 // Audience is a session's export policy: published to whom, and how much.
 type Audience struct {
 	Mode           string   `json:"mode"`

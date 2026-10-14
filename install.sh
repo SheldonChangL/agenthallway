@@ -1,5 +1,5 @@
 #!/bin/sh
-# AgentHub one-line installer for macOS and Linux.
+# Agent Hallway one-line installer for macOS and Linux.
 #
 #     curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
 #
@@ -7,7 +7,13 @@
 # release's own SHA256SUMS before anything is unpacked, puts it somewhere the
 # owner can already write, and registers the background node with launchd or
 # `systemd --user`. It never asks for sudo, and the complete list of paths it
-# writes is in docs/install-script.md.
+# writes and deletes is in docs/install-script.md.
+#
+# Agent Hallway was called AgentHub up to v0.1.11. A tag from then (v0.0.*,
+# v0.1.*) is installed under the names it was released with; any later tag
+# under the new ones, after which the pre-rename install is retired. Every
+# pre-rename name is a LEGACY_* constant below, so all of that can be found,
+# and one day deleted, in one place.
 #
 # Every statement with an effect lives inside main(), and the last line of the
 # file calls it. That is not style: this script is piped into `sh` from the
@@ -24,7 +30,46 @@ API_LATEST="https://api.github.com/repos/${REPO}/releases/latest"
 DOWNLOAD_BASE="https://github.com/${REPO}/releases/download"
 RAW_SELF="https://raw.githubusercontent.com/${REPO}/main/install.sh"
 
-VERSION="${AGENTHUB_VERSION:-}"
+# The names this product installs under now.
+CURRENT_SLUG="agenthallway"
+CURRENT_PRODUCT="Agent Hallway"
+CURRENT_APP_NAME="agenthallway-desktop"
+CURRENT_NODE_NAME="agenthallway-node"
+CURRENT_MCP_NAME="agenthallway-mcp"
+CURRENT_SKILL_NAME="agenthallway-watch"
+CURRENT_MARKER=".agenthallway-install"
+CURRENT_PATH_MARK="# added by the Agent Hallway installer"
+CURRENT_MENU_FILE="agenthallway.desktop"
+CURRENT_FISH_FILE="agenthallway.fish"
+CURRENT_BUNDLE_ID="com.wails.agenthallway-desktop"
+CURRENT_LABEL="local.agenthallway.node"
+CURRENT_UNIT_NAME="agenthallway-node"
+
+# The names releases up to v0.1.11 installed under. They are what a pre-rename
+# tag is installed as, and what an upgrade or an uninstall looks for on disk:
+# the marker files and the PATH comment below are already in owners' home
+# directories, so they have to keep being recognised.
+LEGACY_SLUG="agenthub"
+LEGACY_PRODUCT="AgentHub"
+LEGACY_APP_NAME="agenthub-desktop"
+LEGACY_NODE_NAME="agenthub-node"
+LEGACY_MCP_NAME="agenthub-mcp"
+LEGACY_SKILL_NAME="agenthub-watch"
+LEGACY_MARKER=".agenthub-install"
+LEGACY_PATH_MARK="# added by the AgentHub installer"
+LEGACY_MENU_FILE="agenthub.desktop"
+LEGACY_FISH_FILE="agenthub.fish"
+LEGACY_BUNDLE_ID="com.wails.agenthub-desktop"
+LEGACY_LABEL="local.agenthub.node"
+LEGACY_UNIT_NAME="agenthub-node"
+# The node's own pre-rename default database file name, and the marker it
+# leaves in the new data directory while it moves its files there.
+LEGACY_DB_NAME="agenthub.db"
+LEGACY_MIGRATION_MARK=".migrating-from-agenthub"
+CURRENT_DB_NAME="agenthallway.db"
+
+# Empty counts as unset, as it does for ah (internal/product.Getenv).
+VERSION="${AGENTHALLWAY_VERSION:-${AGENTHUB_VERSION:-}}"
 CLI_ONLY=0
 NO_SERVICE=0
 NO_OPEN=0
@@ -35,27 +80,18 @@ PURGE=0
 DRY_RUN=0
 PREFIX=""
 FROM=""
+ERA=""
 
 TEMP_DIR=""
 MOUNT_POINT=""
-# Set only by the uninstall path, for the app it found; cleared here so a
-# variable of that name in the owner's environment cannot point the "is the app
-# running?" check at some other bundle.
-QUIT_APP_PATH=""
-
-# A directory this script put an install in carries this file, so a later run
-# can tell "the prefix I installed into" from "a directory of the owner's that
-# happens to be named on the command line". Without it, --prefix ~/Documents
-# would be a delete.
-MARKER=".agenthub-install"
 
 # The Claude Code skill that teaches an agent to use `ah` (`ah inbox`,
 # `ah send`, ...). It travels inside the release asset, so the SHA256SUMS check
 # above covers it like every binary; it is never fetched on its own. The copy
-# this script puts in place carries SKILL_MARKER, which is how an upgrade or an
-# uninstall tells it from a link or a copy the owner made themselves.
-SKILL_NAME="agenthub-watch"
-SKILL_MARKER="$MARKER"
+# this script puts in place carries the install's marker file, which is how an
+# upgrade or an uninstall tells it from a link or a copy the owner made
+# themselves.
+#
 # Where the .dmg keeps it: beside the app, hidden, so the drag-to-install
 # window still shows only the app and Applications, and outside the bundle, so
 # the bundle's signature is not touched.
@@ -64,36 +100,111 @@ SKILL_SOURCE=""
 
 AH=""
 SERVICE_STATE=""
+SERVICE_REGISTERED=0
 REMOVE_SKIPPED=""
 PATH_STATE=""
 SKILL_STATE=""
+LEGACY_STATE=""
+
+# set_names <current|legacy> sets the names this run installs under.
+#
+# MARKER: a directory this script put an install in carries this file, so a
+# later run can tell "the prefix I installed into" from "a directory of the
+# owner's that happens to be named on the command line". Without it, --prefix
+# ~/Documents would be a delete. The installed skill carries the same file.
+#
+# PATH_MARK is the comment above the line this script adds to a shell startup
+# file. A second run looks for it rather than for "a line that mentions
+# .local/bin", which an owner's own file can have for reasons of its own.
+set_names() { # set_names <current|legacy>
+	ERA="$1"
+	if [ "$1" = legacy ]; then
+		SLUG="$LEGACY_SLUG"
+		PRODUCT="$LEGACY_PRODUCT"
+		APP_NAME="$LEGACY_APP_NAME"
+		NODE_NAME="$LEGACY_NODE_NAME"
+		MCP_NAME="$LEGACY_MCP_NAME"
+		SKILL_NAME="$LEGACY_SKILL_NAME"
+		MARKER="$LEGACY_MARKER"
+		PATH_MARK="$LEGACY_PATH_MARK"
+		MENU_FILE="$LEGACY_MENU_FILE"
+		FISH_FILE="$LEGACY_FISH_FILE"
+		LABEL="$LEGACY_LABEL"
+		UNIT_NAME="$LEGACY_UNIT_NAME"
+	else
+		SLUG="$CURRENT_SLUG"
+		PRODUCT="$CURRENT_PRODUCT"
+		APP_NAME="$CURRENT_APP_NAME"
+		NODE_NAME="$CURRENT_NODE_NAME"
+		MCP_NAME="$CURRENT_MCP_NAME"
+		SKILL_NAME="$CURRENT_SKILL_NAME"
+		MARKER="$CURRENT_MARKER"
+		PATH_MARK="$CURRENT_PATH_MARK"
+		MENU_FILE="$CURRENT_MENU_FILE"
+		FISH_FILE="$CURRENT_FISH_FILE"
+		LABEL="$CURRENT_LABEL"
+		UNIT_NAME="$CURRENT_UNIT_NAME"
+	fi
+	# The desktop binary is named like the app; the release assets carry the
+	# slug.
+	DESKTOP_NAME="$APP_NAME"
+	TREE_NAME="$SLUG"
+	CLI_ASSET="${SLUG}_"
+	DESKTOP_ASSET="${APP_NAME}_"
+}
+
+# legacy_era_of_tag says whether a release tag is from before the rename:
+# v0.0.* and v0.1.*, with or without the v. Anything else — v0.2.0, a release
+# candidate of it, the dry run's vX.Y.Z placeholder — is current.
+legacy_era_of_tag() { # legacy_era_of_tag <tag>
+	case "$1" in
+	v0.0.* | v0.1.* | 0.0.* | 0.1.*) return 0 ;;
+	esac
+	return 1
+}
+
+# legacy_era_of_archive says whether an archive named on the command line is a
+# pre-rename one, by its file name. What it contains is checked once it is
+# unpacked (confirm_contents).
+legacy_era_of_archive() { # legacy_era_of_archive <file name>
+	case "$1" in
+	"$LEGACY_SLUG"_* | "$LEGACY_APP_NAME"_*) return 0 ;;
+	esac
+	return 1
+}
 
 usage() {
 	cat <<'EOF'
-install.sh — install AgentHub (desktop app and command line) on macOS or Linux.
+install.sh — install Agent Hallway (desktop app and command line) on macOS or Linux.
 
   curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
 
 Options:
   --version vX.Y.Z   install this release instead of the latest one
-                     (AGENTHUB_VERSION does the same)
-  --cli-only         install ah, agenthub-node and agenthub-mcp without the app
+                     (AGENTHALLWAY_VERSION, or the older AGENTHUB_VERSION,
+                     does the same). Tags up to v0.1.11 install AgentHub, as
+                     the product was called then, under its old names
+  --cli-only         install ah, agenthallway-node and agenthallway-mcp
+                     without the app
   --no-service       do not register the background node
   --no-open          do not open the app when the install finishes (macOS)
   --no-modify-path   do not add ~/.local/bin to PATH in the shell's startup
                      file; only say what to add
-  --no-skill         do not install the agenthub-watch skill for Claude Code
-                     (with --uninstall: leave it in place)
+  --no-skill         do not install the agenthallway-watch skill for Claude
+                     Code (with --uninstall: leave it in place)
   --prefix DIR       install under DIR instead of /Applications or ~/.local;
                      symlinks then go to DIR/bin
   --from FILE        install from a local .dmg or .tar.gz instead of
                      downloading; a SHA256SUMS beside it is still checked
-  --uninstall        remove what this script installed: the background
-                     service, the app, the links, the menu entry, the PATH
-                     line and the app's caches; the node's identity and
-                     database stay, so a reinstall is the same node
+  --uninstall        remove what this script installed, under either name
+                     (Agent Hallway, or AgentHub before the rename): the
+                     background service, the app, the links, the menu entry,
+                     the PATH line and the app's caches; the node's identity
+                     and database stay, so a reinstall is the same node
   --purge            with --uninstall: also delete the node's identity,
-                     database and logs (a reinstall is then a new node)
+                     database and log files (only those files: a directory
+                     that holds anything else is left), so a reinstall is a
+                     new node
   --dry-run          print every command instead of running it
   -h, --help         this text
 
@@ -136,7 +247,7 @@ quote() {
 
 # run is the only place a command with an effect is started. Under --dry-run it
 # prints the command and returns 0, which is what makes the dry run safe to
-# point at a machine that already has AgentHub on it.
+# point at a machine that already has Agent Hallway (or AgentHub) on it.
 run() {
 	if [ "$DRY_RUN" -eq 1 ]; then
 		printf '+'
@@ -262,17 +373,20 @@ exists() {
 	[ -e "$1" ] || [ -L "$1" ]
 }
 
-# holds_agenthub asks whether a directory is one an AgentHub install already
-# owns. The marker file answers for a prefix this script wrote; the binaries
-# answer for a tree installed by hand or by an older version of this script.
-holds_agenthub() {
-	exists "$1/$MARKER" || exists "$1/ah" || exists "$1/bin/ah" ||
-		exists "$1/agenthub-desktop" || exists "$1/agenthub-desktop.app" ||
-		exists "$1/share/agenthub"
+# holds_install asks whether a directory is one an install of this product,
+# under either name, already owns. The marker file answers for a prefix this
+# script wrote; the binaries answer for a tree installed by hand or by an older
+# version of this script.
+holds_install() {
+	exists "$1/$CURRENT_MARKER" || exists "$1/ah" || exists "$1/bin/ah" ||
+		exists "$1/$CURRENT_APP_NAME" || exists "$1/$CURRENT_APP_NAME.app" ||
+		exists "$1/share/$CURRENT_SLUG" ||
+		exists "$1/$LEGACY_MARKER" || exists "$1/$LEGACY_APP_NAME" ||
+		exists "$1/$LEGACY_APP_NAME.app" || exists "$1/share/$LEGACY_SLUG"
 }
 
 # check_install_directory refuses a directory this script would delete or
-# replace and that is not its own. AGENTHUB_HOME and --prefix are knobs a
+# replace and that is not its own. AGENTHALLWAY_HOME and --prefix are knobs a
 # reader is invited to turn, and `rm -rf` is downstream of both.
 check_install_directory() { # check_install_directory <what it is> <directory>
 	check_dir="$(absolute_path "$2")"
@@ -285,11 +399,11 @@ check_install_directory() { # check_install_directory <what it is> <directory>
 	fi
 	case "$check_home" in
 	"$check_dir"/*)
-		die "$1 is $check_dir, which contains your home directory; pick a directory of its own, for example \$HOME/.local/agenthub"
+		die "$1 is $check_dir, which contains your home directory; pick a directory of its own, for example \$HOME/.local/$SLUG"
 		;;
 	esac
-	if [ -d "$check_dir" ] && ! holds_agenthub "$check_dir"; then
-		die "$1 is $check_dir, which already exists and holds no AgentHub install.
+	if [ -d "$check_dir" ] && ! holds_install "$check_dir"; then
+		die "$1 is $check_dir, which already exists and holds no $PRODUCT install.
 An upgrade replaces that directory, so this script will not take one it did not
 create. Pick a new directory, or delete that one yourself first."
 	fi
@@ -375,11 +489,6 @@ link_into() { # link_into <target> <name>
 	say "linked $BIN_DIR/$2 -> $1"
 }
 
-# PATH_MARK is the comment above the line this script adds to a shell startup
-# file. A second run looks for it rather than for "a line that mentions
-# .local/bin", which an owner's own file can have for reasons of its own.
-PATH_MARK="# added by the AgentHub installer"
-
 # startup_file names the file a new terminal of this owner's login shell reads,
 # which is where a PATH line has to go to be seen, or prints nothing for a
 # shell whose files this does not know how to write (csh, nu, ...). zsh has
@@ -404,7 +513,7 @@ startup_file() {
 			echo "$HOME/.bashrc"
 		fi
 		;;
-	fish) echo "${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/agenthub.fish" ;;
+	fish) echo "${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/$FISH_FILE" ;;
 	"")
 		if [ "$OS_SLUG" = "darwin" ]; then
 			echo "${ZDOTDIR:-$HOME}/.zshrc"
@@ -414,6 +523,32 @@ startup_file() {
 		;;
 	sh | dash | ash | ksh | mksh | yash) echo "$HOME/.profile" ;;
 	esac
+}
+
+# path_file_marked says whether one startup file carries the comment this
+# script writes above its PATH line, under either name: the pre-rename
+# installer wrote "# added by the AgentHub installer", and an upgrade that did
+# not recognise it would add a second PATH line.
+path_file_marked() { # path_file_marked <file>
+	[ -f "$1" ] && { grep -qF "$CURRENT_PATH_MARK" "$1" || grep -qF "$LEGACY_PATH_MARK" "$1"; }
+}
+
+# path_already_added says whether the startup file already carries the lines
+# this script appends, and sets PATH_ADDED_IN to the file that does. For fish
+# the lines live in a file of their own, whose name changed with the product,
+# so both names are looked at.
+path_already_added() { # path_already_added <startup file>
+	PATH_ADDED_IN="$1"
+	path_file_marked "$1" && return 0
+	case "$1" in
+	*.fish)
+		for added_fish in "$CURRENT_FISH_FILE" "$LEGACY_FISH_FILE"; do
+			PATH_ADDED_IN="$(dirname "$1")/$added_fish"
+			path_file_marked "$PATH_ADDED_IN" && return 0
+		done
+		;;
+	esac
+	return 1
 }
 
 # ensure_path makes `ah` something a new terminal finds. macOS puts no
@@ -448,8 +583,8 @@ ensure_path() {
 		path_line='export PATH="$HOME/.local/bin:$PATH"'
 		;;
 	esac
-	if [ -f "$PATH_FILE" ] && grep -qF "$PATH_MARK" "$PATH_FILE"; then
-		say "$PATH_FILE already adds $BIN_DIR to PATH"
+	if path_already_added "$PATH_FILE"; then
+		say "$PATH_ADDED_IN already adds $BIN_DIR to PATH"
 	elif [ "$DRY_RUN" -eq 1 ]; then
 		printf '+ append to %s: %s\n' "$(quote "$PATH_FILE")" "$path_line"
 	# The app is already in place when this runs, and the service is not yet
@@ -485,8 +620,61 @@ unpack_tarball() {
 			# puts inside the archive and carry on printing.
 			UNPACKED="$TEMP_DIR/unpacked/$(basename "$ARCHIVE_NAME" .tar.gz)"
 		else
-			die "$ARCHIVE_NAME did not contain a directory; it is not an AgentHub archive"
+			die "$ARCHIVE_NAME did not contain a directory; it is not an $PRODUCT archive"
 		fi
+	fi
+}
+
+# era_label names a release era the way the refusals below say it.
+era_label() { # era_label <current|legacy>
+	if [ "$1" = legacy ]; then
+		printf '%s' "a pre-rename $LEGACY_PRODUCT release (v0.1.11 or earlier)"
+	else
+		printf '%s' "an $CURRENT_PRODUCT release (v0.2.0 or later)"
+	fi
+}
+
+# confirm_contents checks that what was unpacked or mounted is the era its name
+# said, before anything is replaced: the names decide which install is retired
+# and which unit is registered, so an archive renamed by hand must not get as
+# far as either. Under --dry-run nothing was unpacked, so there is nothing to
+# look at.
+confirm_contents() { # confirm_contents <path that must exist> <path the other era has>
+	[ "$DRY_RUN" -eq 0 ] || return 0
+	exists "$1" && return 0
+	if [ "$ERA" = legacy ]; then
+		contents_other="$(era_label current)"
+	else
+		contents_other="$(era_label legacy)"
+	fi
+	if exists "$2"; then
+		die "the archive name says $ARCHIVE_NAME is $(era_label "$ERA"), but it contains $(basename "$2"), which is $contents_other; nothing was installed"
+	fi
+	die "the archive name says $ARCHIVE_NAME is $(era_label "$ERA"), but it contains no $(basename "$1"); nothing was installed"
+}
+
+# prepare_tarball unpacks the archive into the temp directory and checks it,
+# before anything installed is stopped or replaced.
+prepare_tarball() {
+	check_install_directory "the $PRODUCT directory" "$TREE"
+	unpack_tarball
+	if [ "$ERA" = legacy ]; then
+		confirm_contents "$UNPACKED/$NODE_NAME" "$UNPACKED/$CURRENT_NODE_NAME"
+	else
+		confirm_contents "$UNPACKED/$NODE_NAME" "$UNPACKED/$LEGACY_NODE_NAME"
+	fi
+}
+
+# mount_dmg attaches the disk image and checks it, before any app is quit or
+# replaced.
+mount_dmg() {
+	MOUNT_POINT="$TEMP_DIR/mnt"
+	run mkdir -p "$MOUNT_POINT"
+	run hdiutil attach -nobrowse -readonly -quiet -mountpoint "$MOUNT_POINT" "$ARCHIVE"
+	if [ "$ERA" = legacy ]; then
+		confirm_contents "$MOUNT_POINT/$APP_NAME.app" "$MOUNT_POINT/$CURRENT_APP_NAME.app"
+	else
+		confirm_contents "$MOUNT_POINT/$APP_NAME.app" "$MOUNT_POINT/$LEGACY_APP_NAME.app"
 	fi
 }
 
@@ -504,17 +692,22 @@ replace_directory() { # replace_directory <staging> <destination>
 # deleted from under it. Replacing the bundle of a running process leaves the
 # process alive with no files: menus stop working, and the next launch is from
 # a bundle the old process still half-owns.
-quit_running_app() {
-	quit_app="${QUIT_APP_PATH:-$APP_PATH}"
+#
+# osascript asks by name, and any app of that name would hear it, so it is
+# only asked when that very bundle's executable is running.
+quit_running_app() { # quit_running_app <app bundle> <app name>
+	quit_app="$1"
+	quit_name="$2"
+	[ -n "$quit_app" ] || return 0
 	if ! command -v pgrep >/dev/null 2>&1; then
 		return 0
 	fi
 	if ! pgrep -f "$quit_app/Contents/MacOS/desktop" >/dev/null 2>&1; then
 		return 0
 	fi
-	say "agenthub-desktop is running; asking it to quit before its bundle is removed"
+	say "$quit_name is running; asking it to quit before its bundle is removed"
 	if [ "$DRY_RUN" -eq 1 ]; then
-		run osascript -e 'quit app "agenthub-desktop"'
+		run osascript -e "quit app \"$quit_name\""
 		return 0
 	fi
 	# The answer osascript gives is not the answer to "did it quit". This app
@@ -527,7 +720,7 @@ quit_running_app() {
 	# (issue #211). Whether the process is gone is what pgrep says below; the
 	# reply is kept only to be shown if it never goes.
 	quit_reply=""
-	if ! quit_reply="$(osascript -e 'quit app "agenthub-desktop"' 2>&1)"; then
+	if ! quit_reply="$(osascript -e "quit app \"$quit_name\"" 2>&1)"; then
 		[ -n "$quit_reply" ] || quit_reply="osascript failed without saying why"
 	else
 		quit_reply=""
@@ -535,29 +728,35 @@ quit_running_app() {
 	quit_waited=0
 	while [ "$quit_waited" -lt 10 ]; do
 		if ! pgrep -f "$quit_app/Contents/MacOS/desktop" >/dev/null 2>&1; then
-			say "agenthub-desktop quit"
+			say "$quit_name quit"
 			return 0
 		fi
 		sleep 1
 		quit_waited=$((quit_waited + 1))
 	done
 	if [ -n "$quit_reply" ]; then
-		die "agenthub-desktop is still running after 10 seconds, and removing a running app's bundle breaks it.
+		die "$quit_name is still running after 10 seconds, and removing a running app's bundle breaks it.
 Quit it yourself (right-click its Dock icon, Quit) and run this again.
 (macOS answered the quit request with: $quit_reply)"
 	fi
-	die "agenthub-desktop is still running after 10 seconds, and removing a running app's bundle breaks it.
+	die "$quit_name is still running after 10 seconds, and removing a running app's bundle breaks it.
 Quit it yourself (right-click its Dock icon, Quit) and run this again."
 }
 
+# quit_legacy_apps asks a running pre-rename app to quit before the upgrade
+# takes its background service away (and, unless that service stays, its
+# bundle): a pre-rename window left running could start a pre-rename node of
+# its own on the files the new node is about to move.
+quit_legacy_apps() {
+	quit_running_app "$LEGACY_APP_PATH" "$LEGACY_APP_NAME"
+	quit_running_app "$LEGACY_OTHER_APP_PATH" "$LEGACY_APP_NAME"
+}
+
 install_macos_app() {
-	MOUNT_POINT="$TEMP_DIR/mnt"
-	run mkdir -p "$MOUNT_POINT"
-	run hdiutil attach -nobrowse -readonly -quiet -mountpoint "$MOUNT_POINT" "$ARCHIVE"
 	run mkdir -p "$APP_PARENT"
-	quit_running_app
+	quit_running_app "$APP_PATH" "$APP_NAME"
 	run rm -rf "$APP_PATH"
-	run ditto "$MOUNT_POINT/agenthub-desktop.app" "$APP_PATH"
+	run ditto "$MOUNT_POINT/$APP_NAME.app" "$APP_PATH"
 	# The skill is copied out before the image is detached; installing it waits
 	# for install_claude_skill, like the tarball's. Under --dry-run nothing is
 	# mounted, so the copy is printed as if the image carried one.
@@ -586,18 +785,16 @@ install_macos_app() {
 }
 
 install_tarball_tree() {
-	check_install_directory "the AgentHub directory" "$AGENTHUB_DIR"
-	unpack_tarball
-	replace_directory "$UNPACKED" "$AGENTHUB_DIR"
-	say "installed $AGENTHUB_DIR"
-	AH="$AGENTHUB_DIR/ah"
+	replace_directory "$UNPACKED" "$TREE"
+	say "installed $TREE"
+	AH="$TREE/ah"
 	link_into "$AH" "ah"
-	SKILL_SOURCE="$AGENTHUB_DIR/skills/$SKILL_NAME"
+	SKILL_SOURCE="$TREE/skills/$SKILL_NAME"
 	if [ "$CLI_ONLY" -eq 1 ]; then
-		link_into "$AGENTHUB_DIR/agenthub-node" "agenthub-node"
-		link_into "$AGENTHUB_DIR/agenthub-mcp" "agenthub-mcp"
+		link_into "$TREE/$NODE_NAME" "$NODE_NAME"
+		link_into "$TREE/$MCP_NAME" "$MCP_NAME"
 	else
-		link_into "$AGENTHUB_DIR/agenthub-desktop" "agenthub-desktop"
+		link_into "$TREE/$DESKTOP_NAME" "$DESKTOP_NAME"
 	fi
 }
 
@@ -638,12 +835,12 @@ detect_webkit_abi() {
 	WEBKIT_ABI=""
 	WEBKIT_PROBED=0
 	webkit_libs=""
-	# AGENTHUB_LDCONFIG_PATHS exists so the "no ldconfig reachable" and "only at
+	# AGENTHALLWAY_LDCONFIG_PATHS exists so the "no ldconfig reachable" and "only at
 	# an absolute path" branches can be tested on a machine that has a real
 	# ldconfig in /sbin, which no PATH the tests control can hide. Same reason as
-	# AGENTHUB_OS_RELEASE above it: the branch that matters is the one the test
+	# AGENTHALLWAY_OS_RELEASE above it: the branch that matters is the one the test
 	# machine is least likely to be in.
-	for webkit_ldconfig in ${AGENTHUB_LDCONFIG_PATHS:-ldconfig /sbin/ldconfig /usr/sbin/ldconfig}; do
+	for webkit_ldconfig in ${AGENTHALLWAY_LDCONFIG_PATHS:-ldconfig /sbin/ldconfig /usr/sbin/ldconfig}; do
 		case "$webkit_ldconfig" in
 		/*) [ -x "$webkit_ldconfig" ] || continue ;;
 		*) command -v "$webkit_ldconfig" >/dev/null 2>&1 || continue ;;
@@ -679,13 +876,13 @@ detect_webkit_abi() {
 # app starts.
 webkit_hint() {
 	[ -z "$WEBKIT_ABI" ] || return 0
-	# AGENTHUB_OS_RELEASE exists so the branches below can be tested. Which
+	# AGENTHALLWAY_OS_RELEASE exists so the branches below can be tested. Which
 	# package name this prints is the whole value of the hint — it is read by
 	# someone whose app will not start — and the names do not follow a pattern
 	# (4.1 is libwebkit2gtk-4.1-0, 4.0 is libwebkit2gtk-4.0-37), so a wrong one
 	# is both easy to write and impossible to notice from the machine that
 	# happens to be running the tests.
-	webkit_os_release="${AGENTHUB_OS_RELEASE:-/etc/os-release}"
+	webkit_os_release="${AGENTHALLWAY_OS_RELEASE:-/etc/os-release}"
 	webkit_id=""
 	if [ -r "$webkit_os_release" ]; then
 		webkit_id="$(sed -n 's/^ID_LIKE=//p;' "$webkit_os_release" | tr -d '"' | head -n 1)"
@@ -713,7 +910,7 @@ webkit_hint() {
 	say "         that instead and re-run this script: it will pick the 4.0 build."
 }
 
-# install_desktop_entry puts AgentHub in the applications menu.
+# install_desktop_entry puts the app in the applications menu.
 #
 # Without it the app is installed and runnable and invisible: someone who just
 # installed a desktop application looks for it in their launcher, not in a
@@ -728,9 +925,9 @@ install_desktop_entry() {
 	[ "$CLI_ONLY" -eq 0 ] || return 0
 
 	desktop_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-	desktop_file="$desktop_dir/agenthub.desktop"
-	desktop_exec="$AGENTHUB_DIR/agenthub-desktop"
-	desktop_icon="$AGENTHUB_DIR/appicon.png"
+	desktop_file="$desktop_dir/$MENU_FILE"
+	desktop_exec="$TREE/$DESKTOP_NAME"
+	desktop_icon="$TREE/appicon.png"
 
 	run mkdir -p "$desktop_dir"
 	if [ "$DRY_RUN" -eq 1 ]; then
@@ -748,12 +945,12 @@ install_desktop_entry() {
 		cat >"$desktop_file" <<DESKTOP_ENTRY
 [Desktop Entry]
 Type=Application
-Name=AgentHub
+Name=$PRODUCT
 Comment=Local control plane for coding-agent sessions
 Exec="$desktop_exec"
 Terminal=false
 Categories=Development;
-StartupWMClass=agenthub-desktop
+StartupWMClass=$DESKTOP_NAME
 DESKTOP_ENTRY
 		if [ -f "$desktop_icon" ]; then
 			echo "Icon=$desktop_icon" >>"$desktop_file"
@@ -772,32 +969,44 @@ DESKTOP_ENTRY
 # stop_linux_node stops the running node before its directory is replaced, so an
 # upgrade does not leave systemd supervising a binary that no longer exists at
 # that path. It is best effort: nothing installed means nothing to stop.
+#
+# The pre-rename unit runs a node from the pre-rename tree, which an upgrade
+# does not replace, so it is left running — `ah service install` retires it in
+# order, with its database carried over — except when both names share one
+# tree (an AGENTHUB_HOME install upgraded in place), whose binaries are about to
+# be swapped from under it.
 stop_linux_node() {
 	if ! command -v systemctl >/dev/null 2>&1; then
 		return 0
 	fi
-	if ! systemctl --user is-active --quiet agenthub-node.service 2>/dev/null; then
-		return 0
+	stop_units="$UNIT_NAME"
+	if [ "$UNIT_NAME" != "$LEGACY_UNIT_NAME" ] && [ "$(absolute_path "$TREE")" = "$(absolute_path "$LEGACY_TREE")" ]; then
+		stop_units="$UNIT_NAME $LEGACY_UNIT_NAME"
 	fi
-	say "stopping the running node before replacing its binaries"
-	run systemctl --user stop agenthub-node.service
+	for stop_unit in $stop_units; do
+		if systemctl --user is-active --quiet "$stop_unit.service" 2>/dev/null; then
+			say "stopping the running node ($stop_unit) before replacing its binaries"
+			run systemctl --user stop "$stop_unit.service"
+		fi
+	done
 }
 
 # --- the Claude Code skill ------------------------------------------------------
 
 # skill_directory is where Claude Code looks for a user-level skill.
-skill_directory() {
-	printf '%s' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/$SKILL_NAME"
+skill_directory() { # skill_directory [skill name]
+	printf '%s' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/${1:-$SKILL_NAME}"
 }
 
 # skill_is_ours says yes only to a real directory holding the marker this
-# script writes. A symlink is never ours, whatever it points at: it is how an
-# owner who keeps skills elsewhere wires them in.
-skill_is_ours() { # skill_is_ours <directory>
-	[ -d "$1" ] && [ ! -L "$1" ] && [ -f "$1/$SKILL_MARKER" ]
+# script writes (the given one: each name's skill carries its own name's
+# marker). A symlink is never ours, whatever it points at: it is how an owner
+# who keeps skills elsewhere wires them in.
+skill_is_ours() { # skill_is_ours <directory> [marker]
+	[ -d "$1" ] && [ ! -L "$1" ] && [ -f "$1/${2:-$MARKER}" ]
 }
 
-# install_claude_skill puts the agenthub-watch skill where Claude Code finds it,
+# install_claude_skill puts the agent's skill where Claude Code finds it,
 # so an agent on this machine knows `ah` is there to be used. It copies from the
 # asset that was just verified and unpacked — never from the network — and
 # replaces only a copy this script put there before. Nothing about it is worth
@@ -833,7 +1042,7 @@ install_claude_skill() {
 	skill_stage="$TEMP_DIR/skill-stage/$SKILL_NAME"
 	if run mkdir -p "$TEMP_DIR/skill-stage" &&
 		run cp -R "$SKILL_SOURCE" "$skill_stage" &&
-		run touch "$skill_stage/$SKILL_MARKER" &&
+		run touch "$skill_stage/$MARKER" &&
 		run mkdir -p "$(dirname "$skill_dest")" &&
 		run rm -rf "$skill_dest" &&
 		run mv "$skill_stage" "$skill_dest"; then
@@ -930,6 +1139,7 @@ register_service() {
 	else
 		run "$AH" service install
 	fi
+	SERVICE_REGISTERED=1
 	run "$AH" service status
 	SERVICE_STATE="running as a background service (\"$AH\" service status shows it)"
 }
@@ -939,45 +1149,45 @@ register_service() {
 closing_lines() {
 	say ""
 	if [ -n "$VERSION" ]; then
-		say "done. AgentHub $VERSION is installed:"
+		say "done. $PRODUCT $VERSION is installed:"
 	else
-		say "done. AgentHub is installed:"
+		say "done. $PRODUCT is installed:"
 	fi
 	if [ "$INSTALLED_APP" -eq 1 ]; then
 		say "  app:  $APP_PATH"
 	fi
 	if [ "$INSTALLED_TREE" -eq 1 ]; then
-		say "  files: $AGENTHUB_DIR"
+		say "  files: $TREE"
 	fi
 	say "  ah:   $BIN_DIR/ah   (\"$AH --version\" says which build)"
 	say "  PATH: $PATH_STATE"
 	say "  node: $SERVICE_STATE"
 	say "  skill: $SKILL_STATE"
+	if [ -n "$LEGACY_STATE" ]; then
+		say "  pre-rename install: $LEGACY_STATE"
+	fi
 	say ""
 	if [ "$CLI_ONLY" -eq 0 ]; then
 		if [ "$OS_SLUG" = "darwin" ] && [ "$INSTALLED_APP" -eq 1 ] && [ -z "$PREFIX" ]; then
-			say "Open agenthub-desktop from Applications; it starts on a setup checklist."
+			say "Open $APP_NAME from Applications; it starts on a setup checklist."
 		elif [ "$OS_SLUG" = "darwin" ] && [ "$INSTALLED_APP" -eq 1 ]; then
 			say "Open $APP_PATH; it starts on a setup checklist."
 		else
-			say "Open agenthub-desktop ($BIN_DIR/agenthub-desktop); it starts on a setup checklist."
+			say "Open $DESKTOP_NAME ($BIN_DIR/$DESKTOP_NAME); it starts on a setup checklist."
 		fi
 	fi
 	say "To pass flags through the pipe, put them after \`sh -s --\`:"
 	say "  curl -fsSL $RAW_SELF | sh -s -- --no-service"
 }
 
-# --- uninstall -------------------------------------------------------------------
+# --- uninstall, and retiring the pre-rename install ------------------------------
 
 # Everything below removes only what this script (or `ah service install`, or
-# the app) put in place, and each removal checks that the thing is ours first:
-# a symlink is removed only when it points into the install, a directory only
-# when it holds one. The owner's own files are never the collateral of a
-# pattern that happened to match.
-
-# BUNDLE_ID is the app's CFBundleIdentifier, which names its caches and
-# preferences under ~/Library. Read from the installed bundle when there is one.
-BUNDLE_ID="com.wails.agenthub-desktop"
+# the app, or the node) put in place, and each removal checks that the thing is
+# ours first: a symlink is removed only when it points into an install, a
+# directory only when it holds one, and inside a data or log directory only a
+# file with a name the node writes. The owner's own files are never the
+# collateral of a pattern that happened to match.
 
 # remove_path deletes one file or directory when it exists, and says so.
 remove_path() { # remove_path <path>
@@ -995,43 +1205,112 @@ remove_path() { # remove_path <path>
 	fi
 }
 
-# remove_link deletes BIN_DIR/<name> when it is a symlink into this install. A
-# real file, or a link to some other ah (a source build, say), is left alone.
-remove_link() { # remove_link <name>
-	link_path="$BIN_DIR/$1"
-	[ -L "$link_path" ] || return 0
-	link_target="$(readlink "$link_path" 2>/dev/null || true)"
-	case "$link_target" in
-	"") ;;
-	"${APP_PATH:-/nonexistent-app-path}"/* | "${OTHER_APP_PATH:-/nonexistent-app-path}"/* | "$AGENTHUB_DIR"/*)
-		run rm -f "$link_path"
-		[ "$DRY_RUN" -eq 1 ] || say "removed $link_path"
-		;;
-	*) say "left $link_path alone: it points at $link_target, not at this install" ;;
-	esac
+# remove_file deletes one file or symlink, and never a directory: it is what
+# works inside a directory this product shares with others (a data directory,
+# a log directory, ~/.local/bin), where nothing is ours by being in there.
+remove_file() { # remove_file <path>
+	exists "$1" || return 0
+	if [ -d "$1" ] && [ ! -L "$1" ]; then
+		say "left $1 alone: it is a directory, and only a file of that name is $CURRENT_PRODUCT's"
+		return 0
+	fi
+	if [ ! -w "$(dirname "$1")" ]; then
+		warn "could not remove $1: $(dirname "$1") is not writable by this account; delete it yourself"
+		REMOVE_SKIPPED="$REMOVE_SKIPPED $1"
+		return 0
+	fi
+	run rm -f "$1"
+	[ "$DRY_RUN" -eq 1 ] || say "removed $1"
 }
 
-# uninstall_ah names this install's own ah, and nothing else. An ah found on
-# PATH could be a source build, or the real install when this run is a
-# --prefix one, and what it would take down is its own service, not this one.
-uninstall_ah() {
-	for uninstall_candidate in "${APP_PATH:+$APP_PATH/Contents/MacOS/ah}" \
-		"${OTHER_APP_PATH:+$OTHER_APP_PATH/Contents/MacOS/ah}" "$AGENTHUB_DIR/ah"; do
-		[ -n "$uninstall_candidate" ] || continue
-		if [ -x "$uninstall_candidate" ]; then
-			printf '%s' "$uninstall_candidate"
+# link_points_into says whether <link> is a symlink whose target is inside one
+# of the given install locations. An empty location matches nothing: as a
+# pattern it would be "/*", which is every absolute path.
+link_points_into() { # link_points_into <link> <install location>...
+	[ -L "$1" ] || return 1
+	points_target="$(readlink "$1" 2>/dev/null || true)"
+	[ -n "$points_target" ] || return 1
+	shift
+	for points_dir in "$@"; do
+		[ -n "$points_dir" ] || continue
+		case "$points_target" in
+		"$points_dir"/*) return 0 ;;
+		esac
+	done
+	return 1
+}
+
+# remove_link deletes BIN_DIR/<name> when it is a symlink into one of the given
+# install locations. A real file, or a link to some other ah (a source build,
+# say), is left alone.
+remove_link() { # remove_link <name> <install location>...
+	link_path="$BIN_DIR/$1"
+	shift
+	[ -L "$link_path" ] || return 0
+	if link_points_into "$link_path" "$@"; then
+		remove_file "$link_path"
+	else
+		say "left $link_path alone: it points at $(readlink "$link_path" 2>/dev/null || true), not at this install"
+	fi
+}
+
+# install_ah_era says which name's ah sits in a directory: the node beside it
+# says, since an AGENTHUB_HOME tree upgraded in place holds either. Prints
+# legacy or current.
+install_ah_era() { # install_ah_era <directory holding ah> <legacy|current: what the location suggests>
+	if exists "$1/$CURRENT_NODE_NAME"; then
+		printf current
+	elif exists "$1/$LEGACY_NODE_NAME"; then
+		printf legacy
+	else
+		printf '%s' "$2"
+	fi
+}
+
+# pick_uninstall_ah sets AH to one of this install's own ah, and nothing else,
+# and AH_ERA to which name's it is: a current ah takes down both registrations,
+# a pre-rename one only its own. An ah found on PATH could be a source build,
+# or the real install when this run is a --prefix one, and what it would take
+# down is its own service, not this one.
+pick_uninstall_ah() {
+	AH=""
+	AH_ERA=""
+	for pick_dir in "${APP_PATH:+$APP_PATH/Contents/MacOS}" "${OTHER_APP_PATH:+$OTHER_APP_PATH/Contents/MacOS}" "$TREE" \
+		"${LEGACY_APP_PATH:+$LEGACY_APP_PATH/Contents/MacOS}" "${LEGACY_OTHER_APP_PATH:+$LEGACY_OTHER_APP_PATH/Contents/MacOS}" "$LEGACY_TREE"; do
+		[ -n "$pick_dir" ] || continue
+		if [ -x "$pick_dir/ah" ]; then
+			AH="$pick_dir/ah"
+			case "$pick_dir" in
+			"${LEGACY_APP_PATH:-/nonexistent-app-path}"/* | "${LEGACY_OTHER_APP_PATH:-/nonexistent-app-path}"/*) AH_ERA=legacy ;;
+			"$LEGACY_TREE") AH_ERA="$(install_ah_era "$pick_dir" legacy)" ;;
+			*) AH_ERA="$(install_ah_era "$pick_dir" current)" ;;
+			esac
 			return 0
 		fi
 	done
 }
 
-# unit_file is where `ah service install` wrote the registration.
-unit_file() {
+# unit_file_for is where `ah service install` writes a registration: a launchd
+# plist named by its label, or a systemd user unit.
+unit_file_for() { # unit_file_for <launchd label> <systemd unit name>
 	if [ "$OS_SLUG" = "darwin" ]; then
-		printf '%s' "$HOME/Library/LaunchAgents/local.agenthub.node.plist"
+		printf '%s' "$HOME/Library/LaunchAgents/$1.plist"
 	else
-		printf '%s' "$HOME/.config/systemd/user/agenthub-node.service"
+		printf '%s' "$HOME/.config/systemd/user/$2.service"
 	fi
+}
+
+# unit_file is this run's own registration, current_unit_file the one under
+# the current names (whichever release this run installs), legacy_unit_file
+# the one a pre-rename ah wrote.
+unit_file() {
+	unit_file_for "$LABEL" "$UNIT_NAME"
+}
+current_unit_file() {
+	unit_file_for "$CURRENT_LABEL" "$CURRENT_UNIT_NAME"
+}
+legacy_unit_file() {
+	unit_file_for "$LEGACY_LABEL" "$LEGACY_UNIT_NAME"
 }
 
 # physical_path prints a path with its directory resolved the way the node
@@ -1054,13 +1333,13 @@ xml_escape() { # xml_escape <string>
 	printf '%s' "$1" | sed "s/&/\\&amp;/g; s/</\\&lt;/g; s/>/\\&gt;/g; s/\"/\\&#34;/g; s/'/\\&#39;/g; s/$xml_tab/\\&#x9;/g"
 }
 
-# node_forms prints, one per line, every way the unit can spell this install's
-# agenthub-node: as given and resolved, each as launchd writes it (XML-escaped
-# inside <string>) and as systemd does (% doubled; quoted, with \ " $ escaped,
-# when the path needs it — internal/service SystemdUnit).
-node_forms() {
-	for forms_node in "${APP_PATH:+$APP_PATH/Contents/MacOS/agenthub-node}" \
-		"${OTHER_APP_PATH:+$OTHER_APP_PATH/Contents/MacOS/agenthub-node}" "$AGENTHUB_DIR/agenthub-node"; do
+# node_forms prints, one per line, every way a unit can spell each given node
+# binary: as given and resolved, each as launchd writes it (XML-escaped inside
+# <string>) and as systemd does (% doubled; quoted, with \ " $ escaped, when the
+# path needs it — internal/service SystemdUnit). Each form line is preceded by
+# the node path it spells, after a tab, so a match can say which node it was.
+node_forms() { # node_forms <node binary>...
+	for forms_node in "$@"; do
 		[ -n "$forms_node" ] || continue
 		for forms_path in "$forms_node" "$(physical_path "$forms_node")"; do
 			forms_xml="$(xml_escape "$forms_path")"
@@ -1077,15 +1356,16 @@ node_forms() {
 	done
 }
 
-# service_is_ours says yes when the registered unit starts the agenthub-node of
-# this install. There is one registration per user whoever made it — a source
-# checkout's bin/ah, the real install while this is a --prefix run — so the
-# unit's own program is the only thing that says whose it is. Read from the
+# service_is_ours says yes when the given unit starts one of the given node
+# binaries. There is one registration per user and name whoever made it — a
+# source checkout's bin/ah, the real install while this is a --prefix run — so
+# the unit's own program is the only thing that says whose it is. Read from the
 # file rather than through `ah`, which may be gone or be someone else's.
-service_is_ours() {
-	ours_unit="$(unit_file)"
+service_is_ours() { # service_is_ours <unit file> <node binary>...
+	ours_unit="$1"
+	shift
 	[ -f "$ours_unit" ] || return 1
-	node_forms >"$TEMP_DIR/node-forms"
+	node_forms "$@" >"$TEMP_DIR/node-forms"
 	while IFS= read -r ours_form; do
 		case "$ours_form" in
 		"<string>"*)
@@ -1101,65 +1381,108 @@ service_is_ours() {
 	return 1
 }
 
-# unit_mentions_install says yes when the unit names a directory this run is
-# about to delete, in any form. A unit that does and still is not recognised
-# as ours is one this script cannot read — and deleting the files a registered
-# service runs from is the one outcome remove_service exists to prevent.
-unit_mentions_install() {
-	for mention_dir in "$APP_PATH" "$OTHER_APP_PATH" "$AGENTHUB_DIR"; do
+# unit_mentions_install says yes when the given unit names one of the given
+# directories in any form. A unit that does and still is not recognised as
+# ours is one this script cannot read — and deleting the files a registered
+# service runs from is the one outcome these checks exist to prevent.
+unit_mentions_install() { # unit_mentions_install <unit file> <directory>...
+	mention_unit="$1"
+	shift
+	for mention_dir in "$@"; do
 		[ -n "$mention_dir" ] || continue
 		for mention_form in "$mention_dir" "$(physical_path "$mention_dir")"; do
-			grep -qF "$mention_form/" "$(unit_file)" 2>/dev/null && return 0
-			grep -qF "$(xml_escape "$mention_form")/" "$(unit_file)" 2>/dev/null && return 0
+			grep -qF "$mention_form/" "$mention_unit" 2>/dev/null && return 0
+			grep -qF "$(xml_escape "$mention_form")/" "$mention_unit" 2>/dev/null && return 0
 		done
 	done
 	return 1
 }
 
-# remove_service stops the node and removes its registration, before any file
-# it runs from is deleted: launchd and systemd both restart a node that exits,
-# and one pointed at a binary that is gone fails in a loop at every login.
-remove_service() {
-	SERVICE_OURS=0
-	if ! exists "$(unit_file)"; then
+# The node binaries and directories of every install this run may remove: the
+# current names' app bundles and tree, and the pre-rename ones'. On Linux the
+# app paths are empty (see main), so they match nothing.
+unit_is_any_install() { # unit_is_any_install <unit file>
+	service_is_ours "$1" \
+		"${APP_PATH:+$APP_PATH/Contents/MacOS/$CURRENT_NODE_NAME}" \
+		"${OTHER_APP_PATH:+$OTHER_APP_PATH/Contents/MacOS/$CURRENT_NODE_NAME}" \
+		"$TREE/$CURRENT_NODE_NAME" \
+		"${LEGACY_APP_PATH:+$LEGACY_APP_PATH/Contents/MacOS/$LEGACY_NODE_NAME}" \
+		"${LEGACY_OTHER_APP_PATH:+$LEGACY_OTHER_APP_PATH/Contents/MacOS/$LEGACY_NODE_NAME}" \
+		"$LEGACY_TREE/$LEGACY_NODE_NAME"
+}
+unit_mentions_any_install() { # unit_mentions_any_install <unit file>
+	unit_mentions_install "$1" "$APP_PATH" "$OTHER_APP_PATH" "$TREE" \
+		"$LEGACY_APP_PATH" "$LEGACY_OTHER_APP_PATH" "$LEGACY_TREE"
+}
+
+# classify_unit sets UNIT_STATE for one registration file: absent, ours (it
+# starts one of the installs this run removes) or foreign. A unit that names a
+# path inside those installs without starting one of their nodes in a form
+# this script can read stops the uninstall before anything is removed.
+classify_unit() { # classify_unit <unit file>
+	UNIT_STATE=absent
+	exists "$1" || return 0
+	if unit_is_any_install "$1"; then
+		UNIT_STATE=ours
 		return 0
 	fi
-	if ! service_is_ours; then
-		if unit_mentions_install; then
-			die "$(unit_file) names a path inside this install, but not in a form this script can read as this install's agenthub-node, so nothing was removed: deleting what a registered service runs from leaves it failing at every login. Take the service down first (\"ah service uninstall\" with the ah it was registered by), then run this again."
-		fi
-		say "left the registered background service alone: $(unit_file) starts an agenthub-node that is not this install's"
-		return 0
+	if unit_mentions_any_install "$1"; then
+		die "$1 names a path inside this install, but not in a form this script can read as starting this install's node, so nothing was removed: deleting what a registered service runs from leaves it failing at every login. Take the service down first (\"ah service uninstall\" with the ah it was registered by), then run this again."
 	fi
-	SERVICE_OURS=1
-	if [ -n "$AH" ]; then
-		if ! run "$AH" service uninstall; then
-			die "\"$AH\" service uninstall failed, so nothing else was removed: deleting the app under a registered service leaves it failing at every login. Fix that first, then run this again."
-		fi
-		return 0
-	fi
-	# No ah anywhere, which is an install half-removed by hand. The unit is
-	# still where `ah service install` wrote it; take it down the same way.
-	uninstall_unit="$(unit_file)"
+	UNIT_STATE=foreign
+	say "left the registered background service alone: $1 starts a node that is not this install's"
+}
+
+# take_down_unit stops a registration and removes its file directly, the way
+# `ah service uninstall` would: for an install half-removed by hand, whose ah
+# is gone, or for the current registration when only a pre-rename ah is left.
+take_down_unit() { # take_down_unit <unit file> <launchd label> <systemd unit name>
 	case "$OS_SLUG" in
-	darwin) run launchctl bootout "gui/$(id -u)/local.agenthub.node" || true ;;
-	linux) run systemctl --user disable --now agenthub-node.service || true ;;
+	darwin) run launchctl bootout "gui/$(id -u)/$2" || true ;;
+	linux) run systemctl --user disable --now "$3.service" || true ;;
 	esac
-	remove_path "$uninstall_unit"
+	remove_path "$1"
 	if [ "$OS_SLUG" = "linux" ]; then
 		run systemctl --user daemon-reload || true
 	fi
 }
 
+# remove_services stops the node and removes its registrations, before any
+# file they run from is deleted: launchd and systemd both restart a node that
+# exits, and one pointed at a binary that is gone fails in a loop at every
+# login. A current ah takes down both names' registrations in one command
+# (internal/service Uninstall), so it is used only when neither of them is
+# someone else's; a pre-rename ah knows only its own.
+remove_services() {
+	if [ "$SERVICE_OURS" -eq 0 ]; then
+		return 0
+	fi
+	if [ "$AH_ERA" = current ] && [ "$CURRENT_UNIT_STATE" != foreign ] && [ "$LEGACY_UNIT_STATE" != foreign ]; then
+		if ! run "$AH" service uninstall; then
+			die "\"$AH\" service uninstall failed, so nothing else was removed: deleting the app under a registered service leaves it failing at every login. Fix that first, then run this again."
+		fi
+		return 0
+	fi
+	if [ "$AH_ERA" = legacy ] && [ "$LEGACY_UNIT_STATE" = ours ]; then
+		if ! run "$AH" service uninstall; then
+			die "\"$AH\" service uninstall failed, so nothing else was removed: deleting the app under a registered service leaves it failing at every login. Fix that first, then run this again."
+		fi
+	elif [ "$LEGACY_UNIT_STATE" = ours ]; then
+		take_down_unit "$(legacy_unit_file)" "$LEGACY_LABEL" "$LEGACY_UNIT_NAME"
+	fi
+	if [ "$CURRENT_UNIT_STATE" = ours ]; then
+		take_down_unit "$(current_unit_file)" "$CURRENT_LABEL" "$CURRENT_UNIT_NAME"
+	fi
+}
+
 # stop_window_node stops a node the desktop window started on its own (it does
 # that when no service is running) — a detached process the service manager
-# knows nothing about, still holding the database open. Matched by the full
-# path of this install's binary, so no other agenthub-node is touched.
-stop_window_node() {
+# knows nothing about, still holding the database open — and on Linux the
+# window itself. Matched by the full path of each given binary, so no other
+# node is touched.
+stop_window_node() { # stop_window_node <binary>...
 	command -v pkill >/dev/null 2>&1 || return 0
-	for window_node in "${APP_PATH:+$APP_PATH/Contents/MacOS/agenthub-node}" \
-		"${OTHER_APP_PATH:+$OTHER_APP_PATH/Contents/MacOS/agenthub-node}" \
-		"$AGENTHUB_DIR/agenthub-node" "$AGENTHUB_DIR/agenthub-desktop"; do
+	for window_node in "$@"; do
 		[ -n "$window_node" ] || continue
 		if pgrep -f "$window_node" >/dev/null 2>&1; then
 			run pkill -f "$window_node" || true
@@ -1169,33 +1492,40 @@ stop_window_node() {
 }
 
 # unpath_file takes the lines ensure_path appended back out of one startup
-# file: the marker, the line under it when it is the one this script wrote,
-# and the blank line it put above them. The rest of the file is rewritten
-# byte for byte, in place — through `cat >`, so a symlinked file stays a link.
+# file, under either name's comment: the comment, the line under it when it is
+# the one this script wrote, and the blank line it put above them. The rest of
+# the file is rewritten byte for byte, in place — through `cat >`, so a
+# symlinked file stays a link. A fish file holding the comment is this
+# script's whole.
 unpath_file() { # unpath_file <file>
 	[ -f "$1" ] || return 0
-	grep -qF "$PATH_MARK" "$1" 2>/dev/null || return 0
-	if ! grep -qxF "$PATH_MARK" "$1" 2>/dev/null; then
-		warn "$1 mentions \"$PATH_MARK\" but not as the line this script writes; left it as it is"
+	if grep -qF "$CURRENT_PATH_MARK" "$1" 2>/dev/null; then
+		unpath_mark="$CURRENT_PATH_MARK"
+	elif grep -qF "$LEGACY_PATH_MARK" "$1" 2>/dev/null; then
+		unpath_mark="$LEGACY_PATH_MARK"
+	else
+		return 0
+	fi
+	if ! grep -qxF "$CURRENT_PATH_MARK" "$1" 2>/dev/null && ! grep -qxF "$LEGACY_PATH_MARK" "$1" 2>/dev/null; then
+		warn "$1 mentions \"$unpath_mark\" but not as the line this script writes; left it as it is"
 		return 0
 	fi
 	case "$1" in
-	*/fish/conf.d/agenthub.fish)
-		# The whole file is this script's.
+	*/fish/conf.d/"$CURRENT_FISH_FILE" | */fish/conf.d/"$LEGACY_FISH_FILE")
 		remove_path "$1"
 		return 0
 		;;
 	esac
 	if [ "$DRY_RUN" -eq 1 ]; then
-		say "+ remove the AgentHub PATH lines from $(quote "$1")"
+		say "+ remove the $CURRENT_PRODUCT PATH lines from $(quote "$1")"
 		return 0
 	fi
 	# shellcheck disable=SC2016 # the literal line ensure_path writes
 	unpath_line='export PATH="$HOME/.local/bin:$PATH"'
 	unpath_tmp="$TEMP_DIR/startup-file"
-	awk -v mark="$PATH_MARK" -v line="$unpath_line" '
+	awk -v mark="$CURRENT_PATH_MARK" -v legacy_mark="$LEGACY_PATH_MARK" -v line="$unpath_line" '
 		skip { skip = 0; if ($0 == line) next }
-		$0 == mark { held = 0; skip = 1; next }
+		$0 == mark || $0 == legacy_mark { held = 0; skip = 1; next }
 		{
 			if (held) print ""
 			held = 0
@@ -1204,44 +1534,131 @@ unpath_file() { # unpath_file <file>
 		}
 		END { if (held) print "" }' "$1" >"$unpath_tmp"
 	if (cat "$unpath_tmp" >"$1") 2>/dev/null; then
-		say "removed the AgentHub PATH lines from $1"
+		say "removed the $CURRENT_PRODUCT PATH lines from $1"
 	else
-		warn "could not write $1; remove the \"$PATH_MARK\" line and the one under it yourself"
+		warn "could not write $1; remove the \"$unpath_mark\" line and the one under it yourself"
 	fi
 }
 
 # default_data_directory is where the node keeps node.key and its database
-# when nothing says otherwise (cmd/agenthub-node: os.UserConfigDir()/agenthub).
-default_data_directory() {
+# when nothing says otherwise: os.UserConfigDir()/agenthallway, and before the
+# rename os.UserConfigDir()/agenthub, which the node moves its own files out
+# of on its first start after the upgrade (internal/datadir).
+default_data_directory() { # default_data_directory [slug]
 	if [ "$OS_SLUG" = "darwin" ]; then
-		printf '%s' "$HOME/Library/Application Support/agenthub"
+		printf '%s' "$HOME/Library/Application Support/${1:-$SLUG}"
 	else
-		printf '%s' "${XDG_CONFIG_HOME:-$HOME/.config}/agenthub"
+		printf '%s' "${XDG_CONFIG_HOME:-$HOME/.config}/${1:-$SLUG}"
 	fi
 }
 
-# data_directory is the directory beside the database the registered unit
-# names — node.key lives beside the database — or the default.
-data_directory() {
-	if [ -n "$SERVICE_DB" ]; then
-		dirname "$SERVICE_DB"
-	else
-		default_data_directory
-	fi
-}
-
-log_directory() {
+# log_directory is where the node started by the service (macOS) or by the
+# window writes node.log. Logs are not moved by the upgrade: the pre-rename
+# directory keeps the old ones.
+log_directory() { # log_directory [slug]
 	if [ "$OS_SLUG" = "darwin" ]; then
-		printf '%s' "$HOME/Library/Logs/agenthub"
+		printf '%s' "$HOME/Library/Logs/${1:-$SLUG}"
 	else
-		printf '%s' "${XDG_STATE_HOME:-$HOME/.local/state}/agenthub"
+		printf '%s' "${XDG_STATE_HOME:-$HOME/.local/state}/${1:-$SLUG}"
 	fi
 }
 
-# purge_data deletes the node's identity and history. The default directory
-# is the node's own and goes whole. A database the owner put anywhere else —
-# ./data in a checkout, or a checkout itself, which is also a directory called
-# agenthub — takes only its own files with it.
+# our_data_file says whether a file name in a data directory is one the node
+# writes there (internal/datadir lists them): its key, the temporary file a
+# key is written through, its database under either name with SQLite's
+# companions, the move's marker, and the database the service unit names.
+# Nothing is ours by being in the directory: on macOS the pre-rename one is
+# also, case-insensitively, the directory of an unrelated app called AgentHub.
+our_data_file() { # our_data_file <file name>
+	case "$1" in
+	node.key | .node.key-* | "$LEGACY_MIGRATION_MARK") return 0 ;;
+	esac
+	for our_db in "$CURRENT_DB_NAME" "$LEGACY_DB_NAME" "${PURGE_DB_NAME:-$CURRENT_DB_NAME}"; do
+		case "$1" in
+		"$our_db" | "$our_db-wal" | "$our_db-shm" | "$our_db-journal") return 0 ;;
+		esac
+	done
+	return 1
+}
+
+# leave_or_rmdir removes a directory this product made once nothing is left in
+# it, and otherwise says what kept it. rmdir, never rm -rf: what is left is not
+# this product's to delete. Under --dry-run nothing was removed, so the files
+# the commands above would have removed are not counted as left.
+leave_or_rmdir() { # leave_or_rmdir <directory> <data|log>
+	[ -d "$1" ] || return 0
+	if [ -L "$1" ]; then
+		say "left $1: it is a symbolic link, not a directory this script made"
+		return 0
+	fi
+	left_names=""
+	left_count=0
+	for left_entry in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+		exists "$left_entry" || continue
+		left_name="$(basename "$left_entry")"
+		if [ "$DRY_RUN" -eq 1 ] && { [ ! -d "$left_entry" ] || [ -L "$left_entry" ]; }; then
+			if [ "$2" = data ] && our_data_file "$left_name"; then
+				continue
+			fi
+			if [ "$2" = log ] && [ "$left_name" = node.log ]; then
+				continue
+			fi
+		fi
+		left_count=$((left_count + 1))
+		if [ "$left_count" -le 5 ]; then
+			left_names="${left_names:+$left_names, }$left_name"
+		fi
+	done
+	if [ "$left_count" -eq 0 ]; then
+		if run rmdir "$1" 2>/dev/null; then
+			[ "$DRY_RUN" -eq 1 ] || say "removed $1"
+		else
+			warn "could not remove the empty directory $1"
+		fi
+		return 0
+	fi
+	[ "$left_count" -le 5 ] || left_names="$left_names, …"
+	say "left $1: it holds files that are not $CURRENT_PRODUCT's ($left_names)"
+}
+
+# remove_our_files deletes, from one data directory, the files the node
+# writes there (our_data_file) and nothing else, then the directory if that
+# emptied it.
+remove_our_files() { # remove_our_files <directory>
+	[ -d "$1" ] || return 0
+	for our_entry in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+		exists "$our_entry" || continue
+		if our_data_file "$(basename "$our_entry")"; then
+			remove_file "$our_entry"
+		fi
+	done
+	leave_or_rmdir "$1" data
+}
+
+# data_directories prints, one per line and each once, the directories --purge
+# looks in: the one beside the database the registered unit names, the
+# current default and the pre-rename default.
+data_directories() {
+	data_seen=""
+	data_service_dir=""
+	[ -z "$SERVICE_DB" ] || data_service_dir="$(dirname "$SERVICE_DB")"
+	for data_dir in "$data_service_dir" "$(default_data_directory "$CURRENT_SLUG")" "$(default_data_directory "$LEGACY_SLUG")"; do
+		[ -n "$data_dir" ] || continue
+		data_abs="$(absolute_path "$data_dir")"
+		if printf '%s\n' "$data_seen" | grep -qxF "$data_abs"; then
+			continue
+		fi
+		data_seen="$data_seen
+$data_abs"
+		printf '%s\n' "$data_dir"
+	done
+}
+
+# purge_data deletes the node's identity, history and logs: the files the node
+# writes, from each directory it may have written them to, and each directory
+# only once that leaves it empty. Never a directory whole — the pre-rename data
+# directory on macOS is, case-insensitively, also another product's, and a
+# database the owner kept in ./data of a checkout has neighbours of its own.
 purge_data() {
 	# The data a registered service belongs to is only this install's to
 	# delete when the service is. A --prefix run with no service of its own
@@ -1252,26 +1669,47 @@ purge_data() {
 		return 0
 	fi
 	PURGED=1
-	purge_dir="$(data_directory)"
 	if [ "$SERVICE_READ" -eq 0 ]; then
-		warn "the registered service could not be read, so a database kept somewhere other than $(default_data_directory) was not looked for"
+		warn "the registered service could not be read, so a database kept somewhere other than $(default_data_directory "$CURRENT_SLUG") or $(default_data_directory "$LEGACY_SLUG") was not looked for"
 	fi
-	if [ "$(absolute_path "$purge_dir")" = "$(absolute_path "$(default_data_directory)")" ]; then
-		remove_path "$purge_dir"
-	else
-		purge_db="${SERVICE_DB:-$purge_dir/agenthub.db}"
-		for purge_file in "$purge_dir/node.key" "$purge_db" "$purge_db-wal" "$purge_db-shm"; do
-			remove_path "$purge_file"
-		done
-	fi
-	remove_path "$(log_directory)"
+	PURGE_DB_NAME=""
+	[ -z "$SERVICE_DB" ] || PURGE_DB_NAME="$(basename "$SERVICE_DB")"
+	data_directories >"$TEMP_DIR/data-directories"
+	while IFS= read -r purge_dir; do
+		# The unit's own database file name counts only in the directory the
+		# unit names; elsewhere a file of that name is someone else's.
+		purge_db_name_kept="$PURGE_DB_NAME"
+		if [ -n "$SERVICE_DB" ] && [ "$(absolute_path "$purge_dir")" != "$(absolute_path "$(dirname "$SERVICE_DB")")" ]; then
+			PURGE_DB_NAME=""
+		fi
+		remove_our_files "$purge_dir"
+		PURGE_DB_NAME="$purge_db_name_kept"
+	done <"$TEMP_DIR/data-directories"
+	for purge_log in "$(log_directory "$CURRENT_SLUG")" "$(log_directory "$LEGACY_SLUG")"; do
+		[ -d "$purge_log" ] || continue
+		remove_file "$purge_log/node.log"
+		leave_or_rmdir "$purge_log" log
+	done
 }
 
-# is_install_tree says yes to a directory that is an unpacked AgentHub tree and
-# not a place that merely has one in it: the two binaries at its top level, and
-# none of the directories install refuses to use. holds_agenthub is looser on
-# purpose — it recognises a prefix — and a source checkout, which has bin/ah,
-# passes it.
+# kept_data_directories names the directories that hold a node.key, for the
+# closing line of an uninstall that keeps them.
+kept_data_directories() {
+	kept_list=""
+	data_directories >"$TEMP_DIR/data-directories"
+	while IFS= read -r kept_dir; do
+		if exists "$kept_dir/node.key"; then
+			kept_list="${kept_list:+$kept_list and }$kept_dir"
+		fi
+	done <"$TEMP_DIR/data-directories"
+	printf '%s' "${kept_list:-$(default_data_directory "$CURRENT_SLUG")}"
+}
+
+# is_install_tree says yes to a directory that is an unpacked tree of this
+# product, under either name, and not a place that merely has one in it: ah
+# and a node binary at its top level, and none of the directories install
+# refuses to use. holds_install is looser on purpose — it recognises a prefix
+# — and a source checkout, which has bin/ah, passes it.
 is_install_tree() { # is_install_tree <directory>
 	tree_dir="$(absolute_path "$1")"
 	tree_home="$(absolute_path "$HOME")"
@@ -1283,127 +1721,360 @@ is_install_tree() { # is_install_tree <directory>
 	if exists "$tree_dir/go.mod" || exists "$tree_dir/.git"; then
 		return 1
 	fi
-	[ -f "$tree_dir/ah" ] && [ -f "$tree_dir/agenthub-node" ]
+	[ -f "$tree_dir/ah" ] && { [ -f "$tree_dir/$CURRENT_NODE_NAME" ] || [ -f "$tree_dir/$LEGACY_NODE_NAME" ]; }
 }
 
-# looks_like_app says yes to an AgentHub app bundle.
+# looks_like_app says yes to an app bundle of this product.
 looks_like_app() { # looks_like_app <path>
 	exists "$1/Contents/MacOS/ah" || exists "$1/Contents/MacOS/desktop"
 }
 
-uninstall() {
-	TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agenthub-uninstall.XXXXXX")"
-	trap cleanup EXIT INT TERM HUP
+# menu_entry_launches says whether a .desktop file starts the given binary.
+# Entries from before Exec= was quoted spell it bare.
+menu_entry_launches() { # menu_entry_launches <entry> <binary>
+	[ -f "$1" ] || return 1
+	grep -qxF "Exec=\"$2\"" "$1" 2>/dev/null || grep -qxF "Exec=$2" "$1" 2>/dev/null
+}
 
-	# A .app bundle is a macOS install and nothing else. On Linux APP_PATH
-	# still names /Applications/agenthub-desktop.app (it is computed for both),
-	# and every step below that looks there would reach a directory this
-	# uninstall has no business in — on a mac whose uname says Linux, which is
-	# how the tests run, that is the developer's own app. Emptied here, it
-	# matches nothing: no ah is taken from it, no link counts as pointing into
-	# it, no process is matched by it and nothing under it is removed.
-	OTHER_APP_PATH=""
-	if [ "$OS_SLUG" != "darwin" ]; then
-		APP_PATH=""
-	elif [ -z "$PREFIX" ]; then
-		# Install picks /Applications when it is writable and ~/Applications
-		# when it is not, and that can change between the install and now (an
-		# account made admin). Both are looked at, so the app is found where it
-		# is rather than where it would go today.
-		OTHER_APP_PATH="$HOME/Applications/agenthub-desktop.app"
-		if [ "$OTHER_APP_PATH" = "$APP_PATH" ]; then
-			OTHER_APP_PATH="${AGENTHUB_APPLICATIONS:-/Applications}/agenthub-desktop.app"
+# bundle_id_of reads an app bundle's CFBundleIdentifier, which names its caches
+# and preferences under ~/Library, or prints the given default.
+bundle_id_of() { # bundle_id_of <app bundle> <default>
+	bundle_read=""
+	if [ -f "$1/Contents/Info.plist" ]; then
+		bundle_read="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$1/Contents/Info.plist" 2>/dev/null || true)"
+	fi
+	printf '%s' "${bundle_read:-$2}"
+}
+
+# app_caches prints the paths under ~/Library that an app with this bundle id
+# writes: caches, WebKit storage (the window's preferences live there),
+# preferences and saved window state.
+app_caches() { # app_caches <bundle id>
+	for cache_entry in "Caches/$1" "WebKit/$1" "HTTPStorages/$1" "Preferences/$1.plist" "Saved Application State/$1.savedState"; do
+		printf '%s\n' "$HOME/Library/$cache_entry"
+	done
+}
+
+# --- the pre-rename install, after an upgrade ------------------------------------
+
+# legacy_item collects one thing retire_legacy_install found (list) or removes
+# it (remove). A link is a file in a directory of the owner's; everything else
+# is a directory or file of the pre-rename install's own.
+legacy_item() { # legacy_item <list|remove> <path> [file]
+	if [ "$1" = list ]; then
+		LEGACY_FOUND="${LEGACY_FOUND:+$LEGACY_FOUND, }$2"
+	elif [ "${3:-}" = file ]; then
+		remove_file "$2"
+	else
+		remove_path "$2"
+	fi
+}
+
+# legacy_inventory walks what a pre-rename install put in place and is still
+# there, in the order it is removed: links, then app bundles, the tree, the
+# menu entry, the skill, the app's caches and the prefix marker. Each is
+# looked at the way --uninstall looks at it: a link only when it points into
+# the pre-rename app or tree, the tree only when it is one, the skill only
+# when it carries the pre-rename marker. Never data, logs, PATH lines or the
+# pre-rename fish file — those still put ~/.local/bin on PATH, and the data is
+# the node's to move.
+legacy_inventory() { # legacy_inventory <list|remove>
+	for inventory_name in "$LEGACY_NODE_NAME" "$LEGACY_MCP_NAME" "$LEGACY_APP_NAME"; do
+		if link_points_into "$BIN_DIR/$inventory_name" "$LEGACY_APP_PATH" "$LEGACY_OTHER_APP_PATH" "$LEGACY_TREE"; then
+			legacy_item "$1" "$BIN_DIR/$inventory_name" file
+		fi
+	done
+	for inventory_app in "$LEGACY_APP_PATH" "$LEGACY_OTHER_APP_PATH"; do
+		if [ -n "$inventory_app" ] && looks_like_app "$inventory_app"; then
+			legacy_item "$1" "$inventory_app"
+		fi
+	done
+	# An AGENTHUB_HOME tree is the current tree as well, upgraded in place.
+	if [ "$(absolute_path "$LEGACY_TREE")" != "$(absolute_path "$TREE")" ] && is_install_tree "$LEGACY_TREE"; then
+		legacy_item "$1" "$LEGACY_TREE"
+	fi
+	inventory_entry="${XDG_DATA_HOME:-$HOME/.local/share}/applications/$LEGACY_MENU_FILE"
+	if menu_entry_launches "$inventory_entry" "$LEGACY_TREE/$LEGACY_APP_NAME"; then
+		legacy_item "$1" "$inventory_entry" file
+	fi
+	if [ "$NO_SKILL" -eq 0 ] && [ -z "$PREFIX" ]; then
+		inventory_skill="$(skill_directory "$LEGACY_SKILL_NAME")"
+		if skill_is_ours "$inventory_skill" "$LEGACY_MARKER"; then
+			legacy_item "$1" "$inventory_skill"
 		fi
 	fi
+	if [ "$OS_SLUG" = "darwin" ] && [ -z "$PREFIX" ]; then
+		app_caches "$LEGACY_BUNDLE_ID" >"$TEMP_DIR/legacy-caches"
+		while IFS= read -r inventory_cache; do
+			if exists "$inventory_cache"; then
+				legacy_item "$1" "$inventory_cache"
+			fi
+		done <"$TEMP_DIR/legacy-caches"
+	fi
+	if [ -n "$PREFIX" ] && exists "$PREFIX/$LEGACY_MARKER"; then
+		legacy_item "$1" "$PREFIX/$LEGACY_MARKER" file
+	fi
+}
 
-	AH="$(uninstall_ah)"
+# retire_legacy_install removes the pre-rename install that an upgrade has
+# just replaced: its app, tree, links, menu entry, marked skill and caches.
+#
+# Not while a pre-rename registration that runs them is still in place: the
+# old node would fail at every login, and — worse — a launchd job with
+# KeepAlive restarting it would find its identity moved away and make a new
+# one. `ah service install` from the new release retires that registration
+# (internal/service), which is why this runs after register_service; with
+# --no-service, or a service that could not be read, the old install stays and
+# the reader is told what to run. Under --dry-run nothing was registered, so a
+# registration the printed `ah service install` would retire counts as gone.
+retire_legacy_install() {
+	LEGACY_FOUND=""
+	legacy_inventory list
+	[ -n "$LEGACY_FOUND" ] || return 0
+	retire_unit="$(legacy_unit_file)"
+	if exists "$retire_unit" && ! { [ "$DRY_RUN" -eq 1 ] && [ "$SERVICE_REGISTERED" -eq 1 ]; }; then
+		if service_is_ours "$retire_unit" \
+			"${LEGACY_APP_PATH:+$LEGACY_APP_PATH/Contents/MacOS/$LEGACY_NODE_NAME}" \
+			"${LEGACY_OTHER_APP_PATH:+$LEGACY_OTHER_APP_PATH/Contents/MacOS/$LEGACY_NODE_NAME}" \
+			"$LEGACY_TREE/$LEGACY_NODE_NAME" ||
+			unit_mentions_install "$retire_unit" "$LEGACY_APP_PATH" "$LEGACY_OTHER_APP_PATH" "$LEGACY_TREE"; then
+			warn "the pre-rename background service $retire_unit is still registered and runs the pre-rename install; the old install was kept so it keeps working. \"$AH\" service install replaces it (and keeps its database); run this script again afterwards."
+			LEGACY_STATE="kept, because its background service is still registered: $LEGACY_FOUND"
+			return 0
+		fi
+	fi
+	stop_window_node \
+		"${LEGACY_APP_PATH:+$LEGACY_APP_PATH/Contents/MacOS/$LEGACY_NODE_NAME}" \
+		"${LEGACY_OTHER_APP_PATH:+$LEGACY_OTHER_APP_PATH/Contents/MacOS/$LEGACY_NODE_NAME}" \
+		"$LEGACY_TREE/$LEGACY_NODE_NAME" "$LEGACY_TREE/$LEGACY_APP_NAME"
+	retire_skipped="$REMOVE_SKIPPED"
+	legacy_inventory remove
+	if [ "$DRY_RUN" -eq 1 ]; then
+		say "the commands above remove the pre-rename $LEGACY_PRODUCT install: $LEGACY_FOUND"
+		LEGACY_STATE="removed: $LEGACY_FOUND"
+	elif [ "$REMOVE_SKIPPED" != "$retire_skipped" ]; then
+		LEGACY_STATE="partly removed; delete what is left yourself:${REMOVE_SKIPPED#"$retire_skipped"}"
+	else
+		say "removed the pre-rename $LEGACY_PRODUCT install: $LEGACY_FOUND"
+		LEGACY_STATE="removed: $LEGACY_FOUND"
+	fi
+}
+
+# legacy_era_guard stops a pre-rename release from being installed over a
+# machine that has moved on. The pre-rename node looks for its identity in
+# the pre-rename data directory; once the new node has moved it, a pre-rename
+# node registered the usual way would start as a new node with no pairings.
+# With --no-service nothing is registered, so the install goes ahead and the
+# reader gets the commands that run the old node on the moved files.
+legacy_era_guard() {
+	[ "$ERA" = legacy ] || return 0
+	guard_found=""
+	guard_data="$(default_data_directory "$CURRENT_SLUG")"
+	for guard_file in node.key "$CURRENT_DB_NAME" "$LEGACY_MIGRATION_MARK"; do
+		if exists "$guard_data/$guard_file"; then
+			guard_found="${guard_found:+$guard_found, }$guard_data/$guard_file"
+		fi
+	done
+	guard_unit="$(current_unit_file)"
+	if exists "$guard_unit"; then
+		guard_found="${guard_found:+$guard_found, }$guard_unit"
+	fi
+	guard_ah=""
+	for guard_app in "$CURRENT_APP_PATH" "$CURRENT_OTHER_APP_PATH"; do
+		if [ -n "$guard_app" ] && looks_like_app "$guard_app"; then
+			guard_found="${guard_found:+$guard_found, }$guard_app"
+			[ -n "$guard_ah" ] || guard_ah="$guard_app/Contents/MacOS/ah"
+		fi
+	done
+	if exists "$CURRENT_TREE/$CURRENT_NODE_NAME"; then
+		guard_found="${guard_found:+$guard_found, }$CURRENT_TREE"
+		[ -n "$guard_ah" ] || guard_ah="$CURRENT_TREE/ah"
+	fi
+	[ -n "$guard_found" ] || return 0
+	guard_tag="${VERSION:-$ARCHIVE_NAME}"
+	guard_recipe="To run the pre-rename node on the identity the new node moved (a rollback):
+  \"${guard_ah:-ah}\" service uninstall
+  curl -fsSL $RAW_SELF | sh -s -- --version ${VERSION:-<tag>} --no-service
+  \"$BIN_DIR/ah\" service install --db \"$guard_data/$CURRENT_DB_NAME\"
+The first removes the $CURRENT_PRODUCT registration (and data stays where it is);
+the last registers the pre-rename node on the moved database, so it is the same
+node. Never move the files back by hand while any node runs."
+	if [ "$NO_SERVICE" -eq 1 ]; then
+		warn "$guard_tag is from before the rename to $CURRENT_PRODUCT, and this machine has moved on ($guard_found). It is installed because of --no-service, and nothing is registered.
+$guard_recipe"
+		return 0
+	fi
+	die "$guard_tag is from before the rename to $CURRENT_PRODUCT. This machine already has $CURRENT_PRODUCT ($guard_found): installed here, $guard_tag would register a node that looks for its identity in $(default_data_directory "$LEGACY_SLUG"), which the new node moves to $guard_data, and it would start as a new node. Nothing was installed. Either install v0.2.0 or later, or roll back.
+$guard_recipe"
+}
+
+# warn_stale_mcp_configs names the MCP configurations that still start the
+# pre-rename agenthub-mcp, which an upgrade has just removed. Read-only: these
+# files are the owner's (~/.claude.json is rewritten by every running Claude
+# Code), and an entry cannot be told from another product's by its key. An
+# entry is ours when its command is the pre-rename MCP binary.
+warn_stale_mcp_configs() {
+	stale=""
+	stale_seen=""
+	for stale_file in "${CLAUDE_CONFIG_DIR:+$CLAUDE_CONFIG_DIR/.claude.json}" "$HOME/.claude.json" "${CODEX_HOME:-$HOME/.codex}/config.toml"; do
+		[ -n "$stale_file" ] || continue
+		case "$stale_seen" in
+		*"|$stale_file|"*) continue ;;
+		esac
+		stale_seen="$stale_seen|$stale_file|"
+		if [ -f "$stale_file" ] && grep -qF "$LEGACY_MCP_NAME" "$stale_file" 2>/dev/null; then
+			stale="$stale $stale_file"
+		fi
+	done
+	[ -n "$stale" ] || return 0
+	# The one this run installed: it sits beside ah in the app and the tree.
+	stale_replacement="$CURRENT_MCP_NAME"
+	if [ -n "$AH" ]; then
+		stale_replacement="$(dirname "$AH")/$CURRENT_MCP_NAME"
+	fi
+	warn "these still start $LEGACY_MCP_NAME, which this upgrade removed:$stale. Replace that entry with one keyed $CURRENT_SLUG whose command is $stale_replacement and whose arguments are the old entry's (-as <provider>:<id>, plus -url or -channel if it had them); the tools are now mcp__${CURRENT_SLUG}__*. Project .mcp.json files were not searched."
+}
+
+# --- uninstall -------------------------------------------------------------------
+
+uninstall() {
+	TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/$CURRENT_SLUG-uninstall.XXXXXX")"
+	trap cleanup EXIT INT TERM HUP
+
+	pick_uninstall_ah
+	CURRENT_UNIT_STATE=absent
+	LEGACY_UNIT_STATE=absent
+	classify_unit "$(current_unit_file)"
+	CURRENT_UNIT_STATE="$UNIT_STATE"
+	classify_unit "$(legacy_unit_file)"
+	LEGACY_UNIT_STATE="$UNIT_STATE"
 	SERVICE_FOUND=0
-	exists "$(unit_file)" && SERVICE_FOUND=1
+	if [ "$CURRENT_UNIT_STATE" != absent ] || [ "$LEGACY_UNIT_STATE" != absent ]; then
+		SERVICE_FOUND=1
+	fi
+	SERVICE_OURS=0
+	if [ "$CURRENT_UNIT_STATE" = ours ] || [ "$LEGACY_UNIT_STATE" = ours ]; then
+		SERVICE_OURS=1
+	fi
 	SERVICE_READ=0
 	SERVICE_DB=""
 	# Read before the service goes: the unit is the only record of a database
 	# kept somewhere other than the default, and --purge needs to know where.
-	# Only through this install's own ah, and only for a unit that is ours.
-	if [ -n "$AH" ] && service_is_ours; then
-		read_service_registration
+	# Only through this install's own ah, only for a unit that is ours, and
+	# only when that ah reads the unit that is ours: a current ah describes
+	# the current registration (or, with none, the pre-rename one), a
+	# pre-rename ah only the pre-rename one.
+	if [ -n "$AH" ] && [ "$SERVICE_OURS" -eq 1 ]; then
+		if { [ "$AH_ERA" = current ] && [ "$CURRENT_UNIT_STATE" != foreign ]; } ||
+			{ [ "$AH_ERA" = legacy ] && [ "$LEGACY_UNIT_STATE" = ours ]; }; then
+			read_service_registration
+		fi
 	elif [ "$SERVICE_FOUND" -eq 0 ]; then
 		SERVICE_READ=1
 	fi
-	for uninstall_app in "$APP_PATH" "$OTHER_APP_PATH"; do
-		if [ -n "$uninstall_app" ] && looks_like_app "$uninstall_app" && [ -f "$uninstall_app/Contents/Info.plist" ]; then
-			uninstall_bundle_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$uninstall_app/Contents/Info.plist" 2>/dev/null || true)"
-			[ -z "$uninstall_bundle_id" ] || BUNDLE_ID="$uninstall_bundle_id"
-		fi
-	done
-
-	remove_service
+	uninstall_bundle_ids=""
 	if [ "$OS_SLUG" = "darwin" ]; then
 		for uninstall_app in "$APP_PATH" "$OTHER_APP_PATH"; do
-			[ -n "$uninstall_app" ] || continue
-			QUIT_APP_PATH="$uninstall_app"
-			quit_running_app
+			if [ -n "$uninstall_app" ] && looks_like_app "$uninstall_app"; then
+				uninstall_bundle_ids="$uninstall_bundle_ids $(bundle_id_of "$uninstall_app" "$CURRENT_BUNDLE_ID")"
+			fi
 		done
+		for uninstall_app in "$LEGACY_APP_PATH" "$LEGACY_OTHER_APP_PATH"; do
+			if [ -n "$uninstall_app" ] && looks_like_app "$uninstall_app"; then
+				uninstall_bundle_ids="$uninstall_bundle_ids $(bundle_id_of "$uninstall_app" "$LEGACY_BUNDLE_ID")"
+			fi
+		done
+		uninstall_bundle_ids="$uninstall_bundle_ids $CURRENT_BUNDLE_ID $LEGACY_BUNDLE_ID"
 	fi
-	stop_window_node
 
-	for uninstall_name in ah agenthub-node agenthub-mcp agenthub-desktop; do
-		remove_link "$uninstall_name"
+	remove_services
+	if [ "$OS_SLUG" = "darwin" ]; then
+		quit_running_app "$APP_PATH" "$CURRENT_APP_NAME"
+		quit_running_app "$OTHER_APP_PATH" "$CURRENT_APP_NAME"
+		quit_running_app "$LEGACY_APP_PATH" "$LEGACY_APP_NAME"
+		quit_running_app "$LEGACY_OTHER_APP_PATH" "$LEGACY_APP_NAME"
+	fi
+	stop_window_node \
+		"${APP_PATH:+$APP_PATH/Contents/MacOS/$CURRENT_NODE_NAME}" \
+		"${OTHER_APP_PATH:+$OTHER_APP_PATH/Contents/MacOS/$CURRENT_NODE_NAME}" \
+		"$TREE/$CURRENT_NODE_NAME" "$TREE/$CURRENT_APP_NAME" \
+		"${LEGACY_APP_PATH:+$LEGACY_APP_PATH/Contents/MacOS/$LEGACY_NODE_NAME}" \
+		"${LEGACY_OTHER_APP_PATH:+$LEGACY_OTHER_APP_PATH/Contents/MacOS/$LEGACY_NODE_NAME}" \
+		"$LEGACY_TREE/$LEGACY_NODE_NAME" "$LEGACY_TREE/$LEGACY_APP_NAME"
+
+	for uninstall_name in ah "$CURRENT_NODE_NAME" "$CURRENT_MCP_NAME" "$CURRENT_APP_NAME" \
+		"$LEGACY_NODE_NAME" "$LEGACY_MCP_NAME" "$LEGACY_APP_NAME"; do
+		remove_link "$uninstall_name" "$APP_PATH" "$OTHER_APP_PATH" "$TREE" \
+			"$LEGACY_APP_PATH" "$LEGACY_OTHER_APP_PATH" "$LEGACY_TREE"
 	done
-	for uninstall_app in "$APP_PATH" "$OTHER_APP_PATH"; do
+	for uninstall_app in "$APP_PATH" "$OTHER_APP_PATH" "$LEGACY_APP_PATH" "$LEGACY_OTHER_APP_PATH"; do
 		if [ -z "$uninstall_app" ]; then
 			:
 		elif looks_like_app "$uninstall_app"; then
 			remove_path "$uninstall_app"
 		elif exists "$uninstall_app"; then
-			say "left $uninstall_app alone: it does not look like the AgentHub app"
+			say "left $uninstall_app alone: it does not look like the $CURRENT_PRODUCT app"
 		fi
 	done
-	if [ -d "$AGENTHUB_DIR" ]; then
-		if is_install_tree "$AGENTHUB_DIR"; then
-			remove_path "$AGENTHUB_DIR"
+	for uninstall_tree in "$TREE" "$LEGACY_TREE"; do
+		[ -d "$uninstall_tree" ] || continue
+		if is_install_tree "$uninstall_tree"; then
+			remove_path "$uninstall_tree"
 		else
-			say "left $AGENTHUB_DIR alone: it is not an unpacked AgentHub install"
+			say "left $uninstall_tree alone: it is not an unpacked $CURRENT_PRODUCT install"
 		fi
-	fi
+	done
 	if [ -n "$PREFIX" ]; then
-		remove_path "$PREFIX/$MARKER"
+		remove_path "$PREFIX/$CURRENT_MARKER"
+		remove_path "$PREFIX/$LEGACY_MARKER"
 	fi
 
-	uninstall_skill="$(skill_directory)"
 	# A --prefix install never put one there, so a --prefix uninstall does not
-	# go looking.
-	if [ "$NO_SKILL" -eq 1 ] || [ -n "$PREFIX" ]; then
-		:
-	elif skill_is_ours "$uninstall_skill"; then
-		remove_path "$uninstall_skill"
-	elif exists "$uninstall_skill"; then
-		say "left $uninstall_skill alone: it is not a copy this script installed"
+	# go looking. Each name's skill carries its own name's marker.
+	if [ "$NO_SKILL" -eq 0 ] && [ -z "$PREFIX" ]; then
+		for uninstall_skill_pair in "$CURRENT_SKILL_NAME $CURRENT_MARKER" "$LEGACY_SKILL_NAME $LEGACY_MARKER"; do
+			uninstall_skill="$(skill_directory "${uninstall_skill_pair% *}")"
+			if skill_is_ours "$uninstall_skill" "${uninstall_skill_pair#* }"; then
+				remove_path "$uninstall_skill"
+			elif exists "$uninstall_skill"; then
+				say "left $uninstall_skill alone: it is not a copy this script installed"
+			fi
+		done
 	fi
 
-	# The menu entry is this install's when it launches this install's app;
-	# one written by a --prefix install and one by the real install share the
-	# same file name.
-	uninstall_entry="${XDG_DATA_HOME:-$HOME/.local/share}/applications/agenthub.desktop"
-	# Entries from before Exec= was quoted spell it bare.
-	if [ -f "$uninstall_entry" ] && { grep -qxF "Exec=\"$AGENTHUB_DIR/agenthub-desktop\"" "$uninstall_entry" 2>/dev/null ||
-		grep -qxF "Exec=$AGENTHUB_DIR/agenthub-desktop" "$uninstall_entry" 2>/dev/null; }; then
-		remove_path "$uninstall_entry"
-	elif [ -f "$uninstall_entry" ]; then
-		say "left $uninstall_entry alone: it launches some other AgentHub install"
-	fi
+	# A menu entry is this install's when it launches this install's app; one
+	# written by a --prefix install and one by the real install share the same
+	# file name.
+	for uninstall_entry_pair in "$CURRENT_MENU_FILE|$TREE/$CURRENT_APP_NAME" "$LEGACY_MENU_FILE|$LEGACY_TREE/$LEGACY_APP_NAME"; do
+		uninstall_entry="${XDG_DATA_HOME:-$HOME/.local/share}/applications/${uninstall_entry_pair%%|*}"
+		if menu_entry_launches "$uninstall_entry" "${uninstall_entry_pair#*|}"; then
+			remove_path "$uninstall_entry"
+		elif [ -f "$uninstall_entry" ]; then
+			say "left $uninstall_entry alone: it launches some other install"
+		fi
+	done
 
 	# A --prefix install never writes a startup file or has caches of its own
 	# (they are named by bundle id, and the real install's are the same ones),
 	# so a --prefix uninstall leaves both alone.
+	uninstall_fish_dir="${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d"
 	[ -n "$PREFIX" ] || for uninstall_rc in "${ZDOTDIR:-$HOME}/.zshrc" "$HOME/.bash_profile" "$HOME/.bash_login" \
-		"$HOME/.profile" "$HOME/.bashrc" "${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/agenthub.fish"; do
+		"$HOME/.profile" "$HOME/.bashrc" "$uninstall_fish_dir/$CURRENT_FISH_FILE" "$uninstall_fish_dir/$LEGACY_FISH_FILE"; do
 		unpath_file "$uninstall_rc"
 	done
 
 	if [ "$OS_SLUG" = "darwin" ] && [ -z "$PREFIX" ]; then
-		for uninstall_cache in "Caches/$BUNDLE_ID" "WebKit/$BUNDLE_ID" "HTTPStorages/$BUNDLE_ID" \
-			"Preferences/$BUNDLE_ID.plist" "Saved Application State/$BUNDLE_ID.savedState"; do
-			remove_path "$HOME/Library/$uninstall_cache"
+		uninstall_ids_seen=""
+		# shellcheck disable=SC2086 # a list of bundle ids, which hold no spaces
+		for uninstall_id in $uninstall_bundle_ids; do
+			case " $uninstall_ids_seen " in
+			*" $uninstall_id "*) continue ;;
+			esac
+			uninstall_ids_seen="$uninstall_ids_seen $uninstall_id"
+			app_caches "$uninstall_id" >"$TEMP_DIR/caches"
+			while IFS= read -r uninstall_cache; do
+				remove_path "$uninstall_cache"
+			done <"$TEMP_DIR/caches"
 		done
 	fi
 
@@ -1423,7 +2094,7 @@ uninstall() {
 	if [ -n "$REMOVE_SKIPPED" ]; then
 		say "done, except for what could not be removed (see the warnings above):$REMOVE_SKIPPED"
 	else
-		say "done. AgentHub is uninstalled."
+		say "done. $CURRENT_PRODUCT is uninstalled."
 	fi
 	if [ "$PURGED" -eq 1 ] && [ "$PURGE_SKIPPED" -eq 1 ]; then
 		say "Some of what --purge was asked to delete is still there (see the warnings above)."
@@ -1433,7 +2104,7 @@ uninstall() {
 	elif [ "$PURGE" -eq 1 ]; then
 		say "Kept: the node's identity and database, which belong to a node that is not this install's (see above)."
 	else
-		say "Kept: the node's identity and database in $(data_directory), and its logs."
+		say "Kept: the node's identity and database in $(kept_data_directories), and its logs."
 		say "Installing again brings the same node back with its pairings. To delete them as well:"
 		say "  curl -fsSL $RAW_SELF | sh -s -- --uninstall --purge"
 	fi
@@ -1522,32 +2193,110 @@ main() {
 		fi
 	fi
 
+	# --- which release, and so which names ---------------------------------------
+
+	# An uninstall removes both names' installs and needs no release. An
+	# install needs the release before any path is built: a tag up to v0.1.11
+	# installs under the names it was released with, any later one under the
+	# current names (legacy_era_of_tag), and --from says which by its file name.
+	if [ "$UNINSTALL" -eq 1 ]; then
+		set_names current
+	else
+		CURL="$(command -v curl 2>/dev/null || true)"
+		WGET="$(command -v wget 2>/dev/null || true)"
+		if command -v shasum >/dev/null 2>&1; then
+			SHA_CMD="shasum"
+			SHA_ARGS="-a 256"
+		elif command -v sha256sum >/dev/null 2>&1; then
+			SHA_CMD="sha256sum"
+			SHA_ARGS=""
+		else
+			die "neither shasum nor sha256sum is on PATH; without one the download cannot be verified"
+		fi
+		if [ -n "$FROM" ]; then
+			if legacy_era_of_archive "$(basename "$FROM")"; then
+				set_names legacy
+			else
+				set_names current
+			fi
+		else
+			resolve_version
+			if legacy_era_of_tag "$VERSION"; then
+				set_names legacy
+			else
+				set_names current
+			fi
+		fi
+	fi
+
 	# --- where things go -------------------------------------------------------
 
+	# TREE is where this run's tarball is unpacked, LEGACY_TREE where a
+	# pre-rename one was, CURRENT_TREE where a current one is. AGENTHUB_HOME,
+	# the pre-rename knob, names all three when the new one is not set: the
+	# tree it names is then upgraded in place, and never retired.
 	if [ -n "$PREFIX" ]; then
 		check_install_directory "--prefix" "$PREFIX"
 		APP_PARENT="$PREFIX"
+		OTHER_APP_PARENT=""
 		BIN_DIR="$PREFIX/bin"
-		AGENTHUB_DIR="${AGENTHUB_HOME:-$PREFIX/share/agenthub}"
+		TREE="${AGENTHALLWAY_HOME:-${AGENTHUB_HOME:-$PREFIX/share/$TREE_NAME}}"
+		CURRENT_TREE="${AGENTHALLWAY_HOME:-${AGENTHUB_HOME:-$PREFIX/share/$CURRENT_SLUG}}"
+		LEGACY_TREE="${AGENTHUB_HOME:-$PREFIX/share/$LEGACY_SLUG}"
 	else
 		BIN_DIR="$HOME/.local/bin"
-		AGENTHUB_DIR="${AGENTHUB_HOME:-$HOME/.local/share/agenthub}"
+		TREE="${AGENTHALLWAY_HOME:-${AGENTHUB_HOME:-$HOME/.local/share/$TREE_NAME}}"
+		CURRENT_TREE="${AGENTHALLWAY_HOME:-${AGENTHUB_HOME:-$HOME/.local/share/$CURRENT_SLUG}}"
+		LEGACY_TREE="${AGENTHUB_HOME:-$HOME/.local/share/$LEGACY_SLUG}"
 		# /Applications when this account can write it, ~/Applications
 		# otherwise. Never sudo: an installer that asks for the administrator
 		# password to put a per-user background service in place is asking for
 		# more than it needs.
-		# AGENTHUB_APPLICATIONS exists for the tests, like AGENTHUB_LDCONFIG_PATHS:
-		# a run that fakes uname still sees this machine's real /Applications,
-		# and a test of what --uninstall leaves alone needs an app there that is
-		# not the developer's own.
-		applications="${AGENTHUB_APPLICATIONS:-/Applications}"
+		# AGENTHALLWAY_APPLICATIONS exists for the tests, like
+		# AGENTHALLWAY_LDCONFIG_PATHS: a run that fakes uname still sees this
+		# machine's real /Applications, and a test of what --uninstall leaves
+		# alone needs an app there that is not the developer's own. The
+		# pre-rename AGENTHUB_APPLICATIONS is read too, so a test that sets only
+		# that one cannot fall through to the real /Applications.
+		applications="${AGENTHALLWAY_APPLICATIONS:-${AGENTHUB_APPLICATIONS:-/Applications}}"
 		if [ -w "$applications" ]; then
 			APP_PARENT="$applications"
+			OTHER_APP_PARENT="$HOME/Applications"
 		else
 			APP_PARENT="$HOME/Applications"
+			OTHER_APP_PARENT="$applications"
+		fi
+		# Install picks /Applications when it is writable and ~/Applications
+		# when it is not, and that can change between an install and now (an
+		# account made admin). An upgrade's retirement and an uninstall look at
+		# both, so an app is found where it is rather than where it would go
+		# today.
+		if [ "$(absolute_path "$OTHER_APP_PARENT")" = "$(absolute_path "$APP_PARENT")" ]; then
+			OTHER_APP_PARENT=""
 		fi
 	fi
-	APP_PATH="$APP_PARENT/agenthub-desktop.app"
+	APP_PATH="$APP_PARENT/$APP_NAME.app"
+	OTHER_APP_PATH="${OTHER_APP_PARENT:+$OTHER_APP_PARENT/$APP_NAME.app}"
+	CURRENT_APP_PATH="$APP_PARENT/$CURRENT_APP_NAME.app"
+	CURRENT_OTHER_APP_PATH="${OTHER_APP_PARENT:+$OTHER_APP_PARENT/$CURRENT_APP_NAME.app}"
+	LEGACY_APP_PATH="$APP_PARENT/$LEGACY_APP_NAME.app"
+	LEGACY_OTHER_APP_PATH="${OTHER_APP_PARENT:+$OTHER_APP_PARENT/$LEGACY_APP_NAME.app}"
+	# A .app bundle is a macOS install and nothing else. On Linux the paths
+	# above still name /Applications (they are computed for both), and every
+	# step that looks there — an uninstall, an upgrade retiring the pre-rename
+	# app — would reach a directory it has no business in: on a mac whose
+	# uname says Linux, which is how the tests run, that is the developer's own
+	# app. Emptied here, they match nothing: no ah is taken from them, no link
+	# counts as pointing into them, no process is matched by them and nothing
+	# under them is removed.
+	if [ "$OS_SLUG" != "darwin" ]; then
+		APP_PATH=""
+		OTHER_APP_PATH=""
+		CURRENT_APP_PATH=""
+		CURRENT_OTHER_APP_PATH=""
+		LEGACY_APP_PATH=""
+		LEGACY_OTHER_APP_PATH=""
+	fi
 	INSTALLED_APP=0
 	INSTALLED_TREE=0
 
@@ -1556,23 +2305,9 @@ main() {
 		return 0
 	fi
 
-	# --- the tools this needs --------------------------------------------------
-
-	CURL="$(command -v curl 2>/dev/null || true)"
-	WGET="$(command -v wget 2>/dev/null || true)"
-	if command -v shasum >/dev/null 2>&1; then
-		SHA_CMD="shasum"
-		SHA_ARGS="-a 256"
-	elif command -v sha256sum >/dev/null 2>&1; then
-		SHA_CMD="sha256sum"
-		SHA_ARGS=""
-	else
-		die "neither shasum nor sha256sum is on PATH; without one the download cannot be verified"
-	fi
-
 	# --- get the archive -------------------------------------------------------
 
-	TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agenthub-install.XXXXXX")"
+	TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/$SLUG-install.XXXXXX")"
 	trap cleanup EXIT INT TERM HUP
 
 	if [ -n "$FROM" ]; then
@@ -1592,15 +2327,14 @@ main() {
 		fi
 		say "installing from $ARCHIVE_NAME"
 	else
-		resolve_version
 		if [ "$CLI_ONLY" -eq 1 ]; then
-			ARCHIVE_NAME="agenthub_${VERSION}_${OS_SLUG}_${ARCH_SLUG}.tar.gz"
+			ARCHIVE_NAME="${CLI_ASSET}${VERSION}_${OS_SLUG}_${ARCH_SLUG}.tar.gz"
 			ARCHIVE_KIND="tgz"
 		elif [ "$OS_SLUG" = "darwin" ]; then
-			ARCHIVE_NAME="agenthub-desktop_${VERSION}_darwin_universal.dmg"
+			ARCHIVE_NAME="${DESKTOP_ASSET}${VERSION}_darwin_universal.dmg"
 			ARCHIVE_KIND="dmg"
 		else
-			ARCHIVE_NAME="agenthub-desktop_${VERSION}_linux_amd64${DESKTOP_SUFFIX}.tar.gz"
+			ARCHIVE_NAME="${DESKTOP_ASSET}${VERSION}_linux_amd64${DESKTOP_SUFFIX}.tar.gz"
 			ARCHIVE_KIND="tgz"
 		fi
 		ARCHIVE="$TEMP_DIR/$ARCHIVE_NAME"
@@ -1616,9 +2350,9 @@ Releases before the desktop builds carry the command line archives only — re-r
 			# and that is said rather than left to be discovered.
 			[ -n "$DESKTOP_SUFFIX" ] || die "$download_failed"
 			warn "release $VERSION has no $ARCHIVE_NAME; that tag predates the WebKit 4.0 build.
-Falling back to agenthub-desktop_${VERSION}_linux_amd64.tar.gz, which is linked against WebKit2GTK 4.1 and may not start on this machine. For a build that matches it, pick a newer tag at https://github.com/${REPO}/releases"
+Falling back to ${DESKTOP_ASSET}${VERSION}_linux_amd64.tar.gz, which is linked against WebKit2GTK 4.1 and may not start on this machine. For a build that matches it, pick a newer tag at https://github.com/${REPO}/releases"
 			DESKTOP_SUFFIX=""
-			ARCHIVE_NAME="agenthub-desktop_${VERSION}_linux_amd64.tar.gz"
+			ARCHIVE_NAME="${DESKTOP_ASSET}${VERSION}_linux_amd64.tar.gz"
 			ARCHIVE="$TEMP_DIR/$ARCHIVE_NAME"
 			say "downloading $ARCHIVE_NAME"
 			fetch "$DOWNLOAD_BASE/$VERSION/$ARCHIVE_NAME" "$ARCHIVE" ||
@@ -1628,6 +2362,21 @@ Releases before the desktop builds carry the command line archives only — re-r
 		fetch "$DOWNLOAD_BASE/$VERSION/SHA256SUMS" "$SUMS" ||
 			die "release $VERSION has no SHA256SUMS, so the download cannot be verified; nothing was installed"
 		verify "$ARCHIVE" "$SUMS" "$ARCHIVE_NAME"
+	fi
+
+	# A pre-rename release refuses a machine that has moved on, before
+	# anything is replaced.
+	legacy_era_guard
+
+	# Unpacked or mounted, and checked to be the release its name says, before
+	# anything installed is stopped or replaced.
+	if [ "$ARCHIVE_KIND" = "dmg" ]; then
+		if [ "$OS_SLUG" != "darwin" ]; then
+			die "a .dmg is a macOS disk image; on Linux pass the linux tar.gz"
+		fi
+		mount_dmg
+	else
+		prepare_tarball
 	fi
 
 	# --- install ---------------------------------------------------------------
@@ -1642,6 +2391,9 @@ Releases before the desktop builds carry the command line archives only — re-r
 
 	case "$OS_SLUG" in
 	darwin)
+		if [ "$ERA" = current ]; then
+			quit_legacy_apps
+		fi
 		if [ "$ARCHIVE_KIND" = "dmg" ]; then
 			install_macos_app
 			INSTALLED_APP=1
@@ -1651,9 +2403,6 @@ Releases before the desktop builds carry the command line archives only — re-r
 		fi
 		;;
 	linux)
-		if [ "$ARCHIVE_KIND" = "dmg" ]; then
-			die "a .dmg is a macOS disk image; on Linux pass the linux tar.gz"
-		fi
 		if [ "$NO_SERVICE" -eq 0 ]; then
 			stop_linux_node
 		fi
@@ -1670,15 +2419,21 @@ Releases before the desktop builds carry the command line archives only — re-r
 	install_claude_skill
 
 	# `ah service install` writes the unit that starts the node at login, and it
-	# writes the absolute path of the agenthub-node beside this ah. Running it on
-	# every upgrade — rather than only the first time — is what keeps an owner
-	# who moved from ~/Applications to /Applications from being left with a unit
-	# that points at a path this script just deleted.
+	# writes the absolute path of the node beside this ah. Running it on every
+	# upgrade — rather than only the first time — is what keeps an owner who
+	# moved from ~/Applications to /Applications from being left with a unit
+	# that points at a path this script just deleted. From v0.2.0 it also
+	# retires the pre-rename registration, carrying its database over.
 	if [ "$NO_SERVICE" -eq 1 ]; then
 		say "skipped the background service (--no-service)"
 		SERVICE_STATE="not registered (--no-service); \"$AH\" service install registers it"
 	else
 		register_service
+	fi
+
+	if [ "$ERA" = current ]; then
+		retire_legacy_install
+		warn_stale_mcp_configs
 	fi
 
 	if [ "$OS_SLUG" = "darwin" ] && [ "$CLI_ONLY" -eq 0 ] && [ "$ARCHIVE_KIND" = "dmg" ] && [ "$NO_OPEN" -eq 0 ]; then

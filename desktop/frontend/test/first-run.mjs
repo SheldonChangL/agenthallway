@@ -109,8 +109,9 @@ const serviceStatus = () => (machine.toolError
     : {
       tool: "/usr/local/bin/ah", supported: machine.supported, installed: machine.installed,
       running: machine.installed && machine.running, pid: machine.installed && machine.running ? 41 : 0,
-      nodeAnswering: machine.nodeUp, logHint: "~/agenthub.log", unitPath: "~/unit",
-      dbPath: machine.installed ? "~/agenthub.db" : "", dbPathKnown: machine.installed, pinnedSettings: [],
+      nodeAnswering: machine.nodeUp, logHint: "~/agenthallway.log", unitPath: "~/unit",
+      dbPath: machine.installed ? "~/agenthallway.db" : "", dbPathKnown: machine.installed, pinnedSettings: [],
+      legacy: Boolean(machine.legacy),
     });
 
 const bindings = {
@@ -414,7 +415,7 @@ const ready = { nodeUp: true, installed: true, running: true };
   const sentence = [];
   walk(nodeRow, (node) => { if (node.tagName !== "p" && node._text) sentence.push(node._text); });
   if (sentence.join(" ").includes("dial tcp")) failures.push(`the dial error is on the node line itself: ${sentence.join(" ")}`);
-  if (!sentence.join(" ").includes(ZH["firstRun.node.down"])) failures.push(`the node line does not say AgentHub is not running: ${sentence.join(" ")}`);
+  if (!sentence.join(" ").includes(ZH["firstRun.node.down"])) failures.push(`the node line does not say Agent Hallway is not running: ${sentence.join(" ")}`);
   let inDetails = false;
   walk(nodeRow, (node) => { if (node.tagName === "details") walk(node, (child) => { if (String(child._text).includes("dial tcp")) inDetails = true; }); });
   if (!inDetails) failures.push("the dial error is not under 「說明」 either");
@@ -564,6 +565,24 @@ const ready = { nodeUp: true, installed: true, running: true };
 }
 
 /* ---------------- 5. the identity guards hold ---------------- */
+
+{
+  // Registered under the pre-rename name, and stopped. Starting it would
+  // start the old program again — ah refuses that restart — so the wizard
+  // writes nothing and goes to the panel that says what it is and offers the
+  // re-registration that replaces it.
+  const app = await start({ nodeUp: false, installed: true, running: false, legacy: true });
+  await primary().onclick();
+  await flush();
+  const touched = writeNames().filter((name) => ["RestartService", "RestartNode", "InstallService"].includes(name));
+  if (touched.length !== 0) failures.push(`the wizard ran ${touched.join(", ")} on the pre-rename registration`);
+  if (app.state.view !== "settings" || app.state.settingsSection !== "settings-service") {
+    failures.push(`the wizard did not go to the service panel for the pre-rename registration: ${app.state.view}/${app.state.settingsSection}`);
+  }
+  if (!el("service-legacy").textContent.includes(ZH["service.legacyReregister"])) {
+    failures.push(`the panel it went to does not offer the re-registration: ${el("service-legacy").textContent}`);
+  }
+}
 
 {
   // A node answering with nothing registered was started by hand, on a

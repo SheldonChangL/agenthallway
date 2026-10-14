@@ -40,6 +40,27 @@ func connect(t *testing.T) *mcp.ClientSession {
 	return session
 }
 
+// A client lists the servers it has by the name each one gives itself and
+// reads the instructions as part of what it tells the model, so both say which
+// product this is. The tools' prefix in the client comes from the key the owner
+// wrote in their config, not from here (desktop/mcpconfig.go).
+func TestTheServerIntroducesItselfAsAgentHallway(t *testing.T) {
+	session := connect(t)
+	initialized := session.InitializeResult()
+	if initialized == nil || initialized.ServerInfo == nil {
+		t.Fatalf("the server did not answer initialize: %+v", initialized)
+	}
+	if initialized.ServerInfo.Name != "agenthallway" {
+		t.Errorf("implementation name = %q, want agenthallway", initialized.ServerInfo.Name)
+	}
+	if !strings.HasPrefix(initialized.Instructions, "Agent Hallway ") {
+		t.Errorf("instructions begin %q, want them to begin with the product's name", initialized.Instructions)
+	}
+	if strings.Contains(initialized.Instructions, "AgentHub") {
+		t.Errorf("instructions still name the old product: %q", initialized.Instructions)
+	}
+}
+
 // The surface is the whole security argument for this process existing: an
 // agent reaching a message written on another machine must not also gain a way
 // to read files or run commands through this server.

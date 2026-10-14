@@ -1,4 +1,4 @@
-// Package service installs agenthub-node as a per-user background service, so
+// Package service installs agenthallway-node as a per-user background service, so
 // the node outlives whichever terminal, agent or desktop window started it.
 //
 // The words a person meets are install, uninstall and status. launchd and
@@ -27,10 +27,10 @@ import (
 
 // Label names the service on both platforms. launchd sees it as the job
 // label; systemd sees it as the unit name (with .service appended).
-const Label = "local.agenthub.node"
+const Label = "local.agenthallway.node"
 
 // UnitName is the systemd unit, which follows its own naming convention.
-const UnitName = "agenthub-node"
+const UnitName = "agenthallway-node"
 
 // ErrUnsupported means this operating system has no service manager this
 // package knows how to drive.
@@ -38,7 +38,7 @@ var ErrUnsupported = errors.New("background service is supported on macOS (launc
 
 // Config is what the service will run.
 type Config struct {
-	// NodeBinary is the absolute path to agenthub-node. Absolute, because a
+	// NodeBinary is the absolute path to agenthallway-node. Absolute, because a
 	// service has no PATH worth relying on and no working directory of the
 	// owner's choosing.
 	NodeBinary string
@@ -88,6 +88,10 @@ type Report struct {
 	Notes []string
 }
 
+// nodeImage is the node's executable on Windows, which taskkill and tasklist
+// address it by.
+const nodeImage = "agenthallway-node.exe"
+
 // Status is what the service manager currently says.
 type Status struct {
 	Supported bool
@@ -96,6 +100,14 @@ type Status struct {
 	PID       int
 	UnitPath  string
 	LogHint   string
+	// Legacy is true when the registration described is the pre-rename one
+	// (LegacyLabel, LegacyUnitName, LegacyTaskName) and no current one exists:
+	// UnitPath, Program, Arguments, Running and PID are then the old
+	// registration's. `ah service install` replaces it.
+	Legacy bool `json:",omitempty"`
+	// LegacyAlsoInstalled is true when the current registration is described
+	// and the pre-rename one is still on disk beside it.
+	LegacyAlsoInstalled bool `json:",omitempty"`
 	// Raw is the manager's own words, for when the summary is not enough.
 	Raw string
 	// Program and Arguments are what the registered unit actually starts, read
@@ -136,7 +148,7 @@ func (m Manager) UnitPath() (string, error) {
 func (m Manager) DefaultLogPath() string {
 	switch m.GOOS {
 	case "darwin":
-		return filepath.Join(m.Home, "Library", "Logs", "agenthub", "node.log")
+		return filepath.Join(m.Home, "Library", "Logs", "agenthallway", "node.log")
 	case "windows":
 		return filepath.Join(m.windowsDataDir(), "node.log")
 	}
@@ -149,9 +161,9 @@ func (m Manager) DefaultLogPath() string {
 // without it.
 func (m Manager) windowsDataDir() string {
 	if base := os.Getenv("LOCALAPPDATA"); base != "" {
-		return filepath.Join(base, "agenthub")
+		return filepath.Join(base, "agenthallway")
 	}
-	return filepath.Join(m.Home, "AppData", "Local", "agenthub")
+	return filepath.Join(m.Home, "AppData", "Local", "agenthallway")
 }
 
 // Install writes the unit, registers it and starts it. An existing
@@ -168,6 +180,13 @@ func (m Manager) Install(ctx context.Context, config Config) (Report, error) {
 		return Report{}, fmt.Errorf("node binary: %w", err)
 	}
 	report := Report{UnitPath: unitPath}
+	// Before anything new is written: the old node has to be down before the
+	// new one starts, and a refusal here has to leave everything as it was.
+	retired, err := m.retireLegacy(ctx, config)
+	report.Steps = append(report.Steps, retired...)
+	if err != nil {
+		return report, err
+	}
 	switch m.GOOS {
 	case "darwin":
 		if config.LogPath == "" {
@@ -199,7 +218,7 @@ func (m Manager) Install(ctx context.Context, config Config) (Report, error) {
 		// ("Input/output error"), which a reinstall from the desktop app hit.
 		// So wait until launchctl itself says the job is not loaded, then
 		// retry the bootstrap a few times rather than once.
-		m.waitUntilUnloaded(ctx, domain)
+		m.waitUntilUnloaded(ctx, domain, Label)
 		var out string
 		var bootstrapErr error
 		for attempt := 0; attempt < 5; attempt++ {
@@ -281,7 +300,10 @@ func (m Manager) Install(ctx context.Context, config Config) (Report, error) {
 		// symptom is a node that works on some logons and not others, which is
 		// the worst kind to be handed. Removing it here rather than only in the
 		// installer, because an owner who runs `ah service install` on a
-		// machine that already has the shortcut has the same problem.
+		// machine that already has the shortcut has the same problem. (The
+		// pre-rename installers' shortcuts are already gone: retireLegacy
+		// removed them before anything was registered, because the node
+		// started above would refuse to move its identity over them.)
 		for _, step := range m.removeLegacyStartupShortcuts() {
 			report.Steps = append(report.Steps, step)
 		}
@@ -333,9 +355,10 @@ func (m Manager) Uninstall(ctx context.Context) (Report, error) {
 		}
 		// The task starts the node and returns, so ending the task does not
 		// stop the node it started. Killing it by name is what actually stops
-		// the thing the owner asked to be rid of.
-		_, _ = m.Runner.Run(ctx, "taskkill", "/F", "/IM", "agenthub-node.exe")
-		report.Steps = append(report.Steps, "stopped agenthub-node")
+		// the thing the owner asked to be rid of. (The pre-rename node is
+		// stopped by its own name below.)
+		_, _ = m.Runner.Run(ctx, "taskkill", "/F", "/IM", nodeImage)
+		report.Steps = append(report.Steps, "stopped agenthallway-node")
 	default:
 		return report, ErrUnsupported
 	}
@@ -346,6 +369,20 @@ func (m Manager) Uninstall(ctx context.Context) (Report, error) {
 		report.Steps = append(report.Steps, "no unit file at "+unitPath+" (already removed)")
 	default:
 		return report, fmt.Errorf("remove unit: %w", err)
+	}
+	// And the pre-rename registration: an uninstall that left it would leave
+	// the old node starting at every login, and the node refusing to move its
+	// identity for as long as it is there. On macOS and Linux only when its
+	// unit is there. On Windows always, because it is also what stops a
+	// pre-rename node by name whatever started it, and each of its steps takes
+	// "nothing there" as an answer.
+	if m.GOOS == "windows" || len(LegacyRegistrations(m.GOOS, m.Home)) > 0 {
+		// On Windows that includes the pre-rename Startup shortcuts.
+		retired, err := m.unregisterLegacy(ctx)
+		report.Steps = append(report.Steps, retired...)
+		if err != nil {
+			return report, err
+		}
 	}
 	if m.GOOS == "linux" {
 		_, _ = m.Runner.Run(ctx, "systemctl", "--user", "daemon-reload")
@@ -369,6 +406,11 @@ func (m Manager) Restart(ctx context.Context) (Report, error) {
 		return Report{}, err
 	}
 	report := Report{UnitPath: unitPath}
+	// The pre-rename registration starts the old node, so restarting it would
+	// bring that back; replacing it is a reinstall.
+	if m.legacyOnly() {
+		return report, m.legacyOnlyError()
+	}
 	switch m.GOOS {
 	case "darwin":
 		// kickstart -k kills the running job and starts it again in one step.
@@ -401,8 +443,11 @@ func (m Manager) Restart(ctx context.Context) (Report, error) {
 		}
 		// Stopping the node, not the task: the task is the launcher, which
 		// exited seconds after it started the node. /End would end nothing.
-		_, _ = m.Runner.Run(ctx, "taskkill", "/F", "/IM", "agenthub-node.exe")
-		report.Steps = append(report.Steps, "stopped agenthub-node")
+		// The pre-rename node too: it would hold the owner's port, and the
+		// node the task starts would find it taken and exit.
+		_, _ = m.Runner.Run(ctx, "taskkill", "/F", "/IM", nodeImage)
+		_, _ = m.Runner.Run(ctx, "taskkill", "/F", "/IM", legacyNodeImage)
+		report.Steps = append(report.Steps, "stopped agenthallway-node")
 		if out, err := m.Runner.Run(ctx, "schtasks", "/Run", "/TN", TaskName); err != nil {
 			if taskAbsent(out, err) {
 				return report, fmt.Errorf("%s is not registered with Task Scheduler, so there is nothing to restart; "+
@@ -426,9 +471,18 @@ func (m Manager) Status(ctx context.Context) (Status, error) {
 		return Status{Supported: false}, nil
 	}
 	status := Status{Supported: true, UnitPath: unitPath}
-	if _, err := os.Stat(unitPath); err == nil {
+	legacyPath, _ := m.legacyUnitPath()
+	switch {
+	case exists(unitPath):
 		status.Installed = true
 		status.Program, status.Arguments = m.InstalledCommand()
+		status.LegacyAlsoInstalled = exists(legacyPath)
+	case exists(legacyPath):
+		// Only the pre-rename registration: described as what it is, from its
+		// own file and its own name, so that a reinstall form is offered the
+		// database it ran on and a status line does not call a running old
+		// node stopped.
+		return m.legacyStatus(ctx, legacyPath), nil
 	}
 	switch m.GOOS {
 	case "darwin":
@@ -456,7 +510,7 @@ func (m Manager) Status(ctx context.Context) (Status, error) {
 		// the launcher: it is "Ready" a second after a successful start, and
 		// reporting that as not running would make every healthy node look
 		// stopped.
-		out, _ := m.Runner.Run(ctx, "tasklist", "/FI", "IMAGENAME eq agenthub-node.exe", "/FO", "CSV", "/NH")
+		out, _ := m.Runner.Run(ctx, "tasklist", "/FI", "IMAGENAME eq "+nodeImage, "/FO", "CSV", "/NH")
 		status.Raw = strings.TrimSpace(out)
 		if match := tasklistPID.FindStringSubmatch(out); match != nil {
 			status.Running = true
@@ -466,19 +520,58 @@ func (m Manager) Status(ctx context.Context) (Status, error) {
 	return status, nil
 }
 
+// legacyStatus is Status for a machine whose only registration is the
+// pre-rename one at path: running state and pid from the old label, unit or
+// image, the program and arguments from the old unit.
+func (m Manager) legacyStatus(ctx context.Context, path string) Status {
+	status := Status{Supported: true, Installed: true, Legacy: true, UnitPath: path, LogHint: m.legacyLogHint()}
+	status.Program, status.Arguments = m.legacyCommand()
+	switch m.GOOS {
+	case "darwin":
+		out, err := m.Runner.Run(ctx, "launchctl", "print", "gui/"+m.UID+"/"+LegacyLabel)
+		status.Raw = strings.TrimSpace(out)
+		if err != nil {
+			return status
+		}
+		status.Running = strings.Contains(out, "state = running")
+		if match := launchdPID.FindStringSubmatch(out); match != nil {
+			status.PID, _ = strconv.Atoi(match[1])
+		}
+	case "linux":
+		out, _ := m.Runner.Run(ctx, "systemctl", "--user", "show", LegacyUnitName, "-p", "ActiveState", "-p", "MainPID")
+		status.Raw = strings.TrimSpace(out)
+		status.Running = strings.Contains(out, "ActiveState=active")
+		if match := systemdPID.FindStringSubmatch(out); match != nil {
+			status.PID, _ = strconv.Atoi(match[1])
+		}
+	case "windows":
+		out, _ := m.Runner.Run(ctx, "tasklist", "/FI", "IMAGENAME eq "+legacyNodeImage, "/FO", "CSV", "/NH")
+		status.Raw = strings.TrimSpace(out)
+		if match := tasklistPID.FindStringSubmatch(out); match != nil {
+			status.Running = true
+			status.PID, _ = strconv.Atoi(match[1])
+		}
+	}
+	return status
+}
+
 var (
 	launchdPID = regexp.MustCompile(`\bpid = (\d+)`)
 	systemdPID = regexp.MustCompile(`MainPID=(\d+)`)
-	// tasklist /FO CSV /NH answers `"agenthub-node.exe","1234","Console",...`.
-	// A filter that matches nothing prints a sentence instead, which this does
-	// not match — deliberately, since that sentence is the node not running.
-	tasklistPID = regexp.MustCompile(`"agenthub-node\.exe","(\d+)"`)
+	// tasklist /FO CSV /NH answers `"agenthallway-node.exe","1234","Console",...`,
+	// or the same for the pre-rename agenthub-node.exe. A filter that matches
+	// nothing prints a sentence instead, which this does not match —
+	// deliberately, since that sentence is the node not running.
+	tasklistPID = regexp.MustCompile(`(?i)"(?:agenthallway|agenthub)-node\.exe","(\d+)"`)
 )
 
 // legacyStartupShortcuts are the names this product's own installers have put
-// in the Startup folder. Only these: a shortcut someone else made, or one an
-// owner wrote themselves, is not this package's to delete.
-var legacyStartupShortcuts = []string{"AgentHub Node.lnk", "agenthub-desktop Node.lnk"}
+// in the Startup folder: the pre-rename installers' two, and the one the
+// current installer still makes when no task can be registered
+// (desktop/build/windows/installer/project.nsi, "${INFO_PRODUCTNAME} Node.lnk",
+// INFO_PRODUCTNAME being wails.json's name). Only these: a shortcut someone
+// else made, or one an owner wrote themselves, is not this package's to delete.
+var legacyStartupShortcuts = append(append([]string{}, legacyNodeStartupShortcuts...), "agenthallway-desktop Node.lnk")
 
 // removeLegacyStartupShortcuts deletes them and says which it removed.
 //
@@ -488,18 +581,22 @@ var legacyStartupShortcuts = []string{"AgentHub Node.lnk", "agenthub-desktop Nod
 // running with a pid nobody asked for — worth saying, not worth refusing an
 // install over.
 func (m Manager) removeLegacyStartupShortcuts() []string {
-	directory := filepath.Join(m.Home, "AppData", "Roaming", "Microsoft", "Windows",
-		"Start Menu", "Programs", "Startup")
-	if base := os.Getenv("APPDATA"); base != "" {
-		directory = filepath.Join(base, "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-	}
+	return m.removeStartupShortcuts(legacyStartupShortcuts,
+		"the task above replaces it; both would start a node", "two nodes will start at your next logon")
+}
+
+// removeStartupShortcuts deletes the named shortcuts from the owner's Startup
+// folder and says which it removed, why (removed), and what is left to happen
+// when one could not be (otherwise).
+func (m Manager) removeStartupShortcuts(names []string, removed, otherwise string) []string {
+	directory := windowsStartupDirectory(m.Home)
 	var steps []string
-	for _, name := range legacyStartupShortcuts {
+	for _, name := range names {
 		path := filepath.Join(directory, name)
 		// #nosec G703 -- the only variable part of this path is APPDATA, which
 		// belongs to the user this process is already running as; the file
-		// names come from legacyStartupShortcuts, which is a constant list in
-		// this package. Nothing from the network, the window or the node's
+		// names come from legacyStartupShortcuts or legacyNodeStartupShortcuts,
+		// constant lists in this package. Nothing from the network, the window or the node's
 		// database reaches it.
 		if _, err := os.Stat(path); err != nil {
 			continue
@@ -508,13 +605,21 @@ func (m Manager) removeLegacyStartupShortcuts() []string {
 		// shortcut, in the owner's own Startup folder, named by this package.
 		if err := os.Remove(path); err != nil {
 			steps = append(steps, "could not remove the old startup shortcut "+path+
-				" ("+err.Error()+"); delete it by hand, or two nodes will start at your next logon")
+				" ("+err.Error()+"); delete it by hand, or "+otherwise)
 			continue
 		}
-		steps = append(steps, "removed the old startup shortcut "+path+
-			" (the task above replaces it; both would start a node)")
+		steps = append(steps, "removed the old startup shortcut "+path+" ("+removed+")")
 	}
 	return steps
+}
+
+// windowsStartupDirectory is the owner's Startup folder: APPDATA when the
+// environment has it, as in every real Windows session, else derived from home.
+func windowsStartupDirectory(home string) string {
+	if base := os.Getenv("APPDATA"); base != "" {
+		return filepath.Join(base, "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+	}
+	return filepath.Join(home, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
 }
 
 // taskAbsent recognises Task Scheduler saying there was no such task. Its
@@ -530,13 +635,13 @@ func taskAbsent(out string, err error) bool {
 	return false
 }
 
-// waitUntilUnloaded polls launchctl until it says the job is not loaded, for
-// a bounded time. Only that answer ends the wait early: a print that fails
-// for some other reason says nothing about the job, so the wait runs out
-// rather than pretending.
-func (m Manager) waitUntilUnloaded(ctx context.Context, domain string) {
+// waitUntilUnloaded polls launchctl until it says the job called label is not
+// loaded, for a bounded time. Only that answer ends the wait early: a print
+// that fails for some other reason says nothing about the job, so the wait
+// runs out rather than pretending.
+func (m Manager) waitUntilUnloaded(ctx context.Context, domain, label string) {
 	for attempt := 0; attempt < 20; attempt++ {
-		out, err := m.Runner.Run(ctx, "launchctl", "print", domain+"/"+Label)
+		out, err := m.Runner.Run(ctx, "launchctl", "print", domain+"/"+label)
 		if err != nil && notLoaded(out, err) {
 			return
 		}
@@ -560,7 +665,8 @@ func (m Manager) pause(ctx context.Context, duration time.Duration) {
 // notLoaded recognises the manager saying there was nothing to stop.
 func notLoaded(out string, err error) bool {
 	text := out + " " + err.Error()
-	for _, marker := range []string{"Could not find service", "No such process", "not loaded", "does not exist", "Unit " + UnitName + ".service not loaded"} {
+	for _, marker := range []string{"Could not find service", "No such process", "not loaded", "does not exist",
+		"Unit " + UnitName + ".service not loaded", "Unit " + LegacyUnitName + ".service not loaded"} {
 		if strings.Contains(text, marker) {
 			return true
 		}
@@ -648,7 +754,7 @@ func SystemdUnit(config Config) []byte {
 		parts = append(parts, systemdQuote(argument))
 	}
 	return []byte(`[Unit]
-Description=AgentHub node (agenthub-node)
+Description=Agent Hallway node (agenthallway-node)
 After=network-online.target
 
 [Service]

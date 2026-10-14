@@ -138,7 +138,7 @@ jobs:
       # gosec too, and for the same reason: the security-scan job runs ./... in
       # the root module, which does not reach a second module, so nothing had
       # ever looked at this one. It is the code that locates and executes ah,
-      # agenthub-node and agenthub-mcp on the owner's machine — the subject of
+      # agenthallway-node and agenthallway-mcp on the owner's machine — the subject of
       # these rules, not an afterthought. It runs here rather than in
       # security-scan because main.go embeds all:frontend/dist and this is the
       # job that has already built it. Any finding fails the job; reviewed false
@@ -154,7 +154,7 @@ jobs:
   # answer, the process's PEB, its token. A wrong answer there is a node
   # restarted on another database — another identity, every pairing gone — and
   # none of it can run on the ubuntu runner or a developer's Mac, where it is
-  # only compiled. So this job starts a real process named agenthub-node.exe,
+  # only compiled. So this job starts a real process named agenthallway-node.exe,
   # with quoted arguments, a --db that is not the default and an APPDATA of its
   # own, and reads it back. Only these tests: the rest of the desktop suite is
   # the ubuntu job's.
@@ -186,11 +186,13 @@ jobs:
       # every test in a file built only for Windows (or for Windows among
       # others) has to be in the list: nothing else runs those, so one left
       # out would be one nobody runs.
-      - name: read a real agenthub-node.exe back
+      - name: read a real agenthallway-node.exe back
         working-directory: desktop
         run: |
           tests=(
             TestListNodeProcessesReadsARealProcess
+            TestListNodeProcessesIgnoresALookalikeName
+            TestStopNodeKillsBothImageNames
             TestProcessEnvironmentReadsAProcess
             TestParseNodeProcessList
             TestParseEnvironmentBlock
@@ -224,7 +226,7 @@ jobs:
           exit $status
 
   # The same for macOS (desktop/nodeprocs_darwin.go): kern.procargs2 is read
-  # from a real process named agenthub-node, whose environment is followed by
+  # from a real process named agenthallway-node, whose environment is followed by
   # the kernel's own strings with nothing between them, and a misread there
   # shows only some of the time — it depends on where the environment ends and
   # on how soon after its start the process is read. So the real-process test
@@ -253,11 +255,12 @@ jobs:
         run: |
           npm ci
           npm run build
-      - name: read a real agenthub-node back
+      - name: read a real agenthallway-node back
         working-directory: desktop
         run: |
           tests=(
             TestListNodeProcessesReadsARealProcess
+            TestListNodeProcessesIgnoresALookalikeName
             TestParseProcargs2
             TestParseProcargs2ReadsEmptyEnvironments
             TestParseProcargs2RefusesWhatItCannotRead
@@ -369,7 +372,7 @@ jobs:
           suffix=""
           if [ "$GOOS" = "windows" ]; then suffix=".exe"; fi
           mkdir -p dist
-          for command in agenthub-node ah agenthub-mcp; do
+          for command in agenthallway-node ah agenthallway-mcp; do
             # -trimpath so the binary does not carry this runner's paths, and
             # so two builds of one commit are byte-identical.
             go build -trimpath -o "dist/${command}${suffix}" "./cmd/${command}"
@@ -399,7 +402,7 @@ jobs:
           (
             cd dist
             shopt -s nullglob
-            built=(agenthub-node* ah* agenthub-mcp* BUILD)
+            built=(agenthallway-node* ah* agenthallway-mcp* BUILD)
             sha256sum "${built[@]}" > SHA256SUMS
           )
           cat dist/SHA256SUMS
@@ -429,7 +432,7 @@ jobs:
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: agenthub-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: agenthallway-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
           if-no-files-found: error
           retention-days: 14

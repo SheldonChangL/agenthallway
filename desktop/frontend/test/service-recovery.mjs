@@ -162,7 +162,7 @@ if (!toast().textContent.includes("對外位址沒有綁起來")) {
 //    node settings form (section 6b).
 app.state.service = {
   supported: true, installed: true, running: true, pid: 7, unitPath: "/u", logHint: "/log",
-  dbPath: "/Users/me/agenthub/data/agenthub.db", dbPathKnown: true,
+  dbPath: "/Users/me/agenthallway/data/agenthallway.db", dbPathKnown: true,
   pinnedSettings: ["peer-listen", "allow-lan"],
 };
 app.renderService();
@@ -186,7 +186,7 @@ confirmed = true;
 if (await app.reinstallWithoutPinnedSettings(app.state.service) !== true) {
   failures.push("re-registering did not report that it ran, so a save cannot tell whether to go ahead");
 }
-if (installed.length !== 1 || installed[0].dbPath !== "/Users/me/agenthub/data/agenthub.db") {
+if (installed.length !== 1 || installed[0].dbPath !== "/Users/me/agenthallway/data/agenthallway.db") {
   failures.push(`re-registering sent ${JSON.stringify(installed)}, want the database already in use`);
 }
 
@@ -334,7 +334,7 @@ app.state.service = unreadable;
 //    service. Blank means the node's default, which is a different database and
 //    therefore a different node.
 await app.openServiceForm();
-if (el("service-db").value !== "/Users/me/agenthub/data/agenthub.db") {
+if (el("service-db").value !== "/Users/me/agenthallway/data/agenthallway.db") {
   failures.push(`the form offered "${el("service-db").value}" instead of the path in use`);
 }
 if (!text("service-db-note").includes("換一個機器身分")) {
@@ -359,7 +359,7 @@ if (confirmations.length !== 1 || !confirmations[0].includes("重新配對")) {
 installed = [];
 confirmations = [];
 confirmed = true;
-el("service-db").value = "/Users/me/agenthub/data/agenthub.db";
+el("service-db").value = "/Users/me/agenthallway/data/agenthallway.db";
 await app.installService();
 if (confirmations.length !== 0) {
   failures.push("reinstalling with the same database asked for confirmation");
@@ -389,7 +389,7 @@ if (text("service-repair") !== "") {
 // 11. The same panel, against what a real node actually answered.
 //
 // The fixture beside this file is the body of GET /v1/node/settings, captured
-// from an agenthub-node started against an address this machine does not hold —
+// from an agenthallway-node started against an address this machine does not hold —
 // not written by hand. Everything above uses a stub, and a stub is a copy of
 // what this test's author believed the node sends: a field renamed on the Go
 // side would leave all ten checks above green and the window blank.

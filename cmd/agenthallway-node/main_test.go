@@ -302,7 +302,7 @@ func functionBody(t *testing.T, file, opener string) string {
 func TestFlagSettingsCollectsOnlyWhatTheCommandLineGave(t *testing.T) {
 	parse := func(args ...string) nodeconfig.Partial {
 		t.Helper()
-		flags := flag.NewFlagSet("agenthub-node", flag.ContinueOnError)
+		flags := flag.NewFlagSet("agenthallway-node", flag.ContinueOnError)
 		var peerListens nodeconfig.StringList
 		flags.Var(&peerListens, "peer-listen", "")
 		allowLAN := flags.Bool("allow-lan", false, "")
@@ -372,7 +372,7 @@ func TestARefusalOverARememberedValueSaysSo(t *testing.T) {
 	// node is refusing to start, so every `ah settings` suggestion points at an
 	// API this node is not serving; the only thing that reaches a dead node is
 	// its own command line.
-	for _, want := range []string{"remembering", "-peer-listen", "agenthub-node", nodeconfig.DefaultPeerListen} {
+	for _, want := range []string{"remembering", "-peer-listen", "agenthallway-node", nodeconfig.DefaultPeerListen} {
 		if !strings.Contains(explained.Error(), want) {
 			t.Errorf("the refusal lacks %q: %v", want, explained)
 		}
@@ -694,7 +694,7 @@ func TestTheOwnerAPIAndTheNodeItselfWithdrawTheSameListener(t *testing.T) {
 			ctx := context.Background()
 
 			// Route one: the owner PUTs to a running node.
-			store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthub.db"))
+			store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthallway.db"))
 			if err != nil {
 				t.Fatal(err)
 			}

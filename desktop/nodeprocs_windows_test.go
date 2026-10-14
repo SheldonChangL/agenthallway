@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"slices"
 	"strings"
@@ -23,16 +24,24 @@ func TestParseNodeProcessList(t *testing.T) {
 			t.Errorf("%q: found %v, err %v; want nothing", empty, found, err)
 		}
 	}
-	found, err := parseNodeProcessList(`[{"pid":12,"commandLine":"\"C:\\Program Files\\agenthub\\agenthub-node.exe\" --db \"C:\\Users\\me\\My Data\\agenthub.db\""}]`)
+	found, err := parseNodeProcessList(`[{"pid":12,"name":"agenthallway-node.exe","commandLine":"\"C:\\Program Files\\agenthallway\\agenthallway-node.exe\" --db \"C:\\Users\\me\\My Data\\agenthallway.db\""},` +
+		`{"pid":14,"name":"AgentHub-Node.exe","commandLine":"C:\\old\\agenthub-node.exe"}]`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{`C:\Program Files\agenthub\agenthub-node.exe`, "--db", `C:\Users\me\My Data\agenthub.db`}
-	if len(found) != 1 || found[0].PID != 12 || !slices.Equal(found[0].Argv, want) {
+	want := []string{`C:\Program Files\agenthallway\agenthallway-node.exe`, "--db", `C:\Users\me\My Data\agenthallway.db`}
+	if len(found) != 2 || found[0].PID != 12 || !slices.Equal(found[0].Argv, want) || found[0].Legacy {
 		t.Errorf("found %+v, want pid 12 with argv %q", found, want)
 	}
-	if _, err := parseNodeProcessList(`[{"pid":13,"commandLine":null}]`); err == nil || !strings.Contains(err.Error(), "13") {
+	// The pre-rename node, named the way Windows may spell it.
+	if len(found) == 2 && (found[1].PID != 14 || !found[1].Legacy || !slices.Equal(found[1].Argv, []string{`C:\old\agenthub-node.exe`})) {
+		t.Errorf("found %+v, want pid 14 listed as the pre-rename node", found[1])
+	}
+	if _, err := parseNodeProcessList(`[{"pid":13,"name":"agenthallway-node.exe","commandLine":null}]`); err == nil || !strings.Contains(err.Error(), "13") {
 		t.Errorf("an unreadable command line was not a failure naming its pid: %v", err)
+	}
+	if _, err := parseNodeProcessList(`[{"pid":15,"name":"notepad.exe","commandLine":"notepad.exe"}]`); err == nil || !strings.Contains(err.Error(), "notepad.exe") {
+		t.Errorf("a process that is not a node was not refused: %v", err)
 	}
 }
 
@@ -42,11 +51,11 @@ func TestParseNodeProcessList(t *testing.T) {
 // the way out — and this app has to read the same thing back.
 func TestWindowsCommandLineRoundTrips(t *testing.T) {
 	for _, argv := range [][]string{
-		{`C:\Program Files\agenthub\agenthub-node.exe`, "--db", `C:\Users\me\My Data\agenthub.db`},
-		{`"C:\quoted"\agenthub-node.exe`, "--db", `C:\a b\x.db`},
-		{"agenthub-node.exe", "", "", "--display-name", ""},
-		{"agenthub-node.exe", `say "hi"`, `a\"b`, `trailing\`, `trailing space\ `, `\\server\share\x.db`},
-		{"agenthub-node.exe", "tab\there", `""`, `"`, `\"`, `a"b"c`, `C:\dir\\`},
+		{`C:\Program Files\agenthallway\agenthallway-node.exe`, "--db", `C:\Users\me\My Data\agenthallway.db`},
+		{`"C:\quoted"\agenthallway-node.exe`, "--db", `C:\a b\x.db`},
+		{"agenthallway-node.exe", "", "", "--display-name", ""},
+		{"agenthallway-node.exe", `say "hi"`, `a\"b`, `trailing\`, `trailing space\ `, `\\server\share\x.db`},
+		{"agenthallway-node.exe", "tab\there", `""`, `"`, `\"`, `a"b"c`, `C:\dir\\`},
 	} {
 		words := make([]string, 0, len(argv))
 		for _, word := range argv {
@@ -117,5 +126,27 @@ func TestProcessEnvironmentReadsAProcess(t *testing.T) {
 	}
 	if err := runsAsThisUser(os.Getpid()); err != nil {
 		t.Errorf("this process is not this process's user: %v", err)
+	}
+}
+
+// W9. Windows keeps an image's whole name, so the node is stopped by it — both
+// of its names: an upgraded machine can still be running the pre-rename image
+// on the same port, and a restart that left it would start a second node on
+// its data. Asserted on the command, which is all this can see without
+// stopping a real process.
+func TestStopNodeKillsBothImageNames(t *testing.T) {
+	var ran [][]string
+	was := runCommand
+	t.Cleanup(func() { runCommand = was })
+	runCommand = func(_ context.Context, name string, args ...string) (string, error) {
+		ran = append(ran, append([]string{name}, args...))
+		return "SUCCESS", nil
+	}
+	if _, err := stopNodeProcesses(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"taskkill", "/F", "/IM", "agenthallway-node.exe", "/IM", "agenthub-node.exe"}
+	if len(ran) != 1 || !slices.Equal(ran[0], want) {
+		t.Errorf("ran %q, want exactly %q", ran, want)
 	}
 }

@@ -970,6 +970,8 @@ export namespace main {
 	    dbPath: string;
 	    dbPathKnown: boolean;
 	    pinnedSettings?: string[];
+	    legacy: boolean;
+	    legacyAlsoInstalled: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ServiceStatus(source);
@@ -990,6 +992,8 @@ export namespace main {
 	        this.dbPath = source["dbPath"];
 	        this.dbPathKnown = source["dbPathKnown"];
 	        this.pinnedSettings = source["pinnedSettings"];
+	        this.legacy = source["legacy"];
+	        this.legacyAlsoInstalled = source["legacyAlsoInstalled"];
 	    }
 	}
 	

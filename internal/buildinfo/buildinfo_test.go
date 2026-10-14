@@ -102,8 +102,8 @@ func TestTheRevisionIsLongEnoughToLookUp(t *testing.T) {
 // Line is what goes in a log or an answer to --version, so it must carry the
 // platform: a report that says darwin/arm64 is one fewer question.
 func TestTheLineNamesTheProgramAndThePlatform(t *testing.T) {
-	line := Line("agenthub-node")
-	for _, want := range []string{"agenthub-node", "go1."} {
+	line := Line("agenthallway-node")
+	for _, want := range []string{"agenthallway-node", "go1."} {
 		if !strings.Contains(line, want) {
 			t.Errorf("Line() = %q, missing %q", line, want)
 		}

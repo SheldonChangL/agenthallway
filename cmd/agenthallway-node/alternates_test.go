@@ -42,7 +42,7 @@ func newE2ENode(t *testing.T, name string) *e2eNode {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := registry.Open(context.Background(), filepath.Join(directory, "agenthub.db"))
+	store, err := registry.Open(context.Background(), filepath.Join(directory, "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

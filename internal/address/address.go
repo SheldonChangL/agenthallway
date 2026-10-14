@@ -1,8 +1,8 @@
-// Package address parses and renders AgentHub session addresses.
+// Package address parses and renders Agent Hallway session addresses.
 //
 // It is separate from internal/protocol because protocol reaches the registry,
 // and a process that only needs to read an address must not link a database
-// driver to do it. agenthub-mcp is that process: see internal/mcpserver.
+// driver to do it. agenthallway-mcp is that process: see internal/mcpserver.
 package address
 
 import (
@@ -38,7 +38,7 @@ func SplitQualifiedID(qualified string) (nodeID, sessionID string, ok bool) {
 	return nodeID, sessionID, true
 }
 
-// Address is a resolved AgentHub destination.
+// Address is a resolved Agent Hallway destination.
 type Address struct {
 	// NodeID is empty for a bare local address.
 	NodeID string

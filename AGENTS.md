@@ -3,7 +3,7 @@
 Repository-wide notes for agents working in this tree. Codex reads this file as
 the project doc; its scope is the whole directory tree rooted here.
 
-## When AgentHub wakes you
+## When Agent Hallway wakes you
 
 A node started with `--auto-wake` starts a Codex turn when a message arrives
 for a session whose own `autoWake` is open (`ah audience <session-id> <mode>
@@ -14,12 +14,13 @@ added: each call replaces the session's whole set, so `ah audience <session-id>
 <mode> --auto-wake` on its own clears `--messages` and `--outbound`. If a turn
 began that way, the rules below apply to the message that started it. This is
 the Codex half of
-`.claude/skills/agenthub-watch/SKILL.md`, which is the same protocol for Claude
+`.claude/skills/agenthallway-watch/SKILL.md`, which is the same protocol for Claude
 Code; the difference is that you were woken by the node and do not poll, so
 there is no schedule to set up and no loop to stop.
 
-Find `ah` the same way the skill does: `AGENTHUB_AH` if set, else `ah` on PATH,
-else `<this repo>/bin/ah`. Do not build it silently if none exists — say so.
+Find `ah` the same way the skill does: `AGENTHALLWAY_AH` (or the older
+`AGENTHUB_AH`) if set, else `ah` on PATH, else `<this repo>/bin/ah`. Do not
+build it silently if none exists — say so.
 
 Identify this session (`SELF`) once:
 

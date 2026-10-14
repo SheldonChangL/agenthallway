@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -24,7 +25,7 @@ import (
 // platform where a setting is most likely to need a restart, the only thing
 // left was Task Manager. That is not an instruction a window may hand out.
 //
-// So this file is the fallback: stop whatever agenthub-node is running on this
+// So this file is the fallback: stop whatever agenthallway-node is running on this
 // machine, start the one that shipped beside this app, and wait until it
 // answers. It is the app's own last resort, not a service: the node it starts
 // is registered with nothing and will not come back at the next login. Windows
@@ -52,18 +53,26 @@ var nodeStopTimeout = 10 * time.Second
 // process restart below.
 func (a *App) RestartNode() (ServiceResult, error) {
 	status := a.ServiceStatus()
+	// The only registration is the pre-rename one, which starts the old node:
+	// restarting it brings that back, and stopping its node by hand would only
+	// have launchd or systemd start it again. Replacing it is a reinstall, and
+	// nothing is stopped here.
+	if status.Supported && status.Installed && status.Legacy {
+		return ServiceResult{}, legacyRegistrationError(runtime.GOOS)
+	}
 	if status.Supported && status.Installed {
 		return a.RestartService()
 	}
 	return a.restartNodeProcess()
 }
 
-// restartNodeProcess stops every agenthub-node on this machine and starts the
-// one beside this app, detached, with its output going to a file, on the
-// arguments the stopped one was started with.
+// restartNodeProcess stops every node on this machine — agenthallway-node,
+// and the pre-rename agenthub-node — and starts the agenthallway-node beside
+// this app, detached, with its output going to a file, on the arguments the
+// stopped one was started with.
 func (a *App) restartNodeProcess() (ServiceResult, error) {
 	nodeClient, nodeURL := a.current()
-	// Killing by executable name cannot tell one node from another, and what
+	// Stopping every node this machine runs cannot tell one from another, and what
 	// starts afterwards takes the node's own defaults — which is the node the
 	// installer runs and the node this app points at out of the box. An owner
 	// who has pointed this window at some other node on this machine is running
@@ -149,9 +158,9 @@ func (a *App) restartNodeProcess() (ServiceResult, error) {
 	// database, so it waits for the process itself.
 	if running != nil {
 		if err := waitForProcessGone(ctx, running.PID); err != nil {
-			return result, fmt.Errorf("agenthub-node (pid %d) was asked to stop and has not exited (%v), so it was "+
+			return result, fmt.Errorf("%s (pid %d) was asked to stop and has not exited (%v), so it was "+
 				"not restarted: a second node on the same database would fail to start and leave nothing running",
-				running.PID, err)
+				running.name(), running.PID, err)
 		}
 	}
 	say("stopped the node answering on %s", nodeURL)
@@ -211,11 +220,15 @@ func (a *App) restartNodeProcess() (ServiceResult, error) {
 	return result, nil
 }
 
-// nodeProcess is one agenthub-node running on this machine and the command
+// nodeProcess is one agenthallway-node running on this machine and the command
 // line it was started with, argv[0] included.
 type nodeProcess struct {
 	PID  int
 	Argv []string
+	// Legacy is true when the process is the pre-rename agenthub-node, which a
+	// machine upgraded from AgentHub can still be running: on the old default
+	// database when its command line names none (planNodeRestart).
+	Legacy bool
 	// Env is the environment the process runs with, and EnvErr why it could
 	// not be read; Env means nothing when EnvErr is set. It is where the node
 	// found every path its command line does not name (nodeenv.go).
@@ -229,9 +242,57 @@ type nodeProcess struct {
 
 func (p nodeProcess) program() string {
 	if len(p.Argv) == 0 {
-		return nodeExecutable
+		return p.name()
 	}
 	return p.Argv[0]
+}
+
+// name is the executable name the process was listed by.
+func (p nodeProcess) name() string {
+	if p.Legacy {
+		return legacyNodeExecutable
+	}
+	return nodeExecutable
+}
+
+// matchNodeExecutable says whether name — an executable's own file name, as
+// this platform spells it — is a node's, and whether it is the pre-rename one.
+// Both are listed and stopped: an upgraded desktop that could not see a
+// still-running agenthub-node would start a second node on its data.
+func matchNodeExecutable(name string) (legacy, ok bool) {
+	switch name {
+	case nodeExecutable:
+		return false, true
+	case legacyNodeExecutable:
+		return true, true
+	}
+	return false, false
+}
+
+// truncatedName is name as a kernel that keeps only limit bytes of it gives it
+// back: macOS keeps 16 (MAXCOMLEN) in p_comm, Linux 15 (TASK_COMM_LEN less its
+// NUL) in comm. agenthallway-node is 17, so neither gives it whole, and a
+// process whose kernel name matches is only a candidate until its own
+// executable name says it is a node.
+func truncatedName(name string, limit int) string {
+	if len(name) > limit {
+		return name[:limit]
+	}
+	return name
+}
+
+// nodeKernelName is whether a kernel name of at most limit bytes can be a
+// node's: the truncation of either name.
+func nodeKernelName(kernel string, limit int) bool {
+	return kernel == truncatedName(nodeExecutable, limit) || kernel == truncatedName(legacyNodeExecutable, limit)
+}
+
+// confirmNode is the second half of that: whether the executable's own name
+// — its last path element, whole, from the process's exec path or argv[0] —
+// is a node's. ok is false for a process whose kernel name only shares a
+// node's first bytes: someone else's agenthallway-notes, say.
+func confirmNode(executable string) (legacy, ok bool) {
+	return matchNodeExecutable(filepath.Base(executable))
 }
 
 func (p nodeProcess) args() []string {
@@ -271,8 +332,8 @@ func planFromRunningNodes(ctx context.Context) (nodeRestartPlan, *nodeProcess, e
 			pids = append(pids, fmt.Sprint(process.PID))
 		}
 		return nodeRestartPlan{}, nil, refuse(fmt.Sprintf(
-			"%d agenthub-node processes are running (pids %s), and stopping by name stops all of them "+
-				"to bring back one", len(processes), strings.Join(pids, ", ")))
+			"%d node processes are running (pids %s; agenthallway-node, or the pre-rename agenthub-node), "+
+				"and a restart stops all of them to bring back one", len(processes), strings.Join(pids, ", ")))
 	}
 	running := processes[0]
 	plan, err := planNodeRestart(running, appPaths)
@@ -284,7 +345,7 @@ func planFromRunningNodes(ctx context.Context) (nodeRestartPlan, *nodeProcess, e
 }
 
 // listNodesSettled is listNodes, asked again a few times when it fails the
-// way a listing fails that caught an agenthub-node on its way out: macOS
+// way a listing fails that caught an agenthallway-node on its way out: macOS
 // answers kern.procargs2 for a process that is exiting and not yet a zombie
 // with EINVAL, and a process gone between being listed and being read is
 // ESRCH. That process is not taken for gone — nothing is known about it until
@@ -349,7 +410,7 @@ func openNodeLog(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 }
 
-// waitForProcessGone waits until no agenthub-node with this pid is listed,
+// waitForProcessGone waits until no agenthallway-node with this pid is listed,
 // for as long as a stop is given, and says why not when it is still there.
 // A listing that fails is asked again: a process on its way out can be caught
 // half-gone, which some platforms answer with an error.
@@ -438,18 +499,21 @@ func nodeAnswers(ctx context.Context, nodeURL string) bool {
 // port (which on a developer's machine belongs to their own node), or creating
 // directories in their home.
 //
-// listNodes, readNodeIdentity and appPaths are the three things it reads from
-// the machine to decide what to start: which nodes are running and how they
-// were started, who is answering, and where a node with this app's environment
-// would put its paths.
+// listNodes, readNodeIdentity, appPaths and appLegacyDatabase are what it
+// reads from the machine to decide what to start: which nodes are running and
+// how they were started, who is answering, and where a node with this app's
+// environment would put its paths — and where a pre-rename node with this
+// app's environment kept its database, which a node started from here moves
+// on its first start (internal/datadir) only when given exactly that path.
 var (
-	stopNode         = stopNodeProcesses
-	startNode        = startNodeDetached
-	probeNode        = nodeAnswers
-	logDir           = nodeLogDir
-	listNodes        = listNodeProcesses
-	readNodeIdentity = func(ctx context.Context, c *client) (NodeIdentity, error) { return c.node(ctx) }
-	appPaths         = appDefaultPaths
+	stopNode          = stopNodeProcesses
+	startNode         = startNodeDetached
+	probeNode         = nodeAnswers
+	logDir            = nodeLogDir
+	listNodes         = listNodeProcesses
+	readNodeIdentity  = func(ctx context.Context, c *client) (NodeIdentity, error) { return c.node(ctx) }
+	appPaths          = appDefaultPaths
+	appLegacyDatabase = appDefaultLegacyDatabase
 )
 
 // runCommand executes one command and returns its combined output. A variable

@@ -23,7 +23,7 @@ const addressedPeer = "node_ubuntu000000000"
 func lanNode(t *testing.T) (*registry.Registry, *httptest.Server) {
 	t.Helper()
 	ctx := context.Background()
-	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,14 +9,14 @@ import (
 	"testing"
 )
 
-// withFakeNode stands in for the agenthub-node lookup so a test about the form
+// withFakeNode stands in for the agenthallway-node lookup so a test about the form
 // is not also a test about packaging. The path is unmistakable on sight.
 func withFakeNode(t *testing.T) string {
 	t.Helper()
 	previous := findNode
 	t.Cleanup(func() { findNode = previous })
-	findNode = func() (string, error) { return "/fake/bundle/agenthub-node", nil }
-	return "/fake/bundle/agenthub-node"
+	findNode = func() (string, error) { return "/fake/bundle/agenthallway-node", nil }
+	return "/fake/bundle/agenthallway-node"
 }
 
 func TestInstallArgsCarryOnlyWhatTheOwnerSet(t *testing.T) {
@@ -29,11 +29,11 @@ func TestInstallArgsCarryOnlyWhatTheOwnerSet(t *testing.T) {
 		t.Errorf("empty form should pass no node flags beyond the pinned binary, got %v", args)
 	}
 
-	args, err = installArgs(ServiceForm{DBPath: " /Users/me/data/agenthub.db "})
+	args, err = installArgs(ServiceForm{DBPath: " /Users/me/data/agenthallway.db "})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "service install --node-binary " + node + " --db /Users/me/data/agenthub.db"
+	want := "service install --node-binary " + node + " --db /Users/me/data/agenthallway.db"
 	if got := strings.Join(args, " "); got != want {
 		t.Errorf("args:\n%s\nwant:\n%s", got, want)
 	}
@@ -48,11 +48,11 @@ func TestInstallArgsCarryOnlyWhatTheOwnerSet(t *testing.T) {
 // start, which is a panel whose saves do nothing.
 func TestInstallArgsPinNoNodeSetting(t *testing.T) {
 	node := withFakeNode(t)
-	args, err := installArgs(ServiceForm{DBPath: "/Users/me/data/agenthub.db"})
+	args, err := installArgs(ServiceForm{DBPath: "/Users/me/data/agenthallway.db"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(args, " "); got != "service install --node-binary "+node+" --db /Users/me/data/agenthub.db" {
+	if got := strings.Join(args, " "); got != "service install --node-binary "+node+" --db /Users/me/data/agenthallway.db" {
 		t.Fatalf("the install command carries more than the database: %s", got)
 	}
 	for _, flag := range nodeSettingFlags {
@@ -68,7 +68,7 @@ func TestFindToolRemembersWhereAhIs(t *testing.T) {
 	previous := findTool
 	toolPath = ""
 	t.Cleanup(func() { findTool = previous; toolPath = "" })
-	t.Setenv("AGENTHUB_AH", "/definitely/not/here")
+	t.Setenv("AGENTHALLWAY_AH", "/definitely/not/here")
 	t.Setenv("PATH", t.TempDir())
 	if _, err := findTool(); err == nil {
 		t.Fatal("found an ah that does not exist")
@@ -86,7 +86,7 @@ func withFakeTool(t *testing.T, output string, runErr error) *[]string {
 		*calls = append(*calls, tool+" "+strings.Join(args, " "))
 		return output, runErr
 	}
-	t.Setenv("AGENTHUB_AH", "/fake/ah")
+	t.Setenv("AGENTHALLWAY_AH", "/fake/ah")
 	toolPath = ""
 	t.Cleanup(func() { runTool = previousRun; findTool = previousFind; toolPath = "" })
 	withFakeNode(t)
@@ -115,12 +115,12 @@ func TestServiceStatusDecodesAhAndAddressesTheAppsNode(t *testing.T) {
 
 func TestServiceStatusWithoutAhExplainsWhereItLooked(t *testing.T) {
 	previous := findTool
-	findTool = func() (string, error) { return "", errors.New("ah was not found (looked: a, b); set AGENTHUB_AH") }
+	findTool = func() (string, error) { return "", errors.New("ah was not found (looked: a, b); set AGENTHALLWAY_AH") }
 	t.Cleanup(func() { findTool = previous })
 	app := NewApp()
 	app.ctx = context.Background()
 	status := app.ServiceStatus()
-	if !strings.Contains(status.ToolError, "AGENTHUB_AH") || status.Supported {
+	if !strings.Contains(status.ToolError, "AGENTHALLWAY_AH") || status.Supported {
 		t.Errorf("status = %+v", status)
 	}
 }
@@ -130,11 +130,11 @@ func TestInstallServiceCarriesAhsWordsBackOnFailure(t *testing.T) {
 	findTool = func() (string, error) { return "/fake/ah", nil }
 	app := NewApp()
 	app.ctx = context.Background()
-	result, err := app.InstallService(ServiceForm{DBPath: "/Users/me/data/agenthub.db"})
+	result, err := app.InstallService(ServiceForm{DBPath: "/Users/me/data/agenthallway.db"})
 	if err == nil || !strings.Contains(err.Error(), "private network") {
 		t.Fatalf("err = %v, want ah's message", err)
 	}
-	if !strings.Contains(result.Command, "--db /Users/me/data/agenthub.db") {
+	if !strings.Contains(result.Command, "--db /Users/me/data/agenthallway.db") {
 		t.Errorf("command = %q", result.Command)
 	}
 }
@@ -180,14 +180,15 @@ func TestLocateBinaryNeverRunsAnAhFromPATH(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", onPath)
+	t.Setenv("AGENTHALLWAY_AH", "")
 	t.Setenv("AGENTHUB_AH", "")
 
 	// An app installed somewhere with nothing beside it — the case a colleague
 	// hits, and the one where PATH used to answer.
-	installed := filepath.Join(t.TempDir(), "Applications", "AgentHub.app", "Contents", "MacOS")
+	installed := filepath.Join(t.TempDir(), "Applications", "agenthallway-desktop.app", "Contents", "MacOS")
 	dir := executable(t, filepath.Join(installed, "desktop"))
 
-	found, err := locateBinaryNear(dir, "ah", "AGENTHUB_AH")
+	found, err := locateBinaryNear(dir, "ah", "AH")
 	if err == nil {
 		t.Fatalf("ah was found at %q; the only ah anywhere is the one on PATH", found)
 	}
@@ -201,13 +202,14 @@ func TestLocateBinaryNeverRunsAnAhFromPATH(t *testing.T) {
 // What the packaging step produces: ah beside the app executable, inside the
 // bundle. This is the path a released .app has to take.
 func TestLocateBinaryFindsWhatWasBundledBesideTheApp(t *testing.T) {
+	t.Setenv("AGENTHALLWAY_AH", "")
 	t.Setenv("AGENTHUB_AH", "")
-	macOS := filepath.Join(t.TempDir(), "AgentHub.app", "Contents", "MacOS")
+	macOS := filepath.Join(t.TempDir(), "agenthallway-desktop.app", "Contents", "MacOS")
 	dir := executable(t, filepath.Join(macOS, "desktop"))
 	bundled := filepath.Join(macOS, "ah")
 	executable(t, bundled)
 
-	found, err := locateBinaryNear(dir, "ah", "AGENTHUB_AH")
+	found, err := locateBinaryNear(dir, "ah", "AH")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,12 +222,13 @@ func TestLocateBinaryFindsWhatWasBundledBesideTheApp(t *testing.T) {
 // desktop/build/bin — and only there. The same offsets under a directory that
 // is not this project's checkout are a stranger's bin/ah, and are refused.
 func TestLocateBinaryTakesTheSourceTreeOnlyFromThisProjectsCheckout(t *testing.T) {
+	t.Setenv("AGENTHALLWAY_AH", "")
 	t.Setenv("AGENTHUB_AH", "")
 	for _, layout := range []struct {
 		name   string
 		within string
 	}{
-		{"macOS", filepath.Join("desktop", "build", "bin", "agenthub-desktop.app", "Contents", "MacOS")},
+		{"macOS", filepath.Join("desktop", "build", "bin", "agenthallway-desktop.app", "Contents", "MacOS")},
 		{"linux", filepath.Join("desktop", "build", "bin")},
 	} {
 		t.Run(layout.name, func(t *testing.T) {
@@ -234,12 +237,12 @@ func TestLocateBinaryTakesTheSourceTreeOnlyFromThisProjectsCheckout(t *testing.T
 			built := filepath.Join(root, "bin", "ah")
 			executable(t, built)
 
-			if found, err := locateBinaryNear(dir, "ah", "AGENTHUB_AH"); err == nil {
+			if found, err := locateBinaryNear(dir, "ah", "AH"); err == nil {
 				t.Fatalf("found %q under a directory with no go.mod of ours", found)
 			}
 
 			checkout(t, root)
-			found, err := locateBinaryNear(dir, "ah", "AGENTHUB_AH")
+			found, err := locateBinaryNear(dir, "ah", "AH")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -265,19 +268,20 @@ func TestSomeoneElsesCheckoutIsNotOurs(t *testing.T) {
 }
 
 // The flag that decides what a launchd job or a systemd unit runs at every
-// boot. Without it `ah service install` resolves agenthub-node itself and ends
+// boot. Without it `ah service install` resolves agenthallway-node itself and ends
 // at exec.LookPath — so taking PATH out of this file would only have moved that
 // decision one hop down, into a file written once and executed forever.
 func TestInstallArgsPinTheNodeBinaryInsideTheBundle(t *testing.T) {
+	t.Setenv("AGENTHALLWAY_NODE", "")
 	t.Setenv("AGENTHUB_NODE", "")
-	macOS := filepath.Join(t.TempDir(), "AgentHub.app", "Contents", "MacOS")
+	macOS := filepath.Join(t.TempDir(), "agenthallway-desktop.app", "Contents", "MacOS")
 	dir := executable(t, filepath.Join(macOS, "desktop"))
-	bundled := filepath.Join(macOS, "agenthub-node")
+	bundled := filepath.Join(macOS, "agenthallway-node")
 	executable(t, bundled)
 
 	previous := findNode
 	t.Cleanup(func() { findNode = previous })
-	findNode = func() (string, error) { return locateBinaryNear(dir, "agenthub-node", "AGENTHUB_NODE") }
+	findNode = func() (string, error) { return locateBinaryNear(dir, "agenthallway-node", "NODE") }
 
 	args, err := installArgs(ServiceForm{})
 	if err != nil {
@@ -296,11 +300,11 @@ func TestInstallArgsPinTheNodeBinaryInsideTheBundle(t *testing.T) {
 		t.Errorf("--node-binary names %v, want the bundled %q", args[at+1:], bundled)
 	}
 
-	// And when there is no agenthub-node to name, the install says so rather
+	// And when there is no agenthallway-node to name, the install says so rather
 	// than quietly leaving the flag off and letting ah fall back to PATH.
-	findNode = func() (string, error) { return "", errors.New("agenthub-node was not found (looked: a, b)") }
+	findNode = func() (string, error) { return "", errors.New("agenthallway-node was not found (looked: a, b)") }
 	if _, err := installArgs(ServiceForm{}); err == nil {
-		t.Error("a missing agenthub-node produced an install that would resolve it from PATH")
+		t.Error("a missing agenthallway-node produced an install that would resolve it from PATH")
 	}
 }
 
@@ -311,9 +315,10 @@ func TestInstallArgsPinTheNodeBinaryInsideTheBundle(t *testing.T) {
 // checkout, and the GUI would run the planted ah to install a launchd job.
 // Depth is not shape: it has to be desktop/build/bin.
 func TestLocateBinaryRefusesACheckoutPlantedBesideAnInstalledApp(t *testing.T) {
+	t.Setenv("AGENTHALLWAY_AH", "")
 	t.Setenv("AGENTHUB_AH", "")
 	shared := t.TempDir()
-	macOS := filepath.Join(shared, "AgentHub.app", "Contents", "MacOS")
+	macOS := filepath.Join(shared, "agenthallway-desktop.app", "Contents", "MacOS")
 	dir := executable(t, filepath.Join(macOS, "desktop"))
 
 	// What the other account writes; nothing here needs the owner's cooperation
@@ -322,7 +327,7 @@ func TestLocateBinaryRefusesACheckoutPlantedBesideAnInstalledApp(t *testing.T) {
 	planted := filepath.Join(shared, "bin", "ah")
 	executable(t, planted)
 
-	found, err := locateBinaryNear(dir, "ah", "AGENTHUB_AH")
+	found, err := locateBinaryNear(dir, "ah", "AH")
 	if err == nil {
 		t.Fatalf("the app would run %q, which anyone with write access to %q could have put there", found, shared)
 	}
@@ -335,13 +340,14 @@ func TestLocateBinaryRefusesACheckoutPlantedBesideAnInstalledApp(t *testing.T) {
 // binary, and it was the one candidate nothing looked at: deleting that line
 // left the suite green.
 func TestLocateBinaryFindsWhatWasBundledInResources(t *testing.T) {
+	t.Setenv("AGENTHALLWAY_AH", "")
 	t.Setenv("AGENTHUB_AH", "")
-	app := filepath.Join(t.TempDir(), "AgentHub.app")
+	app := filepath.Join(t.TempDir(), "agenthallway-desktop.app")
 	dir := executable(t, filepath.Join(app, "Contents", "MacOS", "desktop"))
 	bundled := filepath.Join(app, "Contents", "Resources", "ah")
 	executable(t, bundled)
 
-	found, err := locateBinaryNear(dir, "ah", "AGENTHUB_AH")
+	found, err := locateBinaryNear(dir, "ah", "AH")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +360,7 @@ func TestLocateBinaryFindsWhatWasBundledInResources(t *testing.T) {
 // without the bit, is not one — and handing either back means failing later
 // with a message about exec instead of here with one about the path.
 func TestLocateBinaryRefusesAnOverrideThatIsNotAnExecutableFile(t *testing.T) {
-	macOS := filepath.Join(t.TempDir(), "AgentHub.app", "Contents", "MacOS")
+	macOS := filepath.Join(t.TempDir(), "agenthallway-desktop.app", "Contents", "MacOS")
 	dir := executable(t, filepath.Join(macOS, "desktop"))
 	bundled := filepath.Join(macOS, "ah")
 	executable(t, bundled)
@@ -373,13 +379,13 @@ func TestLocateBinaryRefusesAnOverrideThatIsNotAnExecutableFile(t *testing.T) {
 		"a file with no execute bit": inert,
 	} {
 		t.Run(name, func(t *testing.T) {
-			t.Setenv("AGENTHUB_AH", given)
-			found, err := locateBinaryNear(dir, "ah", "AGENTHUB_AH")
+			t.Setenv("AGENTHALLWAY_AH", given)
+			found, err := locateBinaryNear(dir, "ah", "AH")
 			if err != nil {
 				t.Fatal(err)
 			}
 			if found != bundled {
-				t.Errorf("$AGENTHUB_AH pointing at %s was taken: found %q, want the bundled %q", name, found, bundled)
+				t.Errorf("$AGENTHALLWAY_AH pointing at %s was taken: found %q, want the bundled %q", name, found, bundled)
 			}
 		})
 	}

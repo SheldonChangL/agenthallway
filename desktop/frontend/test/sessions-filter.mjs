@@ -23,7 +23,7 @@ const s = (id, provider, status, mode, extra = {}) => ({
   lastSeenAt: extra.at ?? "2026-09-11T00:00:00Z",
 });
 const rows = [
-  s("a1", "claude", "active", "all_paired", { at: "2026-09-11T03:00:00Z", cwd: "/p/agenthub" }),
+  s("a1", "claude", "active", "all_paired", { at: "2026-09-11T03:00:00Z", cwd: "/p/agenthallway" }),
   s("a2", "claude", "idle", "selected", { nodes: ["n1"], at: "2026-09-11T02:00:00Z", cwd: "/p/prm" }),
   s("a3", "claude", "inactive", "none", { at: "2026-09-10T00:00:00Z" }),
   s("c1", "codex", "active", "none", { at: "2026-09-11T02:30:00Z", management: "由 app-server 管理", cwd: "/p/serial" }),

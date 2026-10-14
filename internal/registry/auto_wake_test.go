@@ -118,7 +118,7 @@ func TestAutoWakeSurvivesEveryReadPath(t *testing.T) {
 // nobody asked for, on a machine whose owner never agreed to that.
 func TestAnOlderDatabaseGainsAutoWakeClosed(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "agenthub.db")
+	path := filepath.Join(t.TempDir(), "agenthallway.db")
 	store := openRegistryAt(t, path)
 	session := storedSession(t, store, "claude:wake-upgraded")
 	if err := store.SetAudience(ctx, session.ID, model.Audience{

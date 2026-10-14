@@ -264,7 +264,7 @@ func (c *Client) answer(id json.RawMessage, method string, params json.RawMessag
 	defer cancel()
 
 	if c.onRequest == nil {
-		c.writeError(id, fmt.Sprintf("agenthub does not answer %q", method))
+		c.writeError(id, fmt.Sprintf("agenthallway does not answer %q", method))
 		return
 	}
 	result, err := c.onRequest(ctx, method, params)
@@ -309,7 +309,7 @@ type InitializeResult struct {
 func (c *Client) Initialize(ctx context.Context) (InitializeResult, error) {
 	var result InitializeResult
 	params := map[string]any{
-		"clientInfo": map[string]string{"name": "agenthub", "version": buildinfo.Version()},
+		"clientInfo": map[string]string{"name": "agenthallway", "version": buildinfo.Version()},
 		// experimentalApi is what turn/start.additionalContext is behind.
 		// Measured: without it, starting a turn with a context fragment is
 		// refused with "requires experimentalApi capability" — so the

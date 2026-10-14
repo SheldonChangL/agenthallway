@@ -46,7 +46,7 @@ func (p *fakeProc) dir(pid int) string { return filepath.Join(p.root, fmt.Sprint
 
 func (p *fakeProc) setState(pid int, state byte) {
 	p.t.Helper()
-	p.write(pid, "stat", fmt.Sprintf("%d (%s) %c 1 %d %d 0 -1", pid, nodeExecutable, state, pid, pid))
+	p.write(pid, "stat", fmt.Sprintf("%d (%s) %c 1 %d %d 0 -1", pid, nodeComm, state, pid, pid))
 }
 
 // write replaces one file whole, by rename, so that a listing running at the
@@ -85,9 +85,50 @@ func nulTerminated(entries []string) string {
 }
 
 var (
-	linuxNodeArgv = []string{"/usr/local/bin/agenthub-node", "--db", "/home/me/a b/agenthub.db"}
+	linuxNodeArgv = []string{"/usr/local/bin/agenthallway-node", "--db", "/home/me/a b/agenthallway.db"}
 	linuxNodeEnv  = []string{"HOME=/home/me", "XDG_CONFIG_HOME=/home/me/.config"}
+	// nodeComm is what Linux gives as agenthallway-node's comm: its first 15
+	// bytes, agenthallway-no.
+	nodeComm = truncatedName(nodeExecutable, kernelNameLength)
 )
+
+// W7. comm is where the listing starts, not where it decides: agenthallway-no
+// is any program whose name begins that way, and argv[0] says which. The
+// pre-rename agenthub-node fits in comm whole, and is listed as what it is.
+func TestLinuxListingConfirmsATruncatedNameByArgv0(t *testing.T) {
+	if nodeComm != "agenthallway-no" {
+		t.Fatalf("nodeComm = %q, want the 15 bytes Linux keeps", nodeComm)
+	}
+	proc := newFakeProc(t)
+	proc.add(600, nodeComm, 'S', linuxNodeArgv, linuxNodeEnv)
+	proc.add(601, nodeComm, 'S', []string{"/usr/bin/agenthallway-notes", "--today"}, linuxNodeEnv)
+	proc.add(602, "agenthub-node", 'S', []string{"/home/me/.local/share/agenthub/agenthub-node"}, linuxNodeEnv)
+	// A whole 17-byte comm is not what Linux gives, and is not taken for one.
+	proc.add(603, nodeExecutable, 'S', linuxNodeArgv, linuxNodeEnv)
+	processes, err := proc.list()
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[int]bool{}
+	for _, process := range processes {
+		listed[process.PID] = process.Legacy
+	}
+	if legacy, ok := listed[600]; !ok || legacy {
+		t.Errorf("agenthallway-node (comm %s): listed %v, legacy %v; want listed, not legacy", nodeComm, ok, legacy)
+	}
+	if _, ok := listed[601]; ok {
+		t.Error("agenthallway-notes was listed as a node because its comm is agenthallway-no")
+	}
+	if legacy, ok := listed[602]; !ok || !legacy {
+		t.Errorf("agenthub-node: listed %v, legacy %v; want listed as the pre-rename node", ok, legacy)
+	}
+	if _, ok := listed[603]; ok {
+		t.Error("a comm Linux never gives was taken for the node's")
+	}
+	if len(processes) != 2 {
+		t.Errorf("listed %+v, want pids 600 and 602", processes)
+	}
+}
 
 // A running node is listed whole; a zombie, which has an empty command line
 // and holds nothing, is not listed and does not stop the listing; a node that
@@ -96,8 +137,8 @@ var (
 // listNodesSettled and waitForProcessGone ask again.
 func TestLinuxListingTakesAnEmptyCommandLineForANodeExiting(t *testing.T) {
 	proc := newFakeProc(t)
-	proc.add(100, nodeExecutable, 'S', linuxNodeArgv, linuxNodeEnv)
-	proc.add(101, nodeExecutable, 'Z', nil, nil)
+	proc.add(100, nodeComm, 'S', linuxNodeArgv, linuxNodeEnv)
+	proc.add(101, nodeComm, 'Z', nil, nil)
 	proc.add(102, "bash", 'S', nil, nil) // not a node: its command line is not read
 	processes, err := proc.list()
 	if err != nil {
@@ -108,7 +149,7 @@ func TestLinuxListingTakesAnEmptyCommandLineForANodeExiting(t *testing.T) {
 		t.Fatalf("listed %+v, want pid 100 with argv %q and env %q", processes, linuxNodeArgv, linuxNodeEnv)
 	}
 
-	proc.add(103, nodeExecutable, 'S', nil, linuxNodeEnv)
+	proc.add(103, nodeComm, 'S', nil, linuxNodeEnv)
 	processes, err = proc.list()
 	if err == nil || !transientListError(err) {
 		t.Fatalf("a node with an empty command line: err = %v, want one listNodesSettled asks again", err)
@@ -131,7 +172,7 @@ func TestLinuxListingAsksAgainANodeCaughtExiting(t *testing.T) {
 
 	t.Run("it settles", func(t *testing.T) {
 		proc := newFakeProc(t)
-		proc.add(200, nodeExecutable, 'S', nil, linuxNodeEnv)
+		proc.add(200, nodeComm, 'S', nil, linuxNodeEnv)
 		calls := 0
 		listWas := listNodes
 		t.Cleanup(func() { listNodes = listWas })
@@ -153,7 +194,7 @@ func TestLinuxListingAsksAgainANodeCaughtExiting(t *testing.T) {
 
 	t.Run("it stays empty", func(t *testing.T) {
 		proc := newFakeProc(t)
-		proc.add(201, nodeExecutable, 'S', nil, linuxNodeEnv)
+		proc.add(201, nodeComm, 'S', nil, linuxNodeEnv)
 		calls := 0
 		proc.install(&calls)
 		plan, running, err := planFromRunningNodes(context.Background())
@@ -187,7 +228,7 @@ func TestLinuxListingAsksAgainANodeGoneWhileBeingRead(t *testing.T) {
 	for _, file := range []string{"stat", "cmdline", "environ"} {
 		t.Run(file+" removed", func(t *testing.T) {
 			proc := newFakeProc(t)
-			proc.add(300, nodeExecutable, 'S', linuxNodeArgv, linuxNodeEnv)
+			proc.add(300, nodeComm, 'S', linuxNodeArgv, linuxNodeEnv)
 			if err := os.Remove(filepath.Join(proc.dir(300), file)); err != nil {
 				t.Fatal(err)
 			}
@@ -197,7 +238,7 @@ func TestLinuxListingAsksAgainANodeGoneWhileBeingRead(t *testing.T) {
 		})
 		t.Run(file+" ESRCH", func(t *testing.T) {
 			proc := newFakeProc(t)
-			proc.add(300, nodeExecutable, 'S', linuxNodeArgv, linuxNodeEnv)
+			proc.add(300, nodeComm, 'S', linuxNodeArgv, linuxNodeEnv)
 			if _, err := listNodeProcessesIn(proc.root, failing(proc, file, syscall.ESRCH)); err == nil || !transientListError(err) {
 				t.Errorf("err = %v, want one listNodesSettled asks again", err)
 			}
@@ -206,7 +247,7 @@ func TestLinuxListingAsksAgainANodeGoneWhileBeingRead(t *testing.T) {
 
 	t.Run("environment empty as it exits", func(t *testing.T) {
 		proc := newFakeProc(t)
-		proc.add(300, nodeExecutable, 'S', linuxNodeArgv, nil)
+		proc.add(300, nodeComm, 'S', linuxNodeArgv, nil)
 		reads := 0
 		read := func(path string) ([]byte, error) {
 			if filepath.Base(path) == "cmdline" {
@@ -224,7 +265,7 @@ func TestLinuxListingAsksAgainANodeGoneWhileBeingRead(t *testing.T) {
 
 	t.Run("environment empty and running", func(t *testing.T) {
 		proc := newFakeProc(t)
-		proc.add(300, nodeExecutable, 'S', linuxNodeArgv, nil)
+		proc.add(300, nodeComm, 'S', linuxNodeArgv, nil)
 		processes, err := proc.list()
 		if err != nil || len(processes) != 1 || processes[0].Env == nil || len(processes[0].Env) != 0 ||
 			processes[0].EnvErr != nil {
@@ -245,7 +286,7 @@ func TestLinuxListingAsksAgainANodeGoneWhileBeingRead(t *testing.T) {
 
 	t.Run("another failure", func(t *testing.T) {
 		proc := newFakeProc(t)
-		proc.add(300, nodeExecutable, 'S', linuxNodeArgv, linuxNodeEnv)
+		proc.add(300, nodeComm, 'S', linuxNodeArgv, linuxNodeEnv)
 		_, err := listNodeProcessesIn(proc.root, failing(proc, "cmdline", syscall.EACCES))
 		if err == nil || transientListError(err) {
 			t.Errorf("err = %v, want a failure that is not asked again", err)
@@ -272,7 +313,7 @@ func TestLinuxWaitForProcessGoneWaitsOutAnEmptyCommandLine(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			nodeStopTimeout = 10 * time.Second
 			proc := newFakeProc(t)
-			proc.add(400, nodeExecutable, 'S', nil, nil)
+			proc.add(400, nodeComm, 'S', nil, nil)
 			calls := 0
 			proc.install(&calls)
 			done := make(chan error, 1)
@@ -297,7 +338,7 @@ func TestLinuxWaitForProcessGoneWaitsOutAnEmptyCommandLine(t *testing.T) {
 	t.Run("it stays empty", func(t *testing.T) {
 		nodeStopTimeout = 50 * time.Millisecond
 		proc := newFakeProc(t)
-		proc.add(401, nodeExecutable, 'S', nil, nil)
+		proc.add(401, nodeComm, 'S', nil, nil)
 		calls := 0
 		proc.install(&calls)
 		err := waitForProcessGone(context.Background(), 401)
@@ -323,12 +364,12 @@ func TestLinuxListingAsksAgainANodeReadCutShort(t *testing.T) {
 	nodeListRetryInterval = time.Millisecond
 
 	const pid = 500
-	longArgv := []string{"/usr/local/bin/agenthub-node", "--display-name", strings.Repeat("n", 600),
-		"--db", "/home/me/a b/agenthub.db"}
+	longArgv := []string{"/usr/local/bin/agenthallway-node", "--display-name", strings.Repeat("n", 600),
+		"--db", "/home/me/a b/agenthallway.db"}
 	longEnv := []string{"HOME=/home/me", "FILLER=" + strings.Repeat("f", 600), "XDG_CONFIG_HOME=/home/me/.config"}
 	newProc := func(t *testing.T) *fakeProc {
 		proc := newFakeProc(t)
-		proc.add(pid, nodeExecutable, 'S', longArgv, longEnv)
+		proc.add(pid, nodeComm, 'S', longArgv, longEnv)
 		return proc
 	}
 	// reader answers this node's environ, and every cmdline read made after

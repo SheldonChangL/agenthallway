@@ -41,6 +41,9 @@ type fakeRestart struct {
 	// appDB is the database appPaths names — this app's environment's
 	// default — made to exist unless a test sets it.
 	appDB string
+	// appLegacyDB is the pre-rename default appLegacyDatabase names for this
+	// app's environment: beside appDB's directory unless a test sets it.
+	appLegacyDB string
 
 	nodeEnv   []string
 	nodePaths nodePaths
@@ -48,19 +51,30 @@ type fakeRestart struct {
 
 var sameNode = NodeIdentity{ID: "node_same", Fingerprint: "AAAA BBBB CCCC DDDD EEEE FFFF"}
 
+// No test stops a real process. The machine running them may have a node of
+// its own — a developer's Mac runs one, under the pre-rename name too — and
+// the real stop would end it. A test that needs a stop installs a fake
+// (fakeRestart.install); one that reaches the real one has a bug, and fails
+// here without stopping anything.
+func init() {
+	stopNode = func(context.Context) (string, error) {
+		panic("a test reached the real stopNode")
+	}
+}
+
 func (f *fakeRestart) install(t *testing.T) {
 	t.Helper()
 	stopWas, startWas, probeWas := stopNode, startNode, probeNode
-	listWas, identityWas, pathsWas := listNodes, readNodeIdentity, appPaths
+	listWas, identityWas, pathsWas, legacyWas := listNodes, readNodeIdentity, appPaths, appLegacyDatabase
 	t.Cleanup(func() {
 		stopNode, startNode, probeNode = stopWas, startWas, probeWas
-		listNodes, readNodeIdentity, appPaths = listWas, identityWas, pathsWas
+		listNodes, readNodeIdentity, appPaths, appLegacyDatabase = listWas, identityWas, pathsWas, legacyWas
 	})
 	if f.identities == nil {
 		f.identities = []NodeIdentity{sameNode}
 	}
 	if f.appDB == "" {
-		f.appDB = existingFile(t, "app default", "agenthub.db")
+		f.appDB = existingFile(t, "app default", "agenthallway.db")
 	}
 	f.nodeEnv, f.nodePaths = nodeEnvironment(t)
 	for index := range f.running {
@@ -72,10 +86,14 @@ func (f *fakeRestart) install(t *testing.T) {
 	appPaths = func() (nodePaths, error) {
 		return nodePaths{database: f.appDB, claude: filepath.Join(appHome, ".claude"), codex: filepath.Join(appHome, ".codex")}, nil
 	}
+	if f.appLegacyDB == "" {
+		f.appLegacyDB = filepath.Join(filepath.Dir(appHome), "agenthub", "agenthub.db")
+	}
+	appLegacyDatabase = func() (string, error) { return f.appLegacyDB, nil }
 	stopNode = func(context.Context) (string, error) {
 		f.steps = append(f.steps, "stop")
 		f.stopped = true
-		return "SUCCESS: the process agenthub-node.exe has been terminated.", nil
+		return "SUCCESS: the process agenthallway-node.exe has been terminated.", nil
 	}
 	startNode = func(binary, logPath string, args []string) error {
 		f.steps = append(f.steps, "start "+binary)
@@ -186,7 +204,7 @@ func restartApp(t *testing.T) *App {
 	logDir = func() (string, error) { return temporary, nil }
 	app := NewApp()
 	app.ctx = context.Background()
-	// NewApp reads AGENTHUB_URL, and a developer's environment may point it
+	// NewApp reads AGENTHALLWAY_URL (or AGENTHUB_URL), and a developer's environment may point it
 	// somewhere else; this is a test about the restart, not about that.
 	app.url = defaultNodeURL
 	app.client = newClient(defaultNodeURL)
@@ -300,7 +318,7 @@ func TestRestartNodeStartsItOnTheDatabaseItWasStartedWith(t *testing.T) {
 	fake := &fakeRestart{
 		answers: []bool{false, true},
 		running: []nodeProcess{{PID: 4242, Argv: []string{
-			"/usr/local/bin/agenthub-node", "--db", database, "-peer-listen", "192.168.1.5:7463", "--allow-lan",
+			"/usr/local/bin/agenthallway-node", "--db", database, "-peer-listen", "192.168.1.5:7463", "--allow-lan",
 			"-claude-root=/Users/me/.claude", "-display-name", "-looks-like-a-flag", "-auto-wake=false",
 		}}},
 	}
@@ -333,7 +351,7 @@ func TestRestartNodeOnTheDefaultDatabaseNamesIt(t *testing.T) {
 	withFakeNode(t)
 	fake := &fakeRestart{
 		answers: []bool{false, true},
-		running: []nodeProcess{{PID: 7, Argv: []string{"/Applications/agenthub-desktop.app/Contents/MacOS/agenthub-node"}}},
+		running: []nodeProcess{{PID: 7, Argv: []string{"/Applications/agenthallway-desktop.app/Contents/MacOS/agenthallway-node"}}},
 	}
 	fake.install(t)
 
@@ -359,7 +377,7 @@ func TestRestartNodeFollowsTheNodesEnvironmentNotTheApps(t *testing.T) {
 	withFakeNode(t)
 	fake := &fakeRestart{
 		answers: []bool{false, true},
-		running: []nodeProcess{{PID: 8, Argv: []string{"/usr/bin/agenthub-node"}}},
+		running: []nodeProcess{{PID: 8, Argv: []string{"/usr/bin/agenthallway-node"}}},
 	}
 	fake.install(t)
 	if fake.appDB == fake.nodePaths.database {
@@ -389,7 +407,7 @@ func TestRestartNodeReportsANodeThatCameBackAsSomeoneElse(t *testing.T) {
 			withFakeNode(t)
 			fake := &fakeRestart{
 				answers:    []bool{false, true},
-				running:    []nodeProcess{{PID: 9, Argv: []string{"/opt/agenthub-node", "-peer-listen", "10.0.0.1:7463"}}},
+				running:    []nodeProcess{{PID: 9, Argv: []string{"/opt/agenthallway-node", "-peer-listen", "10.0.0.1:7463"}}},
 				identities: []NodeIdentity{sameNode, after},
 			}
 			fake.install(t)
@@ -398,7 +416,7 @@ func TestRestartNodeReportsANodeThatCameBackAsSomeoneElse(t *testing.T) {
 			if err == nil {
 				t.Fatalf("a node that came back as %+v was reported as restarted:\n%s", after, result.Output)
 			}
-			recovery := commandLine("/opt/agenthub-node", []string{"-peer-listen", "10.0.0.1:7463",
+			recovery := commandLine("/opt/agenthallway-node", []string{"-peer-listen", "10.0.0.1:7463",
 				"--db", fake.nodePaths.database, "--claude-root", fake.nodePaths.claude, "--codex-root", fake.nodePaths.codex})
 			for _, phrase := range []string{after.ID, sameNode.ID, "different database", recovery} {
 				if !strings.Contains(err.Error(), phrase) {
@@ -418,7 +436,7 @@ func TestRestartNodeDoesNotHandBackAnInferredPathAsTheWayBack(t *testing.T) {
 	withEnvironmentFallback(t, true)
 	fake := &fakeRestart{
 		answers: []bool{false, true},
-		running: []nodeProcess{{PID: 22, Argv: []string{`C:\agenthub\agenthub-node.exe`, "-discover"},
+		running: []nodeProcess{{PID: 22, Argv: []string{`C:\agenthallway\agenthallway-node.exe`, "-discover"},
 			EnvErr: errors.New("access is denied")}},
 		identities: []NodeIdentity{sameNode, {ID: "node_new", Fingerprint: sameNode.Fingerprint}},
 	}
@@ -435,7 +453,7 @@ func TestRestartNodeDoesNotHandBackAnInferredPathAsTheWayBack(t *testing.T) {
 		t.Errorf("the way back names the inferred path %s, which is what brought up node_new: %v", fake.appDB, err)
 	}
 	for _, phrase := range []string{
-		"node_new", sameNode.ID, commandLine(`C:\agenthub\agenthub-node.exe`, []string{"-discover"}),
+		"node_new", sameNode.ID, commandLine(`C:\agenthallway\agenthallway-node.exe`, []string{"-discover"}),
 		"environment it was first started in", "--db, --claude-root, --codex-root", "inferred",
 	} {
 		if !strings.Contains(err.Error(), phrase) {
@@ -455,43 +473,48 @@ func TestRestartNodeRefusesBeforeStoppingWhatItCannotStartAgain(t *testing.T) {
 		want     string
 	}{
 		{name: "command line unreadable", listErr: errors.New("operation not permitted"), want: "operation not permitted"},
-		{name: "two nodes", want: "2 agenthub-node processes", running: func(*testing.T) []nodeProcess {
-			return []nodeProcess{{PID: 1, Argv: []string{"agenthub-node"}}, {PID: 2, Argv: []string{"agenthub-node"}}}
+		{name: "two nodes", want: "2 node processes", running: func(*testing.T) []nodeProcess {
+			return []nodeProcess{{PID: 1, Argv: []string{"agenthallway-node"}}, {PID: 2, Argv: []string{"agenthallway-node"}}}
+		}},
+		// Two of any kind: a pre-rename node beside a current one is the same
+		// two nodes, and a restart would stop both to bring back one.
+		{name: "a node and a pre-rename node", want: "2 node processes", running: func(*testing.T) []nodeProcess {
+			return []nodeProcess{{PID: 1, Argv: []string{"agenthallway-node"}}, {PID: 2, Argv: []string{"agenthub-node"}, Legacy: true}}
 		}},
 		{name: "relative database", want: "relative path", running: func(*testing.T) []nodeProcess {
-			return []nodeProcess{{PID: 3, Argv: []string{"agenthub-node", "--db", "data/agenthub.db"}}}
+			return []nodeProcess{{PID: 3, Argv: []string{"agenthallway-node", "--db", "data/agenthallway.db"}}}
 		}},
 		{name: "database not there", want: "is not there", running: func(t *testing.T) []nodeProcess {
-			return []nodeProcess{{PID: 4, Argv: []string{"agenthub-node", "--db", filepath.Join(t.TempDir(), "gone.db")}}}
+			return []nodeProcess{{PID: 4, Argv: []string{"agenthallway-node", "--db", filepath.Join(t.TempDir(), "gone.db")}}}
 		}},
 		{name: "default database not there", want: "is not there", running: func(t *testing.T) []nodeProcess {
 			home := t.TempDir()
-			return []nodeProcess{{PID: 5, Argv: []string{"agenthub-node"},
+			return []nodeProcess{{PID: 5, Argv: []string{"agenthallway-node"},
 				Env: []string{"HOME=" + home, "USERPROFILE=" + home, "APPDATA=" + home}}}
 		}},
 		{name: "unknown flag", want: "-from-the-future", running: func(t *testing.T) []nodeProcess {
-			return []nodeProcess{{PID: 6, Argv: []string{"agenthub-node", "-from-the-future", "x"}}}
+			return []nodeProcess{{PID: 6, Argv: []string{"agenthallway-node", "-from-the-future", "x"}}}
 		}},
 		{name: "environment unreadable", want: "environment could not be read", running: func(t *testing.T) []nodeProcess {
-			return []nodeProcess{{PID: 10, Argv: []string{"agenthub-node"}, EnvErr: errors.New("permission denied")}}
+			return []nodeProcess{{PID: 10, Argv: []string{"agenthallway-node"}, EnvErr: errors.New("permission denied")}}
 		}},
 		{name: "environment unreadable, only the roots missing", want: "-claude-root, -codex-root", running: func(t *testing.T) []nodeProcess {
 			database := existingFile(t, "hand", "mine.db")
-			return []nodeProcess{{PID: 11, Argv: []string{"agenthub-node", "--db", database}, EnvErr: errors.New("permission denied")}}
+			return []nodeProcess{{PID: 11, Argv: []string{"agenthallway-node", "--db", database}, EnvErr: errors.New("permission denied")}}
 		}},
 		{name: "environment without a home", want: "HOME", running: func(t *testing.T) []nodeProcess {
-			return []nodeProcess{{PID: 12, Argv: []string{"agenthub-node"}, Env: []string{"PATH=/usr/bin"}}}
+			return []nodeProcess{{PID: 12, Argv: []string{"agenthallway-node"}, Env: []string{"PATH=/usr/bin"}}}
 		}},
 		{name: "a relative home", want: "relative path", running: func(t *testing.T) []nodeProcess {
-			return []nodeProcess{{PID: 13, Argv: []string{"agenthub-node"},
+			return []nodeProcess{{PID: 13, Argv: []string{"agenthallway-node"},
 				Env: []string{"HOME=home", "USERPROFILE=home", "APPDATA=home"}}}
 		}},
 		{name: "listening elsewhere", want: "-listen 127.0.0.1:7999", running: func(t *testing.T) []nodeProcess {
 			database := existingFile(t, "hand", "mine.db")
-			return []nodeProcess{{PID: 14, Argv: []string{"agenthub-node", "--db", database, "-listen", "127.0.0.1:7999"}}}
+			return []nodeProcess{{PID: 14, Argv: []string{"agenthallway-node", "--db", database, "-listen", "127.0.0.1:7999"}}}
 		}},
 		{name: "fallback, another user", fallback: true, want: "runs as S-1-5-21-2", running: func(t *testing.T) []nodeProcess {
-			return []nodeProcess{{PID: 15, Argv: []string{"agenthub-node"}, EnvErr: errors.New("access denied"),
+			return []nodeProcess{{PID: 15, Argv: []string{"agenthallway-node"}, EnvErr: errors.New("access denied"),
 				UserErr: errors.New("pid 15 runs as S-1-5-21-2, and this app as S-1-5-21-1")}}
 		}},
 	}
@@ -531,7 +554,7 @@ func withEnvironmentFallback(t *testing.T, on bool) {
 // can be asked afterwards who it is.
 func TestRestartNodeLetsTheAppsEnvironmentStandInOnlyWhereItMayAndIsChecked(t *testing.T) {
 	unreadable := func() []nodeProcess {
-		return []nodeProcess{{PID: 21, Argv: []string{`C:\agenthub\agenthub-node.exe`}, EnvErr: errors.New("access is denied")}}
+		return []nodeProcess{{PID: 21, Argv: []string{`C:\agenthallway\agenthallway-node.exe`}, EnvErr: errors.New("access is denied")}}
 	}
 
 	withFakeNode(t)
@@ -588,7 +611,7 @@ func TestRestartNodeNeedsToKnowWhoIsAnswering(t *testing.T) {
 	hung := &fakeRestart{
 		answers:    []bool{false, false, true},
 		identities: []NodeIdentity{{}, sameNode},
-		running:    []nodeProcess{{PID: 31, Argv: []string{"/usr/bin/agenthub-node"}}},
+		running:    []nodeProcess{{PID: 31, Argv: []string{"/usr/bin/agenthallway-node"}}},
 	}
 	hung.install(t)
 	result, err := restartAppProcess(t)
@@ -613,7 +636,7 @@ func TestRestartNodeWaitsForTheProcessToExit(t *testing.T) {
 			fake := &fakeRestart{
 				answers:      []bool{false},
 				identities:   identities,
-				running:      []nodeProcess{{PID: 41, Argv: []string{"/usr/bin/agenthub-node"}}},
+				running:      []nodeProcess{{PID: 41, Argv: []string{"/usr/bin/agenthallway-node"}}},
 				survivesStop: true,
 			}
 			fake.install(t)
@@ -628,7 +651,7 @@ func TestRestartNodeWaitsForTheProcessToExit(t *testing.T) {
 	}
 }
 
-// A listing that catches an agenthub-node on its way out fails — macOS
+// A listing that catches an agenthallway-node on its way out fails — macOS
 // answers EINVAL for a process that is exiting and not yet a zombie. That is
 // asked again rather than refused at once, and the process is not taken for
 // gone: a failure that lasts is a refusal, and a failure of another kind is
@@ -637,8 +660,8 @@ func TestRestartNodeAsksAgainAListingThatCaughtANodeExiting(t *testing.T) {
 	attemptsWas, intervalWas := nodeListAttempts, nodeListRetryInterval
 	t.Cleanup(func() { nodeListAttempts, nodeListRetryInterval = attemptsWas, intervalWas })
 	nodeListRetryInterval = time.Millisecond
-	exiting := fmt.Errorf("read the command line of agenthub-node (pid 52): %w", syscall.EINVAL)
-	running := func() []nodeProcess { return []nodeProcess{{PID: 51, Argv: []string{"/usr/bin/agenthub-node"}}} }
+	exiting := fmt.Errorf("read the command line of agenthallway-node (pid 52): %w", syscall.EINVAL)
+	running := func() []nodeProcess { return []nodeProcess{{PID: 51, Argv: []string{"/usr/bin/agenthallway-node"}}} }
 
 	withFakeNode(t)
 	fake := &fakeRestart{answers: []bool{false, true}, running: running()}
@@ -725,11 +748,11 @@ func TestParseNodeArgsReadsTheWayTheNodeDoes(t *testing.T) {
 // TestRunCommandOutputKeepsStderrApart runs, writing to both streams the way
 // PowerShell writes its answer to stdout and its progress records to stderr.
 func TestCommandOutputHelper(t *testing.T) {
-	if os.Getenv("AGENTHUB_COMMAND_OUTPUT_HELPER") != "1" {
+	if os.Getenv("AGENTHALLWAY_COMMAND_OUTPUT_HELPER") != "1" {
 		t.Skip("helper process")
 	}
 	fmt.Fprint(os.Stderr, "#< CLIXML\n<Objs><Obj S=\"progress\"/></Objs>\n")
-	fmt.Fprint(os.Stdout, `[{"pid":1,"commandLine":"agenthub-node"}]`)
+	fmt.Fprint(os.Stdout, `[{"pid":1,"commandLine":"agenthallway-node"}]`)
 	os.Exit(0)
 }
 
@@ -741,12 +764,12 @@ func TestRunCommandOutputKeepsStderrApart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AGENTHUB_COMMAND_OUTPUT_HELPER", "1")
+	t.Setenv("AGENTHALLWAY_COMMAND_OUTPUT_HELPER", "1")
 	stdout, stderr, err := runCommandOutput(context.Background(), self, "-test.run=^TestCommandOutputHelper$")
 	if err != nil {
 		t.Fatalf("%v\n%s%s", err, stdout, stderr)
 	}
-	if stdout != `[{"pid":1,"commandLine":"agenthub-node"}]` {
+	if stdout != `[{"pid":1,"commandLine":"agenthallway-node"}]` {
 		t.Errorf("stdout = %q, want the JSON alone", stdout)
 	}
 	if !strings.Contains(stderr, "CLIXML") {

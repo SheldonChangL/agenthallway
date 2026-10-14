@@ -211,8 +211,8 @@ if (countsCalls === 0) {
   if (!pill.title.includes(String(total))) {
     failures.push(`the tab total has no tooltip saying what it counts: ${JSON.stringify(pill.title)}`);
   }
-  if (document.title !== `(${total}) AgentHub`) {
-    failures.push(`the window title is ${JSON.stringify(document.title)}, want "(${total}) AgentHub"`);
+  if (document.title !== `(${total}) Agent Hallway`) {
+    failures.push(`the window title is ${JSON.stringify(document.title)}, want "(${total}) Agent Hallway"`);
   }
 }
 
@@ -315,7 +315,7 @@ if (refresh) {
   if (!el("tab-local-inbox").classList.contains("hidden")) {
     failures.push(`a failed counts read left the tab total showing ${JSON.stringify(tabTotal.textContent)}`);
   }
-  if (document.title !== "AgentHub") {
+  if (document.title !== "Agent Hallway") {
     failures.push(`a failed counts read left the window title as ${JSON.stringify(document.title)}`);
   }
   // The numbers themselves are not thrown away — clearing them would be the
@@ -418,7 +418,7 @@ if (refresh) {
   if (!el("tab-local-inbox").classList.contains("hidden")) {
     failures.push(`an ok:false answer left the tab total showing ${JSON.stringify(tabTotal.textContent)}`);
   }
-  if (document.title !== "AgentHub") {
+  if (document.title !== "Agent Hallway") {
     failures.push(`an ok:false answer left the window title as ${JSON.stringify(document.title)}`);
   }
   // The empty map it carried is not the answer. Taking it would zero every

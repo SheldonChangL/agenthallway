@@ -378,7 +378,7 @@ if (app.state.notices.find((notice) => notice.title === ZH["attention.nodeDown.t
 }
 
 // 3b. The service: supported, not running.
-serviceAnswer = { supported: true, installed: true, running: false, pid: 0, logHint: "~/agenthub.log" };
+serviceAnswer = { supported: true, installed: true, running: false, pid: 0, logHint: "~/agenthallway.log" };
 await loadWith(reachable());
 // With the first-run wizard up the strip is hidden whole: the wizard's first
 // step is this very fix, and one thing with two buttons is what the checklist
@@ -400,7 +400,7 @@ if (!service) {
   failures.push("a stopped service put no row on the strip");
 } else {
   if (service.sev !== "alert") failures.push(`the service row is ${service.sev}, want alert`);
-  if (!service.body.includes("~/agenthub.log")) failures.push(`the service row does not say where the log is: ${service.body}`);
+  if (!service.body.includes("~/agenthallway.log")) failures.push(`the service row does not say where the log is: ${service.body}`);
   // The button does the fix itself now (inline-publish.mjs §service presses
   // it and follows each branch); here, that it says which fix it is.
   if (service.action.textContent !== ZH["attention.service.startAction"]) {
@@ -604,7 +604,7 @@ await loadWith(reachable());
 
 // 3f. The drawer lists every row, most severe first, with no fold button; the
 //     bell takes the colour of the most severe one and says how many wait.
-serviceAnswer = { supported: true, installed: true, running: false, pid: 0, logHint: "~/agenthub.log" };
+serviceAnswer = { supported: true, installed: true, running: false, pid: 0, logHint: "~/agenthallway.log" };
 countsAnswer = { ok: true, counts: { "codex:two": { held: 9, capacity: 9, full: true } } };
 pairRequestsAnswer = [incoming];
 pairingAnswer = { availability: "on", windowAvailable: true, state: { open: true, remainingSeconds: 300 }, candidates: [] };

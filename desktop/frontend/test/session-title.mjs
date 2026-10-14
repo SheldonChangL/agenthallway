@@ -23,7 +23,7 @@ const check = (cond, msg) => { if (!cond) failures.push(msg); };
 
 const base = {
   provider: "claude", status: "idle", management: "unmanaged", visibility: "private",
-  cwd: "/p/agenthub", lastSeenAt: "2026-09-15T00:00:00Z",
+  cwd: "/p/agenthallway", lastSeenAt: "2026-09-15T00:00:00Z",
 };
 const titled = { ...base, id: "claude:d30366c4-260c-453d-add2-de7fb3d8cdae", title: "錄影檔和alert遺失問題" };
 const untitled = { ...base, id: "claude:435f4b1e-7915-45ec-a0ac-272782db1e96" };

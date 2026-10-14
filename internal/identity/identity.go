@@ -130,7 +130,7 @@ func MachineName() string {
 			return name
 		}
 	}
-	return "agenthub-node"
+	return "agenthallway-node"
 }
 
 // shortenUntilAnnounceable returns the announceable form of the longest byte

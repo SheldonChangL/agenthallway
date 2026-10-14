@@ -986,7 +986,7 @@ func TestOutboundWithAnIDStillAsksAboutThatMessage(t *testing.T) {
 	}
 }
 
-// `/agenthub-watch` deletes a message every tick, and until this existed the
+// `/agenthallway-watch` deletes a message every tick, and until this existed the
 // skill told the agent to run `curl -X DELETE`: the CLI could already do it,
 // under a name nobody looks for. The path is the thing to hold — a wrong one
 // deletes somebody else's message or nothing at all.
@@ -1232,6 +1232,28 @@ func TestWakesSendsTheSessionItWasGiven(t *testing.T) {
 			}
 			if asked != 1 {
 				t.Errorf("the node was asked %d times; want once", asked)
+			}
+		})
+	}
+}
+
+// ah reads the node's address from AGENTHALLWAY_URL, and from the older
+// AGENTHUB_URL for a machine whose shell profile was written before the rename.
+func TestTheNodeURLComesFromTheNewVariableFirst(t *testing.T) {
+	cases := []struct {
+		name, current, legacy, want string
+	}{
+		{"neither", "", "", "http://127.0.0.1:7462"},
+		{"only the older name", "", "http://127.0.0.1:9001", "http://127.0.0.1:9001"},
+		{"only the new name", "http://127.0.0.1:9002", "", "http://127.0.0.1:9002"},
+		{"both", "http://127.0.0.1:9002", "http://127.0.0.1:9001", "http://127.0.0.1:9002"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AGENTHALLWAY_URL", tc.current)
+			t.Setenv("AGENTHUB_URL", tc.legacy)
+			if got := defaultNodeURL(); got != tc.want {
+				t.Errorf("defaultNodeURL() = %q, want %q", got, tc.want)
 			}
 		})
 	}

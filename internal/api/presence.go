@@ -193,7 +193,7 @@ func (s *Server) listPeers(w http.ResponseWriter, r *http.Request) {
 				// The whole snapshot goes, not the offending row: a peer that
 				// has started claiming other people's sessions is not a source
 				// whose remaining rows are worth serving, which is the same
-				// judgement `Peers()` makes in agenthub-mcp.
+				// judgement `Peers()` makes in agenthallway-mcp.
 				//
 				// The peer stays listed and online rather than disappearing: it
 				// is reachable, and its next heartbeat replaces this. What it

@@ -21,6 +21,7 @@ import (
 	"agenthub.local/agenthub/internal/buildinfo"
 	"agenthub.local/agenthub/internal/codexapp"
 	"agenthub.local/agenthub/internal/codexdriver"
+	"agenthub.local/agenthub/internal/datadir"
 	"agenthub.local/agenthub/internal/discovery"
 	"agenthub.local/agenthub/internal/hub"
 	"agenthub.local/agenthub/internal/identity"
@@ -29,13 +30,14 @@ import (
 	"agenthub.local/agenthub/internal/pairing"
 	"agenthub.local/agenthub/internal/protocol"
 	"agenthub.local/agenthub/internal/registry"
+	nodeservice "agenthub.local/agenthub/internal/service"
 	"agenthub.local/agenthub/internal/transport"
 	"agenthub.local/agenthub/internal/wake"
 )
 
 func main() {
 	if err := run(); err != nil {
-		log.Printf("agenthub-node: %v", err)
+		log.Printf("agenthallway-node: %v", err)
 		os.Exit(1)
 	}
 }
@@ -43,7 +45,7 @@ func main() {
 func run() error {
 	// First line, before anything can fail: a log someone sends back has to say
 	// which build produced it.
-	log.Print(buildinfo.Line("agenthub-node"))
+	log.Print(buildinfo.Line("agenthallway-node"))
 	defaults, err := defaultPaths()
 	if err != nil {
 		return err
@@ -92,8 +94,41 @@ func run() error {
 		return err
 	}
 
+	// Bound before anything touches data. Two nodes cannot both hold the
+	// owner's address, so a second one — the pre-rename agenthub-node
+	// included, which listens on the same default — stops here, before it
+	// moves or opens anything.
+	ownerListener, err := net.Listen("tcp", *listenAddress)
+	if err != nil {
+		return fmt.Errorf("the owner address %s is in use, so another node is probably running (the pre-rename "+
+			"agenthub-node included); stop it and start this again: %w", *listenAddress, err)
+	}
+	defer func() { _ = ownerListener.Close() }()
+
+	// Which database, and whether it is the default one: a node set up before
+	// the rename keeps its identity in the old directory, and that identity is
+	// moved here, before anything opens a database. Anything that cannot be
+	// moved safely ends this start rather than leaving an empty directory,
+	// where the two calls below would make up a new identity.
 	ctx := context.Background()
-	store, err := registry.Open(ctx, *dbPath)
+	layout, err := datadir.DefaultLayout()
+	if err != nil {
+		return err
+	}
+	db, managed, err := datadir.Resolve(layout, *dbPath, wasSet(flag.CommandLine, "db"), log.Printf)
+	if err != nil {
+		return err
+	}
+	if managed {
+		if err := datadir.Migrate(ctx, layout, datadir.Options{
+			LegacyRegistrations: nodeservice.LegacyRegistrationsForCurrentUser,
+			Logf:                log.Printf,
+		}); err != nil {
+			return err
+		}
+	}
+
+	store, err := registry.Open(ctx, db)
 	if err != nil {
 		return err
 	}
@@ -147,7 +182,7 @@ func run() error {
 	// The signing key lives beside the database rather than in it: a database
 	// gets copied and inspected far more casually than a file named node.key,
 	// and a copy that carried the key would clone this node's identity.
-	keypair, err := identity.LoadOrCreateKeypair(filepath.Dir(*dbPath))
+	keypair, err := identity.LoadOrCreateKeypair(filepath.Dir(db))
 	if err != nil {
 		return fmt.Errorf("load node key: %w", err)
 	}
@@ -356,7 +391,8 @@ func run() error {
 		default:
 		}
 	}
-	go func() { reportServeError(server.ListenAndServe()) }()
+	// The listener bound at the top of run(), before any data was touched.
+	go func() { reportServeError(server.Serve(ownerListener)) }()
 	// One server for every peer listener, each already open — bound at the top
 	// of run() so that failing to bind degrades this node instead of ending it
 	// — and each already under the set's one connection cap: the request rate
@@ -457,7 +493,9 @@ func defaultPaths() (paths, error) {
 		return paths{}, fmt.Errorf("find config directory: %w", err)
 	}
 	return paths{
-		database: filepath.Join(config, "agenthub", "agenthub.db"),
+		// The current default, so -h shows it. A node set up before the
+		// rename has its database in the old directory until run() moves it.
+		database: datadir.LayoutFor(config).NewDB,
 		claude:   filepath.Join(home, ".claude"),
 		codex:    filepath.Join(home, ".codex"),
 	}, nil
@@ -770,7 +808,7 @@ func rememberedRefusal(err error, sources map[string]string) error {
 	}
 	return fmt.Errorf("%w\n"+
 		"this node is remembering %s from an earlier start, so the refusal is about a value that "+
-		"is not on this command line. Run agenthub-node again with the flag that replaces the "+
+		"is not on this command line. Run agenthallway-node again with the flag that replaces the "+
 		"stored value — for example `-peer-listen %s` — and the new value is remembered in its "+
 		"place. (`ah settings` reads this node's own API, which only answers once the node starts, "+
 		"so it cannot undo a value that is stopping it.)",

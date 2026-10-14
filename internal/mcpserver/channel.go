@@ -17,7 +17,7 @@ import (
 //
 // It arrives in the agent's context as
 //
-//	<channel source="agenthub" key="value">content</channel>
+//	<channel source="agenthallway" key="value">content</channel>
 //
 // and is treated as new input: the agent takes a turn, rather than the text
 // sitting in context until somebody types.
@@ -153,7 +153,7 @@ func bodyFence() string {
 		// alternative to a random fence is a guessable one, which reads as a
 		// boundary the peer cannot cross while being one they can — worse
 		// than not delivering the message at all.
-		panic("agenthub: no randomness for a channel fence: " + err.Error())
+		panic("agenthallway: no randomness for a channel fence: " + err.Error())
 	}
 	return "#" + hex.EncodeToString(raw[:])
 }

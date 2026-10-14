@@ -40,7 +40,7 @@ func newTestMode() (*Mode, *testClock) {
 	return m, clock
 }
 
-// Announcing tells everyone on the network that this machine runs AgentHub and
+// Announcing tells everyone on the network that this machine runs Agent Hallway and
 // which key it holds. That has to be off until someone asks for it.
 func TestPairingModeIsClosedUntilOpened(t *testing.T) {
 	m, _ := newTestMode()

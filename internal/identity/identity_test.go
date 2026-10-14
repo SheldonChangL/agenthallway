@@ -14,7 +14,7 @@ import (
 
 func openTestRegistry(t *testing.T) *registry.Registry {
 	t.Helper()
-	store, err := registry.Open(context.Background(), filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := registry.Open(context.Background(), filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestANameThatGrowsWhenNormalisedIsStillShortened(t *testing.T) {
 	} {
 		withMachineName(t, machine)
 		got := MachineName()
-		if got == "agenthub-node" || got == shortenUntilAnnounceable(hostname) {
+		if got == "agenthallway-node" || got == shortenUntilAnnounceable(hostname) {
 			t.Errorf("MachineName() = %q for a %d-byte name that expands when normalised; "+
 				"the machine's own name was given up", got, len(machine))
 		}
@@ -146,13 +146,13 @@ func TestANameThatGrowsWhenNormalisedIsStillShortened(t *testing.T) {
 }
 
 // A long name is shortened rather than discarded: a truncated name still says
-// which machine this is, and "agenthub-node" does not.
+// which machine this is, and "agenthallway-node" does not.
 func TestALongMachineNameIsShortenedNotDiscarded(t *testing.T) {
 	// 60 CJK characters is 180 bytes, well over the bound, and every cut inside
 	// the limit lands in the middle of a rune.
 	withMachineName(t, strings.Repeat("三", 60))
 	name := MachineName()
-	if name == "agenthub-node" {
+	if name == "agenthallway-node" {
 		t.Fatal("a long name was discarded; the node lost the one thing identifying it")
 	}
 	// A prefix here because NFKC leaves 三 alone. Not true in general — see

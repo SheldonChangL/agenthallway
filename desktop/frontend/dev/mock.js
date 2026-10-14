@@ -91,7 +91,7 @@ if (readmeDemo) {
 //                       nobody paired — step 1 is down to 「開放區網並繼續」
 //   ?onboarding=unreachable
 //                       the service says it is running and the node answers
-//                       nothing. Step 1 must say 「AgentHub 還沒在這台執行」 and
+//                       nothing. Step 1 must say 「Agent Hallway 還沒在這台執行」 and
 //                       keep the dial error under 說明; its button restarts
 //                       the service.
 //   ?onboarding=slow    the same as `fresh`, except ServiceStatus takes three
@@ -422,7 +422,7 @@ const overviewNodes = () => (onboarding ? wizardNodes : query.get("paired") === 
 // the service rather than installing over it.
 let serviceShape = query.get("service") ?? "";
 const shapedService = () => ({
-  stopped: { tool: "/usr/local/bin/ah", supported: true, installed: true, running: false, pid: 0, unitPath: "~/Library/LaunchAgents/local.agenthub.node.plist", logHint: "~/Library/Logs/agenthub-node.log", nodeAnswering: true, dbPath: "~/.local/share/agenthub/agenthub.db", dbPathKnown: true, pinnedSettings: [] },
+  stopped: { tool: "/usr/local/bin/ah", supported: true, installed: true, running: false, pid: 0, unitPath: "~/Library/LaunchAgents/local.agenthallway.node.plist", logHint: "~/Library/Logs/agenthallway-node.log", nodeAnswering: true, dbPath: "~/.local/share/agenthallway/agenthallway.db", dbPathKnown: true, pinnedSettings: [] },
   none: { tool: "/usr/local/bin/ah", supported: true, installed: false, running: false, pid: 0, unitPath: "", logHint: "", nodeAnswering: true, dbPathKnown: false },
   down: { tool: "/usr/local/bin/ah", supported: true, installed: false, running: false, pid: 0, unitPath: "", logHint: "", nodeAnswering: false, dbPathKnown: false },
   noah: { toolError: "ah not found on PATH or beside the app", supported: true, installed: false, running: false },
@@ -545,7 +545,7 @@ configure({
     { id: "m3", from: "", body: "A test message queued on this machine.", createdAt: ago(4000) },
   ] }),
   ClearInbox: async () => ({ removed: 3 }),
-  MCPConfig: async (sessionId) => ({ text: JSON.stringify({ mcpServers: { agenthub: { command: "/usr/local/bin/agenthub-mcp", args: ["-as", sessionId, "-url", "http://127.0.0.1:7462"] } } }, null, 2) }),
+  MCPConfig: async (sessionId) => ({ text: JSON.stringify({ mcpServers: { agenthallway: { command: "/usr/local/bin/agenthallway-mcp", args: ["-as", sessionId, "-url", "http://127.0.0.1:7462"] } } }, null, 2) }),
   // `?copy=fail` refuses every write, to see a row's copy fallback.
   CopyText: async (text) => {
     log("CopyText", text);
@@ -649,8 +649,8 @@ configure({
   ServiceStatus: async () => (await sleep(serviceStatusDelayMs), shapedService() ?? (firstRun && !installedHere
     ? { tool: "/usr/local/bin/ah", supported: true, installed: false, running: false, pid: 0, unitPath: "", logHint: "", nodeAnswering: !unreachable, dbPathKnown: false }
     : unreachable
-    ? { tool: "/usr/local/bin/ah", supported: true, installed: true, running: true, pid: servicePid, unitPath: "~/Library/LaunchAgents/local.agenthub.node.plist", logHint: "~/Library/Logs/agenthub-node.log", nodeAnswering: false, dbPathKnown: false }
-    : { tool: "/usr/local/bin/ah", supported: true, installed: true, running: true, pid: servicePid, unitPath: "~/Library/LaunchAgents/local.agenthub.node.plist", logHint: "~/Library/Logs/agenthub-node.log", nodeAnswering: true, node: "http://127.0.0.1:7462", dbPath: "~/.local/share/agenthub/agenthub.db", dbPathKnown: true, pinnedSettings: onboarding ? [] : ["peer-listen", "allow-lan"] })),
+    ? { tool: "/usr/local/bin/ah", supported: true, installed: true, running: true, pid: servicePid, unitPath: "~/Library/LaunchAgents/local.agenthallway.node.plist", logHint: "~/Library/Logs/agenthallway-node.log", nodeAnswering: false, dbPathKnown: false }
+    : { tool: "/usr/local/bin/ah", supported: true, installed: true, running: true, pid: servicePid, unitPath: "~/Library/LaunchAgents/local.agenthallway.node.plist", logHint: "~/Library/Logs/agenthallway-node.log", nodeAnswering: true, node: "http://127.0.0.1:7462", dbPath: "~/.local/share/agenthallway/agenthallway.db", dbPathKnown: true, pinnedSettings: onboarding ? [] : ["peer-listen", "allow-lan"] })),
   InstallService: async (form) => { log("InstallService", form); await sleep(600); serviceShape = ""; unreachable = false; installedHere = true; return { command: `ah service install --db ${form.dbPath || "(the node's default location)"}`, output: "installed (pid 41872)" }; },
   UninstallService: async () => ({ command: "ah service uninstall", output: "removed" }),
   LocalAddresses: async () => localAddresses,

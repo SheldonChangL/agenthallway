@@ -16,7 +16,7 @@ import (
 // nodeSettingFlags is a copy, and a copy has to be checked.
 //
 // This module shares no code with the node on purpose — it is what keeps Wails'
-// CGo requirement away from a cross-compiled agenthub-node — so the five
+// CGo requirement away from a cross-compiled agenthallway-node — so the five
 // settings are spelled here a second time. The cost of that is a sixth setting
 // added on one side only: the panel would stop recognising a unit that pins it,
 // and go back to showing an owner a settings page whose saves are overridden
@@ -93,14 +93,14 @@ func flagSpelling(field string) string {
 // wrong here makes the restart misread where a --db value ends.
 //
 // So the node's flags are read from its source as Go, not as text: every
-// non-test file of cmd/agenthub-node is parsed, and every call that defines a
+// non-test file of cmd/agenthallway-node is parsed, and every call that defines a
 // flag on the command line — flag.String, flag.StringVar, flag.Var,
 // flag.Func, flag.BoolFunc, flag.TextVar and the rest, called on the package
 // or on flag.CommandLine — gives its name and whether it is a boolean. A call
 // on either that this check does not know is a failure, not a skip, so a
 // definer Go adds later cannot slip past it.
 func TestNodeFlagTableMatchesTheNode(t *testing.T) {
-	found := nodeFlagsFromSource(t, filepath.Join("..", "cmd", "agenthub-node"))
+	found := nodeFlagsFromSource(t, filepath.Join("..", "cmd", "agenthallway-node"))
 	for name, takesValue := range found {
 		mine, ok := nodeFlagTakesValue[name]
 		if !ok {

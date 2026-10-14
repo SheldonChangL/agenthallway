@@ -81,7 +81,7 @@ func (w *recordingWaker) quiet(t *testing.T, within time.Duration) {
 func wakingSurfaces(t *testing.T) (*registry.Registry, http.Handler, http.Handler, *recordingWaker) {
 	t.Helper()
 	ctx := context.Background()
-	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthub.db"))
+	store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthallway.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -700,7 +700,7 @@ func TestTheWakeSwitchTravelsThroughTheAudienceEndpoint(t *testing.T) {
 func TestNodeEndpointReportsTheNodesAutoWakeFlag(t *testing.T) {
 	for _, autoWake := range []bool{false, true} {
 		ctx := context.Background()
-		store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthub.db"))
+		store, err := registry.Open(ctx, filepath.Join(t.TempDir(), "agenthallway.db"))
 		if err != nil {
 			t.Fatal(err)
 		}
