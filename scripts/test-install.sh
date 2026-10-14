@@ -2728,7 +2728,9 @@ for i10_os in darwin linux; do
 			"$i10_old/hooks" "$i10_log_old/their.log")" = "$i10_foreign_before" ] ||
 			fail "i10-$i10_os: another app's files changed"
 		checks=$((checks + 1))
-		[ -d "$i10_old" ] && [ -d "$i10_log_old" ] || fail "i10-$i10_os: a directory another app shares was removed"
+		if ! { [ -d "$i10_old" ] && [ -d "$i10_log_old" ]; }; then
+			fail "i10-$i10_os: a directory another app shares was removed"
+		fi
 		contains "i10-$i10_os" "$work/i10-$i10_os.txt" "installing again makes a new node"
 	fi
 done
@@ -2780,6 +2782,11 @@ for i13_mode in --dry-run ""; do
 	contains "i13$i13_mode" "$work/i13.txt" "$i13_home/.claude.json"
 	contains "i13$i13_mode" "$work/i13.txt" "$i13_home/codex/config.toml"
 	contains "i13$i13_mode" "$work/i13.txt" "mcp__agenthallway__*"
+	# Advice that can be followed: the entry to write, naming the binary this
+	# run installed. The app has had no MCP button since the row action went.
+	contains "i13$i13_mode" "$work/i13.txt" \
+		"Replace that entry with one keyed agenthallway whose command is $i13_home/.local/share/agenthallway/agenthallway-mcp and whose arguments are the old entry's"
+	lacks "i13$i13_mode" "$work/i13.txt" "MCP config button"
 	checks=$((checks + 1))
 	[ "$(path_state "$i13_home/.claude.json" "$i13_home/claude-config/.claude.json" "$i13_home/codex/config.toml")" = "$i13_before" ] ||
 		fail "i13$i13_mode: an MCP configuration was written"
@@ -2791,6 +2798,12 @@ PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="
 	CODEX_HOME="$i13_home/codex" sandboxed "$work/i13-legacy-home" sh "$installer" --from "$legacy_tgz" --no-service --dry-run \
 	>"$work/i13-legacy.txt" 2>&1 || fail "i13-legacy: failed: $(cat "$work/i13-legacy.txt")"
 lacks i13-legacy "$work/i13-legacy.txt" "these still start"
+# The release notes and this script's documentation give the same advice.
+for i13_doc in "$repository/.github/workflows/release.yml" "$repository/docs/install-script.md"; do
+	lacks i13-docs "$i13_doc" "MCP config button"
+done
+contains i13-docs "$repository/.github/workflows/release.yml" "the arguments are the old entry's"
+contains i13-docs "$repository/docs/install-script.md" "one keyed \`agenthallway\` whose command is the \`agenthallway-mcp\`"
 
 echo "== I14 the pre-rename environment names still work =="
 mkdir -p "$work/i14-home"
@@ -2830,7 +2843,9 @@ PATH="$(fake_uname Linux x86_64):$bare_path" SHELL=/bin/bash CLAUDE_CONFIG_DIR="
 	sandboxed "$i14_real_home" env AGENTHUB_HOME="$i14_tree" sh "$installer" --from "$current_tgz" --no-service \
 	>"$work/i14-inplace.txt" 2>&1 || fail "i14-inplace: the upgrade failed: $(cat "$work/i14-inplace.txt")"
 checks=$((checks + 1))
-[ -x "$i14_tree/agenthallway-node" ] && [ -x "$i14_tree/ah" ] || fail "i14-inplace: $i14_tree does not hold the current release"
+if ! { [ -x "$i14_tree/agenthallway-node" ] && [ -x "$i14_tree/ah" ]; }; then
+	fail "i14-inplace: $i14_tree does not hold the current release"
+fi
 checks=$((checks + 1))
 ! exists_path "$i14_tree/agenthub-node" || fail "i14-inplace: the tree still holds the pre-rename binaries"
 checks=$((checks + 1))

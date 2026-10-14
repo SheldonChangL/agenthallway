@@ -411,6 +411,54 @@ func TestUpgradeWithTheDefaultPathGivenExplicitly(t *testing.T) {
 	}
 }
 
+// The same unit, started again after the move. A v0.1.x unit can name the old
+// default by another spelling of its directory (`ah service install --db`
+// makes the path absolute without resolving links), and the first start
+// moves the identity and removes the emptied old directory. Every later start
+// gets the same -db, of a directory that is no longer there: it has to be the
+// default still, not an empty database made for it, which is a new node.
+func TestTheNextStartUnderTheSameUnitIsTheSameNode(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		spell func(t *testing.T, m *machine) string
+	}{
+		{"the configuration directory through a symlink", func(t *testing.T, m *machine) string {
+			if runtime.GOOS == "windows" {
+				t.Skip("symlinks need privileges on Windows")
+			}
+			link := filepath.Join(m.root, "config-link")
+			if err := os.Symlink(m.layout.Config, link); err != nil {
+				t.Fatal(err)
+			}
+			return filepath.Join(link, "agenthub", "agenthub.db")
+		}},
+		{"another case", func(t *testing.T, m *machine) string {
+			variant := filepath.Join(m.layout.Config, "AgentHub")
+			if _, err := os.Stat(variant); err != nil {
+				t.Skip("this volume honours case, so the variant is another directory")
+			}
+			return filepath.Join(variant, "agenthub.db")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newMachine(t)
+			l := m.layout
+			legacy := datadirtest.WriteLegacy(t, l.Old, true)
+			given := tc.spell(t, m)
+
+			first := m.start(t, "-db", given)
+			first.requireIdentity(t, legacy)
+			requireExists(t, l.Old, false)
+			first.stop(t)
+
+			second := m.start(t, "-db", given)
+			second.requireIdentity(t, legacy)
+			requireExists(t, l.Old, false)
+			second.stop(t)
+		})
+	}
+}
+
 // Any other --db is the owner's: used as given, never moved, and not held
 // back by a pre-rename registration — exactly what v0.1.x did with it.
 func TestACustomDatabaseIsUsedAsGivenAndNothingMoves(t *testing.T) {

@@ -199,8 +199,10 @@ this order:
    `agenthub-mcp`, which the upgrade removed: `$CLAUDE_CONFIG_DIR/.claude.json`,
    `~/.claude.json` and `${CODEX_HOME:-~/.codex}/config.toml` are searched for
    that name, and each that mentions it is named, with the advice to replace the
-   entry with the one the app's MCP config button gives (tools are now
-   `mcp__agenthallway__*`). Project `.mcp.json` files are not searched. These
+   entry with one keyed `agenthallway` whose command is the `agenthallway-mcp`
+   this run installed beside `ah` (the warning gives its full path) and whose
+   arguments are the old entry's (tools are now `mcp__agenthallway__*`).
+   Project `.mcp.json` files are not searched. These
    files are never written: they are the owner's, Claude Code rewrites
    `~/.claude.json` while it runs, and an entry cannot be told from another
    product's by its key. This step also runs under `--dry-run`.

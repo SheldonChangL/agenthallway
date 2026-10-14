@@ -300,7 +300,10 @@ func (m Manager) Install(ctx context.Context, config Config) (Report, error) {
 		// symptom is a node that works on some logons and not others, which is
 		// the worst kind to be handed. Removing it here rather than only in the
 		// installer, because an owner who runs `ah service install` on a
-		// machine that already has the shortcut has the same problem.
+		// machine that already has the shortcut has the same problem. (The
+		// pre-rename installers' shortcuts are already gone: retireLegacy
+		// removed them before anything was registered, because the node
+		// started above would refuse to move its identity over them.)
 		for _, step := range m.removeLegacyStartupShortcuts() {
 			report.Steps = append(report.Steps, step)
 		}
@@ -374,14 +377,11 @@ func (m Manager) Uninstall(ctx context.Context) (Report, error) {
 	// pre-rename node by name whatever started it, and each of its steps takes
 	// "nothing there" as an answer.
 	if m.GOOS == "windows" || len(LegacyRegistrations(m.GOOS, m.Home)) > 0 {
+		// On Windows that includes the pre-rename Startup shortcuts.
 		retired, err := m.unregisterLegacy(ctx)
 		report.Steps = append(report.Steps, retired...)
 		if err != nil {
 			return report, err
-		}
-		if m.GOOS == "windows" {
-			report.Steps = append(report.Steps, m.removeStartupShortcuts(legacyNodeStartupShortcuts,
-				"it started the pre-rename node at logon", "the pre-rename node will start at your next logon")...)
 		}
 	}
 	if m.GOOS == "linux" {

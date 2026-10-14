@@ -147,7 +147,18 @@ func (m Manager) retireLegacy(ctx context.Context, config Config) ([]string, err
 		return nil, fmt.Errorf("the pre-rename service %s ran the node on --db %s; pass --db %s (or the database you mean) to replace it",
 			m.LegacyName(), database, database)
 	}
-	return m.unregisterLegacy(ctx)
+	steps, err := m.unregisterLegacy(ctx)
+	if err != nil {
+		return steps, err
+	}
+	// A node started over any of them would refuse to move its identity and
+	// exit, and the report would still say it was started.
+	if left := LegacyRegistrations(m.GOOS, m.Home); len(left) > 0 {
+		return steps, fmt.Errorf("the pre-rename registration is not all gone (%s), and the node refuses to move its "+
+			"identity while it is there, so nothing new was registered or started; remove it, then run this again",
+			strings.Join(left, ", "))
+	}
+	return steps, nil
 }
 
 // unregisterLegacy takes the pre-rename registration down by the platform's
@@ -164,11 +175,13 @@ func (m Manager) unregisterLegacy(ctx context.Context) ([]string, error) {
 	switch m.GOOS {
 	case "darwin":
 		domain := "gui/" + m.UID
-		if out, err := m.Runner.Run(ctx, "launchctl", "bootout", domain+"/"+LegacyLabel); err != nil && !notLoaded(out, err) {
+		out, err := m.Runner.Run(ctx, "launchctl", "bootout", domain+"/"+LegacyLabel)
+		if err != nil && !notLoaded(out, err) && !bootoutInProgress(out, err) {
 			return steps, fmt.Errorf("launchctl bootout %s: %w: %s", LegacyLabel, err, strings.TrimSpace(out))
 		}
 		// bootout returns before the job is gone, and the old node is still
-		// shutting down until it is.
+		// shutting down until it is. The same wait covers a job that an
+		// earlier bootout is still taking down.
 		m.waitUntilUnloaded(ctx, domain, LegacyLabel)
 	case "linux":
 		// --now waits for the stop job, so the old node has exited when this
@@ -193,6 +206,12 @@ func (m Manager) unregisterLegacy(ctx context.Context) ([]string, error) {
 		if _, err := m.Runner.Run(ctx, "taskkill", "/F", "/IM", legacyNodeImage); err == nil {
 			steps = append(steps, "stopped the pre-rename "+product.LegacyNodeBinary)
 		}
+		// Those shortcuts are registrations as much as the task is: each
+		// starts the old node at logon, and the node refuses to move its
+		// identity while one is there (LegacyRegistrations). So they go here,
+		// with the task, before Install registers or starts anything.
+		steps = append(steps, m.removeStartupShortcuts(legacyNodeStartupShortcuts,
+			"it started the pre-rename node at logon", "the pre-rename node will start at your next logon")...)
 	default:
 		return steps, ErrUnsupported
 	}
@@ -213,6 +232,15 @@ func (m Manager) unregisterLegacy(ctx context.Context) ([]string, error) {
 		steps = append(steps, "stopped and removed the pre-rename service "+m.LegacyName()+ran)
 	}
 	return steps, nil
+}
+
+// bootoutInProgress recognises launchd answering a bootout with EINPROGRESS
+// ("Boot-out failed: 36: Operation now in progress"): the job is still being
+// torn down, by an earlier bootout or its own exit. It is on its way out, so
+// that is not a failure to stop it.
+func bootoutInProgress(out string, err error) bool {
+	text := out + " " + err.Error()
+	return strings.Contains(text, "Operation now in progress") || strings.Contains(text, "failed: 36:")
 }
 
 // removeIfPresent removes path and says whether there was anything to remove.

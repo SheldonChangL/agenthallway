@@ -30,6 +30,8 @@ defaults:
 
 env:
   GOSEC_VERSION: v2.29.0
+  # see .github/scripts/install-gosec.sh
+  GOSEC_XTOOLS_VERSION: v0.52.0
   GOVULNCHECK_VERSION: v1.7.0
 
 jobs:
@@ -77,7 +79,7 @@ jobs:
           "$(go env GOPATH)/bin/govulncheck" ./...
       - name: gosec
         run: |
-          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          ./.github/scripts/install-gosec.sh
           "$(go env GOPATH)/bin/gosec" -quiet ./...
 
   build:
@@ -806,7 +808,7 @@ jobs:
               echo "- AgentHub is now **Agent Hallway**. Paired machines keep working across versions: the wire protocol, signatures and discovery name are unchanged, so machines can be upgraded one at a time."
               echo "- **Automatic.** On its first start the node moves its identity and database from \`…/agenthub/\` to \`…/agenthallway/\` (only its own files; the node id stays the same). \`install.sh\` and the Windows installer replace the background service (\`local.agenthub.node\` / \`agenthub-node\` / \"AgentHub Node\") and remove the old app, files, links and the skill they installed."
               echo "- If the node refuses to start with \"pre-rename background service is still registered\": run \`ah service install\` (it keeps the database)."
-              echo "- **Manual: MCP entries.** Remove the \`agenthub\` entry (\`claude mcp remove agenthub -s <scope>\`, Codex \`[mcp_servers.agenthub]\`, each project's \`.mcp.json\`) and add the one the app's MCP config button gives. The tools are now \`mcp__agenthallway__agent_*\`, so update permission allowlists in \`.claude/settings*.json\` too. \`install.sh\` names the user-level configurations that still start \`agenthub-mcp\`; it never writes them."
+              echo "- **Manual: MCP entries.** Remove the \`agenthub\` entry (\`claude mcp remove agenthub -s <scope>\`, Codex \`[mcp_servers.agenthub]\`, each project's \`.mcp.json\`) and add one keyed \`agenthallway\` in its place: the command is the full path of \`agenthallway-mcp\`, which sits beside \`ah\` (macOS \`/Applications/agenthallway-desktop.app/Contents/MacOS/\`, Linux \`~/.local/share/agenthallway/\`), and the arguments are the old entry's — \`-as <provider>:<id>\`, plus \`-url\` or \`-channel\` if it had them. The tools are now \`mcp__agenthallway__agent_*\`, so update permission allowlists in \`.claude/settings*.json\` too. \`install.sh\` names the user-level configurations that still start \`agenthub-mcp\`; it never writes them."
               echo "- **Manual: the skill.** It is \`/agenthallway-watch\` now. An \`agenthub-watch\` you linked or copied yourself is left where it is; rename or remove it by hand if you want. \`AGENTHUB_*\` environment variables are still read; prefer \`AGENTHALLWAY_*\`."
               echo "- The desktop app's window preferences (filters, sort, language override, background) reset once, and the setup checklist shows again."
               echo "- Logs now go to \`~/Library/Logs/agenthallway/\`, \`journalctl --user -u agenthallway-node\` and \`%LOCALAPPDATA%\\agenthallway\\\`; old logs stay where they were."
