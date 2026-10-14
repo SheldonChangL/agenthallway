@@ -147,7 +147,18 @@ func (m Manager) retireLegacy(ctx context.Context, config Config) ([]string, err
 		return nil, fmt.Errorf("the pre-rename service %s ran the node on --db %s; pass --db %s (or the database you mean) to replace it",
 			m.LegacyName(), database, database)
 	}
-	return m.unregisterLegacy(ctx)
+	steps, err := m.unregisterLegacy(ctx)
+	if err != nil {
+		return steps, err
+	}
+	// A node started over any of them would refuse to move its identity and
+	// exit, and the report would still say it was started.
+	if left := LegacyRegistrations(m.GOOS, m.Home); len(left) > 0 {
+		return steps, fmt.Errorf("the pre-rename registration is not all gone (%s), and the node refuses to move its "+
+			"identity while it is there, so nothing new was registered or started; remove it, then run this again",
+			strings.Join(left, ", "))
+	}
+	return steps, nil
 }
 
 // unregisterLegacy takes the pre-rename registration down by the platform's
@@ -193,6 +204,12 @@ func (m Manager) unregisterLegacy(ctx context.Context) ([]string, error) {
 		if _, err := m.Runner.Run(ctx, "taskkill", "/F", "/IM", legacyNodeImage); err == nil {
 			steps = append(steps, "stopped the pre-rename "+product.LegacyNodeBinary)
 		}
+		// Those shortcuts are registrations as much as the task is: each
+		// starts the old node at logon, and the node refuses to move its
+		// identity while one is there (LegacyRegistrations). So they go here,
+		// with the task, before Install registers or starts anything.
+		steps = append(steps, m.removeStartupShortcuts(legacyNodeStartupShortcuts,
+			"it started the pre-rename node at logon", "the pre-rename node will start at your next logon")...)
 	default:
 		return steps, ErrUnsupported
 	}
