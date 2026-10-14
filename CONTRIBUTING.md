@@ -1,4 +1,4 @@
-# Contributing to AgentHub
+# Contributing to Agent Hallway
 
 Thanks for looking. Bug reports, questions and pull requests are all welcome,
 in English or 中文 — issues and pull requests can be written in either.
@@ -22,7 +22,7 @@ For a security problem, do not open an issue: see [SECURITY.md](SECURITY.md).
 These are the commands [CI](.github/workflows/ci.yml) runs. A pull request
 needs all of them green.
 
-**Root module** (`agenthub-node`, `ah`, `agenthub-mcp`), from the repository
+**Root module** (`agenthallway-node`, `ah`, `agenthallway-mcp`), from the repository
 root:
 
 ```sh

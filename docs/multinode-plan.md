@@ -176,6 +176,6 @@ Windows autostart acceptance tracked in #65.
   built from; it is enough on its own for the first release.
 - Session launch and supervision. Wake-up (#60) has since landed, and went
   through each provider's own API rather than writing into its files or
-  process — that boundary did not move. `agenthub-mcp` serves the MCP surface
+  process — that boundary did not move. `agenthallway-mcp` serves the MCP surface
   over stdio; Streamable HTTP would put it on a socket, a separate decision not
   taken.

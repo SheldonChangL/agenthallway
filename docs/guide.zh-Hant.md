@@ -1,4 +1,4 @@
-# AgentHub 使用手冊
+# Agent Hallway 使用手冊
 
 [English](guide.md) | 繁體中文 · [README](../README.zh-Hant.md) · [開發者文件（英文）](developer.md)
 
@@ -7,17 +7,17 @@
 
 先認識幾個詞：
 
-- **機器**：一台裝了 AgentHub 的電腦。畫面上說的「這台機器」是你正坐著用的這一台，「另一台機器」是要配對的對象。
-- **背景服務**：每台機器登入時自動啟動、在背景執行的 AgentHub 小程式（指令與檔案裡叫 `agenthub-node`）。
+- **機器**：一台裝了 Agent Hallway 的電腦。畫面上說的「這台機器」是你正坐著用的這一台，「另一台機器」是要配對的對象。
+- **背景服務**：每台機器登入時自動啟動、在背景執行的 Agent Hallway 小程式（指令與檔案裡叫 `agenthallway-node`）。
   你點的視窗只是它的控制面板。
 - **機器 ID**：`node_` 開頭的一串，每台機器各一個。
 - **配對**：讓兩台機器互相認識一次，之後彼此信任。
 - **指紋**：從機器金鑰算出來的一串短碼，四個字一組。兩個人各看一台螢幕對念，
   確認兩台是直接連上、中間沒有別人。
 - **分享** session：讓已配對的機器看得到它。沒分享的 session 狀態是**未分享**。
-- **心跳**：每個 AgentHub 每 15 秒送給每台已配對機器的一小段簽章更新，表示它還在，並帶著分享給那台的 session。
+- **心跳**：每個 Agent Hallway 每 15 秒送給每台已配對機器的一小段簽章更新，表示它還在，並帶著分享給那台的 session。
   「尚未收到心跳」就是那台什麼都還沒送過來。
-- **在區網上搜尋**（`agenthub-node` 的 `-discover`）：收聽區網上其他機器的廣播，並在配對開放中時廣播這台自己。
+- **在區網上搜尋**（`agenthallway-node` 的 `-discover`）：收聽區網上其他機器的廣播，並在配對開放中時廣播這台自己。
   全新安裝預設關閉，首次設定的第 1 步會把它打開。
 
 目錄：
@@ -36,7 +36,7 @@
 
 ## 安裝
 
-做完這章，AgentHub 就裝在你的電腦上，背景服務也註冊成登入時自動啟動。
+做完這章，Agent Hallway 就裝在你的電腦上，背景服務也註冊成登入時自動啟動。
 
 ### macOS 與 Linux
 
@@ -47,8 +47,8 @@ curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install
 ```
 
 腳本會下載適合這台機器的版本，在解開之前先用該版本自己的檢查碼清單（`SHA256SUMS`）
-核對檔案。接著把 app 放到 macOS 的 `/Applications` 或 Linux 的 `~/.local/share/agenthub`，
-把 `ah` 指令放進 `~/.local/bin`，註冊背景服務，再在 `~/.claude/skills/agenthub-watch` 裝一個 Claude Code skill，
+核對檔案。接著把 app 放到 macOS 的 `/Applications` 或 Linux 的 `~/.local/share/agenthallway`，
+把 `ah` 指令放進 `~/.local/bin`，註冊背景服務，再在 `~/.claude/skills/agenthallway-watch` 裝一個 Claude Code skill，
 讓這台機器上的 agent 知道怎麼用 `ah`（不要的話，把最後的 `sh` 換成 `sh -s -- --no-skill`）。
 它不會用 `sudo`，也不會要你輸入密碼。
 
@@ -59,28 +59,28 @@ Linux 的視窗需要 GTK 3 與 WebKit2GTK。腳本會自動挑對應的版本�
 
 怎麼打開 app：
 
-- **macOS**：腳本跑完會自動打開。之後從「應用程式」打開 agenthub-desktop。
-- **Linux**：應用程式選單裡的 AgentHub，或在新開的終端機執行 `agenthub-desktop`（腳本把它放在 `~/.local/bin`）。
+- **macOS**：腳本跑完會自動打開。之後從「應用程式」打開 agenthallway-desktop。
+- **Linux**：應用程式選單裡的 Agent Hallway，或在新開的終端機執行 `agenthallway-desktop`（腳本把它放在 `~/.local/bin`）。
 
 ### Windows
 
-AgentHub 從未在真的 Windows 電腦上跑過。Windows 版只在 CI 建置與測試，實機驗收還沒做
+Agent Hallway 從未在真的 Windows 電腦上跑過。Windows 版只在 CI 建置與測試，實機驗收還沒做
 （[#21](https://github.com/SheldonChangL/agenthub/issues/21)、[verification.md](verification.md#build-matrix)（英文））。
 下面寫的是安裝程式設計上會做的事。
 
 1. 打開 [Releases 頁面](https://github.com/SheldonChangL/agenthub/releases)，
-   下載 `agenthub-desktop_<版本>_windows_amd64-installer.exe`（Windows 10 或 11，64 位元）。
+   下載 `agenthallway-desktop_<版本>_windows_amd64-installer.exe`（Windows 10 或 11，64 位元）。
 2. 執行它。Windows 會先跳警告，處理方式見下一節。
-3. 安裝程式會放好 app（預設在 `C:\Program Files\agenthub-desktop\agenthub-desktop`）、
-   用工作排程器註冊背景服務並啟動，再加上開始功能表項目和桌面捷徑，名稱都是 agenthub-desktop，從哪一個打開都可以。
+3. 安裝程式會放好 app（預設在 `C:\Program Files\agenthallway-desktop\agenthallway-desktop`）、
+   用工作排程器註冊背景服務並啟動，再加上開始功能表項目和桌面捷徑，名稱都是 agenthallway-desktop，從哪一個打開都可以。
    Claude Code skill 是安裝程式元件頁上的一個勾選框，預設不勾。
 
 不想用安裝程式，可以下載同一頁的 `..._windows_amd64.zip`，解開就能執行。
-`ah.exe`、`agenthub-node.exe`、`agenthub-mcp.exe` 要和 app 放在同一個資料夾。
+`ah.exe`、`agenthallway-node.exe`、`agenthallway-mcp.exe` 要和 app 放在同一個資料夾。
 
 ### 電腦跳出下載警告時
 
-AgentHub 的檔案都沒有簽章。簽章憑證每年要花錢，這個專案沒有買，所以電腦說「沒有人替這個檔案擔保」是實話。
+Agent Hallway 的檔案都沒有簽章。簽章憑證每年要花錢，這個專案沒有買，所以電腦說「沒有人替這個檔案擔保」是實話。
 你能自己核對的是檢查碼：每個版本都附 `SHA256SUMS`，版本說明裡也印了同樣的值。
 
 - **macOS，用一行指令安裝**：不會跳警告。腳本已經核對過檢查碼，會自己清掉「從網路下載」的標記。
@@ -89,7 +89,7 @@ AgentHub 的檔案都沒有簽章。簽章憑證每年要花錢，這個專案�
     按「強制打開」並確認（英文介面依序是 Done、Open Anyway）。
   - macOS 14 以前：在 app 上按右鍵，選「打開」，再按一次「打開」。
   - 兩種版本都可以在終端機執行：
-    `xattr -dr com.apple.quarantine /Applications/agenthub-desktop.app`
+    `xattr -dr com.apple.quarantine /Applications/agenthallway-desktop.app`
 - **Windows**：SmartScreen 會說「Windows 已保護您的電腦」。按「其他資訊」，再按「仍要執行」。
 - **Linux**：不會跳警告。
 
@@ -101,17 +101,17 @@ sha256sum -c SHA256SUMS --ignore-missing         # Linux
 ```
 
 ```powershell
-Get-FileHash .\agenthub-desktop_<版本>_windows_amd64-installer.exe -Algorithm SHA256
+Get-FileHash .\agenthallway-desktop_<版本>_windows_amd64-installer.exe -Algorithm SHA256
 ```
 
 Windows 上把印出來的值和 `SHA256SUMS` 裡對應的那一行比對。
 
 ## 第一次設定
 
-做完這章，AgentHub 會在這台機器的背景執行、區網裡的其他機器連得到它（如果你選了開放），
+做完這章，Agent Hallway 會在這台機器的背景執行、區網裡的其他機器連得到它（如果你選了開放），
 而且你已經配對好第二台，或先跳過。
 
-第一次打開 AgentHub，視窗會是三步的設定精靈。左邊列出三個步驟，右邊是目前這一步。
+第一次打開 Agent Hallway，視窗會是三步的設定精靈。左邊列出三個步驟，右邊是目前這一步。
 在第 3 步勾選 session 之前，什麼都不會被分享。
 
 ![首次設定第 1 步：三項檢查、寫出開放位址與區網搜尋會讓人看到什麼的藍底說明，以及「準備好這台機器」與「只在這台用，不開放區網」兩顆按鈕](screenshots/first-run.zh-Hant.png)
@@ -122,9 +122,9 @@ Windows 上把印出來的值和 `SHA256SUMS` 裡對應的那一行比對。
 
 | 檢查項目 | 意思 |
 |---|---|
-| **AgentHub 在背景執行** | AgentHub 正在跑，關掉視窗也會繼續。 |
+| **Agent Hallway 在背景執行** | Agent Hallway 正在跑，關掉視窗也會繼續。 |
 | **登入後自動啟動** | 已經註冊成背景服務：launchd（macOS）、`systemd --user`（Linux）或工作排程器（Windows）。 |
-| **區網裡的其他機器找得到、也連得到** | AgentHub 在你家裡或辦公室的網路位址上接受連線，讓其他機器連得進來；也在區網上搜尋，讓其他機器找得到它。 |
+| **區網裡的其他機器找得到、也連得到** | Agent Hallway 在你家裡或辦公室的網路位址上接受連線，讓其他機器連得進來；也在區網上搜尋，讓其他機器找得到它。 |
 
 按鈕上方有一格藍底說明，用兩句話寫出按下去會開放什麼：
 
@@ -133,7 +133,7 @@ Windows 上把印出來的值和 `SHA256SUMS` 裡對應的那一行比對。
 
 這台有兩個以上的區網位址時，會先在**要讓其他機器從哪個網路連進來？**底下讓你選一個。
 
-按**準備好這台機器**。視窗會啟動 AgentHub、註冊成背景服務、開放區網位址、打開區網搜尋、重新啟動 AgentHub 讓設定生效，
+按**準備好這台機器**。視窗會啟動 Agent Hallway、註冊成背景服務、開放區網位址、打開區網搜尋、重新啟動 Agent Hallway 讓設定生效，
 每做完一項就打勾。全部完成時會顯示**這台準備好了**，並自動進到下一步。
 
 按鈕上寫的是還沒做的事。只差區網那一項時，按鈕是**開放區網並繼續**。位址已經開放、只差搜尋沒開時
@@ -141,16 +141,16 @@ Windows 上把印出來的值和 `SHA256SUMS` 裡對應的那一行比對。
 不搜尋的話，另一台不會出現在第 2 步的清單裡，要用輸入位址的方式配對。搜尋開不起來時，這一步會說明，
 並且照樣提供**下一步**，理由相同。
 
-位址已經開放、搜尋沒開，但背景服務沒在跑（停著、AgentHub 在服務之外跑，或狀態還在讀取中）時，
+位址已經開放、搜尋沒開，但背景服務沒在跑（停著、Agent Hallway 在服務之外跑，或狀態還在讀取中）時，
 按鈕是**準備好這台機器**，旁邊還有**準備好這台機器，先不搜尋**。後者對服務做的事和前者相同
 （啟動服務，或先帶你到設定頁確認資料庫），但不寫任何網路設定，所以搜尋維持關著；服務跑起來後就進到第 2 步。
 
-只想在這台用 AgentHub，按**只在這台用，不開放區網**。第 2 步會標成**已選擇只在這台用**並跳過。
+只想在這台用 Agent Hallway，按**只在這台用，不開放區網**。第 2 步會標成**已選擇只在這台用**並跳過。
 
 **失敗時**，那一行會顯示**沒有完成**和一句白話說明，底下的**說明**裡是原始錯誤。
 按**重試**。問題沒解決之前不會往下走。有兩種情況會刻意停下來：
 
-- AgentHub 已經在跑，但不是以背景服務啟動的（例如你從終端機啟動）。視窗會帶你到設定頁，
+- Agent Hallway 已經在跑，但不是以背景服務啟動的（例如你從終端機啟動）。視窗會帶你到設定頁，
   先確認它用的資料庫再安裝，因為裝在別的資料庫上，這台就會變成新的機器身分。
   好了之後按標題列的**繼續設定**回來。
 - 「設定 → 連線設定」有還沒儲存的修改。精靈不會替你存，請先到那一頁儲存或重新讀取。
@@ -174,7 +174,7 @@ Windows 上把印出來的值和 `SHA256SUMS` 裡對應的那一行比對。
 2. 選對方可以做什麼：
    - **可留訊息**：對方看得到這個 session，也能寄訊息到它的收件匣，這個 session 也能回覆。
    - **可留訊息並喚醒**：訊息到了還會試著叫醒 agent。勾的全是 Claude Code session 時不能選，
-     因為 AgentHub 叫不醒 Claude Code session。
+     因為 Agent Hallway 叫不醒 Claude Code session。
 3. 按**分享 2 個 session**。數字跟著你勾的數量變；沒勾任何一個時按鈕會寫
    **先勾選要分享的 session**，而且按不下去。
 
@@ -325,7 +325,7 @@ Demo-MacBook 無從得知 studio-mac 到底有沒有按**一樣，完成配對**
 視窗裡沒有只收不送、或只送不收的選項；需要的話用終端機的 `ah audience`。
 
 已配對的機器收到的只是一段簡短描述：session 的 ID、是 Claude Code 還是 Codex、狀態與狀態從哪裡判斷來的、
-是不是由 AgentHub 管理、最後活動時間，以及你允許時才有的工作目錄。對話內容、你的提示詞、session 標題都不會送出去。
+是不是由 Agent Hallway 管理、最後活動時間，以及你允許時才有的工作目錄。對話內容、你的提示詞、session 標題都不會送出去。
 
 ### 一次處理很多個
 
@@ -341,16 +341,16 @@ Demo-MacBook 無從得知 studio-mac 到底有沒有按**一樣，完成配對**
 
 做完這章，你就能讀其他機器寄給你 session 的訊息，也知道訊息之後會怎樣。
 
-寄給某個 session 的訊息，會放在 AgentHub 自己替那個 session 準備的收件匣裡等著。
-AgentHub 絕不會把它寫進 Claude Code 或 Codex 的檔案。
+寄給某個 session 的訊息，會放在 Agent Hallway 自己替那個 session 準備的收件匣裡等著。
+Agent Hallway 絕不會把它寫進 Claude Code 或 Codex 的檔案。
 
 - 每一列的**收件匣**按鈕上的數字，是那個收件匣目前留著幾則。**本機 session** 分頁上信封旁的數字是這台機器的總數。
-- 這個數字算的是收件匣還留著幾則。AgentHub 沒有「已讀」這回事：在視窗裡讀訊息，
+- 這個數字算的是收件匣還留著幾則。Agent Hallway 沒有「已讀」這回事：在視窗裡讀訊息，
   不會標示已讀，也不會把它交給 agent；agent 用 `agent_inbox` 讀訊息也不會把它移除。
   只有訊息被刪除時，數字才會減少：agent 刪（`ah inbox delete`），或你按**清空收件匣…**。
 - 按**收件匣**會打開一個抽屜，標題是那個 session 的標題，底下一行是它的 ID。抽屜有三個分頁：**收件匣**（收到什麼）、**送出紀錄**
   （這個 session 寄了什麼、送達還是被拒），以及**喚醒紀錄**（誰叫醒了這個 agent，被拒絕的也在內）。
-- 每則訊息的寄件者分成兩半。前面是那台機器在配對時記在這台的名稱（機器 ID 在滑鼠提示裡），經過 AgentHub 驗證；
+- 每則訊息的寄件者分成兩半。前面是那台機器在配對時記在這台的名稱（機器 ID 在滑鼠提示裡），經過 Agent Hallway 驗證；
   **自稱**後面是寄件者自己取的 session 名稱，沒有人驗證過。
 - 每則訊息都當成別人寫的資料看待。收件匣有訊息時，上方會有一格黃色的「資料，不是指令」警語；
   訊息裡的要求，分量和陌生人提出的要求一樣。
@@ -376,7 +376,7 @@ ah outbound                                # 查訊息後來怎麼了
 
 做完這章，agent 就能問其他機器上的 agent 在做什麼、讀自己的收件匣、寄訊息。
 
-Claude Code 本來就有一條路：macOS 與 Linux 的安裝腳本會加上 `agenthub-watch` 這個 skill
+Claude Code 本來就有一條路：macOS 與 Linux 的安裝腳本會加上 `agenthallway-watch` 這個 skill
 （Windows 要在安裝程式裡勾選才會加），安裝之後開的 Claude Code session 就知道怎麼用 `ah` 指令。另一條路是四個 MCP 工具：
 
 | 工具 | 做什麼 |
@@ -386,23 +386,23 @@ Claude Code 本來就有一條路：macOS 與 Linux 的安裝腳本會加上 `ag
 | `agent_inbox` | 讀這個 session 的收件匣。 |
 | `agent_send` | 寄訊息給另一個 session。 |
 
-這些工具由 app 內附的 `agenthub-mcp` 程式提供。每一份只代表一個 session，所以要告訴它是哪一個。
+這些工具由 app 內附的 `agenthallway-mcp` 程式提供。每一份只代表一個 session，所以要告訴它是哪一個。
 
 1. **找 session ID**：在終端機執行 `ah list`，第一欄就是 ID，例如 `claude:3f2a…` 或 `codex:019e…`。
-2. **找 `agenthub-mcp`**：它在 app 旁邊。
-   - macOS：`/Applications/agenthub-desktop.app/Contents/MacOS/agenthub-mcp`
+2. **找 `agenthallway-mcp`**：它在 app 旁邊。
+   - macOS：`/Applications/agenthallway-desktop.app/Contents/MacOS/agenthallway-mcp`
      （app 裝在 `~/Applications` 的話就在那底下）
-   - Linux：`~/.local/share/agenthub/agenthub-mcp`
-   - Windows：預設是 `C:\Program Files\agenthub-desktop\agenthub-desktop\agenthub-mcp.exe`，
-     或你在安裝程式裡選的資料夾，和 `agenthub-desktop.exe` 放在一起。這個路徑是從安裝程式腳本讀出來的，
+   - Linux：`~/.local/share/agenthallway/agenthallway-mcp`
+   - Windows：預設是 `C:\Program Files\agenthallway-desktop\agenthallway-desktop\agenthallway-mcp.exe`，
+     或你在安裝程式裡選的資料夾，和 `agenthallway-desktop.exe` 放在一起。這個路徑是從安裝程式腳本讀出來的，
      還沒在真的 Windows 電腦上看過。
 3. **Claude Code**：在那個 session 的專案資料夾存一個 `.mcp.json`，填上完整路徑和你的 session ID：
 
    ```json
    {
      "mcpServers": {
-       "agenthub": {
-         "command": "/Applications/agenthub-desktop.app/Contents/MacOS/agenthub-mcp",
+       "agenthallway": {
+         "command": "/Applications/agenthallway-desktop.app/Contents/MacOS/agenthallway-mcp",
          "args": ["-as", "claude:<id>"]
        }
      }
@@ -432,9 +432,9 @@ Claude Code 本來就有一條路：macOS 與 Linux 的安裝腳本會加上 `ag
 
 會發生什麼：
 
-- **Codex session**：在一台機器上實際看過喚醒成功。AgentHub 會接回那個 Codex thread，在裡面開始一輪。
+- **Codex session**：在一台機器上實際看過喚醒成功。Agent Hallway 會接回那個 Codex thread，在裡面開始一輪。
 - **Claude Code session**：未驗證。視窗不提供喚醒 Claude Code。就算所有設定都到位，
-  AgentHub 也記錄成「已喚醒」，卻從沒看到那一輪真的開始。詳見
+  Agent Hallway 也記錄成「已喚醒」，卻從沒看到那一輪真的開始。詳見
   [channel-push-not-observed.md](channel-push-not-observed.md)（英文）。
   Claude Code 內建的跨 session 訊息是另一條路：兩台登入同一個 claude.ai 帳號、兩邊 session 都開
   Remote Control 時，經由 claude.ai 送出的訊息實測叫醒了另一台閒置的 session。
@@ -449,12 +449,12 @@ Claude Code 本來就有一條路：macOS 與 Linux 的安裝腳本會加上 `ag
 開了喚醒的已配對機器，可以在上限內隨時讓你的機器開始一輪工作。不再信任它時，到「區網」分頁按
 **撤銷信任**，或把這台機器的開關關掉。
 
-被叫醒的 Codex 該怎麼處理訊息，寫在這個 repo 的 [AGENTS.md](../AGENTS.md) 的「When AgentHub wakes you」一節（英文）。
+被叫醒的 Codex 該怎麼處理訊息，寫在這個 repo 的 [AGENTS.md](../AGENTS.md) 的「When Agent Hallway wakes you」一節（英文）。
 Codex 會讀它所在專案的 `AGENTS.md`，所以把那一節複製到你自己的專案裡。
 
 ## 通知
 
-做完這章，你就知道 AgentHub 會在哪裡告訴你事情，以及每則訊息會留多久。視窗上方不會有橫幅，一切都在右下角和鈴鐺裡。
+做完這章，你就知道 Agent Hallway 會在哪裡告訴你事情，以及每則訊息會留多久。視窗上方不會有橫幅，一切都在右下角和鈴鐺裡。
 
 - **跳出的訊息**出現在右下角，一次一則：新的會取代舊的，被取代的幾則會收成一個連結，
   寫著**另有 2 則較早的通知**，按下去打開通知紀錄。成功和資訊類 6 秒後自己收起，帶按鈕（例如**復原**）的則是 15 秒。
@@ -466,8 +466,8 @@ Codex 會讀它所在專案的 `AGENTS.md`，所以把那一節複製到你自�
 
   | 項目 | 按鈕 |
   |---|---|
-  | **AgentHub 沒有回應** | **重試** |
-  | **AgentHub 還不是背景服務**／**背景服務已安裝，但沒有在執行** | **安裝為背景服務**、**到設定頁安裝**或**啟動背景服務** |
+  | **Agent Hallway 沒有回應** | **重試** |
+  | **Agent Hallway 還不是背景服務**／**背景服務已安裝，但沒有在執行** | **安裝為背景服務**、**到設定頁安裝**或**啟動背景服務** |
   | **收件匣已滿：…** | **開啟收件匣** |
   | **自稱 … 的機器想和這台機器配對** | **比對並核准** |
 
@@ -476,9 +476,9 @@ Codex 會讀它所在專案的 `AGENTS.md`，所以把那一節複製到你自�
 
 ## 背景服務
 
-做完這章，你就看得出 AgentHub 有沒有在跑，沒在跑時也知道怎麼修。
+做完這章，你就看得出 Agent Hallway 有沒有在跑，沒在跑時也知道怎麼修。
 
-AgentHub 負責看著你的 session、回應其他機器。裝成背景服務後，它會在登入時啟動，不依賴視窗。
+Agent Hallway 負責看著你的 session、回應其他機器。裝成背景服務後，它會在登入時啟動，不依賴視窗。
 首次設定精靈會替你裝好，之後要檢查就看這裡。
 
 **標題列右側**有一顆顯示服務狀態的按鈕：
@@ -486,26 +486,26 @@ AgentHub 負責看著你的 session、回應其他機器。裝成背景服務後
 | 顯示 | 意思 |
 |---|---|
 | **背景服務執行中** | 一切正常。 |
-| **背景服務在跑，但 AgentHub 沒回應** | 服務起來了，AgentHub 卻沒有回應。 |
+| **背景服務在跑，但 Agent Hallway 沒回應** | 服務起來了，Agent Hallway 卻沒有回應。 |
 | **服務已裝但沒在跑** | 已註冊，但停著。 |
-| **AgentHub 非背景服務** | AgentHub 在跑，但會跟著啟動它的視窗或終端機一起結束。 |
-| **AgentHub 未執行** | 什麼都沒在跑。 |
+| **Agent Hallway 非背景服務** | Agent Hallway 在跑，但會跟著啟動它的視窗或終端機一起結束。 |
+| **Agent Hallway 未執行** | 什麼都沒在跑。 |
 | **此平台無背景服務**／**找不到 ah** | 視窗在這裡沒辦法管理服務。 |
 
 按下它就會處理它描述的狀況：安裝服務、啟動服務，或打開設定頁。
 
 「設定」分成五個分頁：**背景服務**、**連線設定**、**本機身分**、**外觀**、**語言**。
 
-**「設定 → 背景服務」**有**重新讀取**、**重新啟動 AgentHub**（服務停著時是**啟動 AgentHub**）、
+**「設定 → 背景服務」**有**重新讀取**、**重新啟動 Agent Hallway**（服務停著時是**啟動 Agent Hallway**）、
 **安裝為背景服務…**（已經裝過時是**重新安裝…**）和**移除服務…**。
 安裝表單只有一個欄位：**資料庫路徑**。留空就用預設位置。換一個路徑等於換一個機器身分，
 所有已配對的機器都得重新配對，所以視窗會先問你。
 
-**「設定 → 連線設定」**是 AgentHub 啟動時才讀的設定：
+**「設定 → 連線設定」**是 Agent Hallway 啟動時才讀的設定：
 **對外位址**（這台機器有的每個位址一個勾選框，其他機器可以從勾選的任一個連進來，最多勾四個）、
 **允許區網連線**、**在區網上搜尋其他機器（配對時也讓其他機器找到這台）**、**允許訊息自動喚醒 agent**，
 以及收在**進階**裡的**視為私有網段**。
-**儲存並重啟服務**會存檔、重新啟動 AgentHub，並確認改動真的生效。
+**儲存並重啟服務**會存檔、重新啟動 Agent Hallway，並確認改動真的生效。
 **在區網上搜尋其他機器（配對時也讓其他機器找到這台）**就是搜尋開關：勾著的時候，這台會一直收聽其他機器的廣播（只收不送），
 用來列出想配對的機器、更新已配對機器的位址；只有配對開放中時，才會廣播自己的名稱、位址、平台、指紋與機器 ID。
 開關旁的**說明**也是這樣寫的。
@@ -517,16 +517,16 @@ AgentHub 負責看著你的 session、回應其他機器。裝成背景服務後
 
 各平台的差異：
 
-- macOS 與 Linux 在 AgentHub 當掉時會自己把它重新帶起來。
-- Windows 只在登入時啟動它。AgentHub 停了就一直停著，直到你按**重新啟動 AgentHub**或下次登入。
-- Linux 上 AgentHub 在你登入期間執行。要讓它在沒人登入時也跑，執行一次 `loginctl enable-linger <使用者>`。
+- macOS 與 Linux 在 Agent Hallway 當掉時會自己把它重新帶起來。
+- Windows 只在登入時啟動它。Agent Hallway 停了就一直停著，直到你按**重新啟動 Agent Hallway**或下次登入。
+- Linux 上 Agent Hallway 在你登入期間執行。要讓它在沒人登入時也跑，執行一次 `loginctl enable-linger <使用者>`。
 
-AgentHub 的 log：macOS 在 `~/Library/Logs/agenthub/node.log`，Linux 用 `journalctl --user -u agenthub-node`，
-Windows 在 `%LOCALAPPDATA%\agenthub\node.log`。
+Agent Hallway 的 log：macOS 在 `~/Library/Logs/agenthallway/node.log`，Linux 用 `journalctl --user -u agenthallway-node`，
+Windows 在 `%LOCALAPPDATA%\agenthallway\node.log`。
 
 ## 升級與移除
 
-做完這章，你就能升到新版本，或把 AgentHub 從電腦上拿掉，而不會不小心弄丟配對。
+做完這章，你就能升到新版本，或把 Agent Hallway 從電腦上拿掉，而不會不小心弄丟配對。
 
 ### 升級
 
@@ -536,11 +536,71 @@ macOS 與 Linux 再執行一次安裝指令：
 curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh
 ```
 
-它會換掉 app，保留 AgentHub 的資料庫與機器身分，並重新註冊服務，讓它指向新的那一份。
-如果 AgentHub 用的是你自己指定的資料庫（`--db`），還會印出 `keeping the node's database at <path>`；用預設資料庫時不會有這一行。在 macOS 上，它會先請正在開著的 AgentHub 視窗結束，最多等 10 秒。
+它會換掉 app，保留 Agent Hallway 的資料庫與機器身分，並重新註冊服務，讓它指向新的那一份。
+如果 Agent Hallway 用的是你自己指定的資料庫（`--db`），還會印出 `keeping the node's database at <path>`；用預設資料庫時不會有這一行。在 macOS 上，它會先請正在開著的 Agent Hallway 視窗結束，最多等 10 秒。
 要裝特定版本，把最後的 `sh` 換成 `sh -s -- --version vX.Y.Z`。
 
 Windows 則從 Releases 頁面下載新的安裝程式來執行。
+
+從 AgentHub v0.1.x 升上來？請先看
+[從 AgentHub (v0.1.x) 升級](#從-agenthub-v01x-升級)。
+
+### 從 AgentHub (v0.1.x) 升級
+
+Agent Hallway 在 v0.1.11 以前叫 AgentHub。v0.2.0 改了名，是為了避免和另一個同名、不相干的專案混淆。
+它還是同一個程式、同一台機器：已配對的機器跨這兩個版本照常運作，因為通訊協定、簽章和區網搜尋用的名稱都沒有變，
+所以可以一台一台升級。
+
+照上面的方式升級：macOS 與 Linux 再執行一次安裝指令，Windows 執行新的安裝程式。
+
+**會自動處理的**
+
+- 新的 app 與檔案以新名稱放好（`agenthallway-desktop`、`~/.local/share/agenthallway` 等），
+  安裝腳本先前裝的 AgentHub app、檔案、連結和 `agenthub-watch` skill 會被移除。
+  你的資料、log，以及 shell 啟動檔裡的 PATH 那一行都不會動。macOS 上，正在開著的 AgentHub 視窗會先被請求結束。
+- 背景服務以新名稱重新註冊（launchd 是 `local.agenthallway.node`、systemd 是 `agenthallway-node`、
+  工作排程器是 `Agent Hallway Node`），沿用同一個資料庫。舊的註冊
+  （`local.agenthub.node`、`agenthub-node`、`AgentHub Node`）會被移除。
+- 節點第一次啟動時，會把自己的身分與資料庫從 `…/agenthub/` 搬到 `…/agenthallway/`
+  （`node.key` 與 `agenthub.db`，之後叫 `agenthallway.db`；只搬它自己的檔案）。這個資料夾在 macOS 是
+  `~/Library/Application Support`，在 Linux 是 `~/.config`（或 `$XDG_CONFIG_HOME`），在 Windows 是 `%APPDATA%`。
+  機器 ID 不變，所以每一個配對都還在。
+- Windows 上，安裝程式會先以靜默模式執行 AgentHub 的解除安裝程式。它會移除舊的程式檔、捷徑和排程工作，
+  留下 `%APPDATA%\agenthub`，由節點接著搬走。如果事後「已安裝的應用程式」裡還列著 `agenthub-desktop`，自己到那裡解除安裝。
+
+**舊的安裝還在時。** 用了 `--no-service`，或腳本讀不到已註冊的服務時，它會整套保留 AgentHub 的安裝，
+否則舊服務在每次登入時都會啟動失敗。先執行 `ah service install`，再執行一次安裝指令。
+視窗也會這樣告訴你：標題列的狀態按鈕顯示**背景服務仍用舊名稱登記**，「設定 → 背景服務」會出現一段說明，
+指出這個服務仍以改名前的名稱登記，並附上**以 Agent Hallway 重新登記**；按下去會先問你，
+再用同一個資料庫換掉舊的登記。如果節點因為 "pre-rename background service is still registered" 而拒絕啟動，
+處理方式一樣：`ah service install` 會保留資料庫。
+
+**要自己動手的**
+
+- **MCP 設定。** 升級不會改任何 MCP 設定。伺服器現在叫 `agenthallway`，由 `agenthallway-mcp` 執行，
+  所以把舊的 `agenthub` 項目拿掉（`claude mcp remove agenthub -s <scope>`、Codex 的 `[mcp_servers.agenthub]`、
+  每個專案的 `.mcp.json`），再照[讓 agent 使用四個工具](#讓-agent-使用四個工具)加一個新的。
+  工具現在叫 `mcp__agenthallway__agent_*`，所以 `.claude/settings*.json` 裡的權限允許清單也要一併更新。
+  安裝腳本會指出使用者層級裡仍在啟動 `agenthub-mcp` 的設定；它從不寫入這些檔案。
+- **skill。** 現在是 `/agenthallway-watch`。你自己連結或複製的 `agenthub-watch` 會留在原處；想換就自己改名或刪掉。
+- **環境變數。** `AGENTHUB_*` 仍然會讀，但請改用 `AGENTHALLWAY_*`。
+
+**其他變動**
+
+- 視窗自己的偏好（篩選、排序、語言覆寫、背景）會重設一次，首次設定精靈也會再出現一次。
+- log 改放到[背景服務](#背景服務)裡寫的新路徑；舊的 log 留在原處。
+- **macOS。** 升級後如果其他機器顯示離線，到「系統設定 → 隱私權與安全性 → 本地網路」檢查 `agenthallway-node`
+  （英文介面是 Local Network）。
+
+**把一台機器退回 v0.1.11**：新的 `ah` 會移除兩個註冊，資料留在原處。舊的節點會在搬過去的檔案上執行，身分不變。
+
+```sh
+ah service uninstall
+curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --version v0.1.11 --no-service
+"<the v0.1.11 ah>" service install --db "<config>/agenthallway/agenthallway.db"
+```
+
+有任何節點在跑的時候，不要自己把檔案搬回去。之後再升級時會帶著那個 `--db`，不需要再搬。
 
 ### 移除
 
@@ -559,36 +619,36 @@ curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install
 加上 `--dry-run` 可以先看每一步，但什麼都不做。
 
 Windows 則和其他程式一樣，從「設定 → 應用程式」解除安裝。解除安裝程式會移除排程工作、app，
-以及它裝的那份 skill。`%APPDATA%\agenthub` 裡的機器身分與資料庫會保留。
+以及它裝的那份 skill。`%APPDATA%\agenthallway` 裡的機器身分與資料庫會保留。
 
 ## 疑難排解
 
 做完這章，你就能自己排除最常遇到的問題。
 
-**AgentHub 沒有回應。** 按鈴鐺裡**需要你處理**的**重試**，或按標題列的服務狀態按鈕。還是沒回應的話，到
-「設定 → **背景服務**」按**重新啟動 AgentHub**，並看 log（路徑見[背景服務](#背景服務)）。
+**Agent Hallway 沒有回應。** 按鈴鐺裡**需要你處理**的**重試**，或按標題列的服務狀態按鈕。還是沒回應的話，到
+「設定 → **背景服務**」按**重新啟動 Agent Hallway**，並看 log（路徑見[背景服務](#背景服務)）。
 剛在**連線設定**存過的設定，是第一個要懷疑的地方。
 
 **另一台沒出現。** 兩台都要完成第 1 步（它會打開區網搜尋）：只有一台在搜尋時，兩台都看不到對方。
-兩台也要在同一個網路，而且 AgentHub 都開在第 2 步，或「區網」分頁的配對抽屜。第 2 步說這台沒在搜尋時，
+兩台也要在同一個網路，而且 Agent Hallway 都開在第 2 步，或「區網」分頁的配對抽屜。第 2 步說這台沒在搜尋時，
 按**開始在區網上搜尋**。任一台的防火牆都可能擋住 7463 埠，有些網路也會擋搜尋用的 multicast。
 這時打開**找不到另一台？**輸入位址，搜尋關著也能用。
 
 **配對失敗。** 訊息會寫出原因。常見的幾種：
 
 - 「對方那台沒有開放配對」：在那台按**與另一台機器配對**（或打開第 2 步），再送一次。
-- 「連不到那個位址」：檢查位址、兩台是不是在同一個網路、對方的 AgentHub 有沒有在跑。
+- 「連不到那個位址」：檢查位址、兩台是不是在同一個網路、對方的 Agent Hallway 有沒有在跑。
 - 「這台機器不會送資料到那個位址」：那個位址不在這台視為私有的網段裡。`10.`、`172.16.` 到 `172.31.`、
   `192.168.`、`169.254.` 開頭的位址本來就算私有，不用設定。只有兩台用網路線直連、兩端的位址不在這些範圍內時，
   例如 `122.122.122.1` 和 `122.122.122.2`，才要在兩邊的**視為私有網段**都填上那條線的網段。
   網段寫成「位址／斜線／數字」：`122.122.0.0/16` 涵蓋所有 `122.122.` 開頭的位址，
   `122.122.122.0/24` 則固定前三組數字。兩種寫法都涵蓋這條線的兩端。
-- 「對方那台跑的是還沒有配對交換功能的舊版 AgentHub」：先在那台更新 AgentHub。
+- 「對方那台跑的是還沒有配對交換功能的舊版 Agent Hallway」：先在那台更新 Agent Hallway。
 
 **指紋不一致。** 按**拒絕**（首次設定精靈裡叫**不一樣，拒絕**），在弄清楚你連到的是哪一台之前不要再送請求。兩台中間可能有東西冒充其中一台。
 
 **配對好了，卻看不到對方的 session。** 配對本身不會分享任何 session，要對方把 session 分享給你。
-如果「區網」分頁寫著「尚未收到心跳」，可能是對方還沒完成它那一邊的配對，或它的 AgentHub 沒在跑。
+如果「區網」分頁寫著「尚未收到心跳」，可能是對方還沒完成它那一邊的配對，或它的 Agent Hallway 沒在跑。
 
 **收件匣滿了。** 從鈴鐺裡**需要你處理**的**開啟收件匣**打開，讀完需要的，按**清空收件匣…**，或讓 agent 刪掉它處理完的訊息。
 收件匣滿的時候，新訊息會被退回，直到有空位為止。
@@ -597,7 +657,7 @@ Windows 則和其他程式一樣，從「設定 → 應用程式」解除安裝�
 
 **升級因為 app 還開著而中止**（macOS）。舊版的安裝腳本在 macOS 對結束請求回了錯誤時就會中止升級，
 雖然 app 其實過一下就結束了。這已經修好：現在腳本會等最多 10 秒，只有 app 真的還在跑才會停下。
-一行指令每次都會抓最新的腳本。萬一還是停下來，自己結束 AgentHub（在 Dock 圖示上按右鍵 → **結束**）再執行一次。
+一行指令每次都會抓最新的腳本。萬一還是停下來，自己結束 Agent Hallway（在 Dock 圖示上按右鍵 → **結束**）再執行一次。
 
 **Claude Code session 沒被叫醒。** 目前就是這樣，見[喚醒 agent](#喚醒-agent)。用**收件匣**讀它的訊息，
 或讓 agent 呼叫 `agent_inbox`。

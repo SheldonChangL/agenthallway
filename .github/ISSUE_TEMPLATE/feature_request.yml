@@ -1,12 +1,12 @@
 name: Feature request
-description: Something AgentHub could do, or do differently.
+description: Something Agent Hallway could do, or do differently.
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
         English or 中文 are both fine. Describing the problem matters more than
-        the solution: what you were trying to do, and where AgentHub got in
+        the solution: what you were trying to do, and where Agent Hallway got in
         the way.
   - type: textarea
     id: problem
@@ -27,7 +27,7 @@ body:
     attributes:
       label: What it would share, and with whom
       description: |
-        AgentHub publishes nothing by default. If this would send anything to another machine
+        Agent Hallway publishes nothing by default. If this would send anything to another machine
         or to an agent, say what and when, so the privacy side can be thought through.
   - type: textarea
     id: alternatives

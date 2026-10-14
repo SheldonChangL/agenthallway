@@ -1,5 +1,7 @@
 # A channel push, sent correctly and never injected
 
+> Recorded before the rename to Agent Hallway (v0.2.0); commands and paths below use the old name AgentHub.
+
 What this records: `agenthub-mcp -channel` writes a well-formed
 `notifications/claude/channel` frame onto its stdout, Claude Code reads that
 pipe, and nothing arrives in the session. Four attempts on a real two-machine

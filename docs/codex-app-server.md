@@ -8,13 +8,13 @@ codex app-server generate-json-schema --out <temporary-directory> --experimental
 
 Verified request flow:
 
-1. `initialize` with AgentHub client name and version
+1. `initialize` with Agent Hallway client name and version
 2. `initialized` notification
 3. `thread/list` with a page size, updated-time ordering, and `useStateDbOnly: true`
 
 Decoded thread fields are restricted to `id`, `cwd`, `status.type`, and `updatedAt`. Preview, turns, and prompt content are ignored. Status mapping is:
 
-| App Server | AgentHub |
+| App Server | Agent Hallway |
 |---|---|
 | `active` | `active` |
 | `idle` | `idle` |
@@ -46,7 +46,7 @@ capability`. Measured, not read: the first real wake failed on exactly this.
 words are marked as such rather than being interpolated into the same string as
 this node's instruction. `turnTrigger` is set to `agenthub-wake`, which Codex
 records — an owner can see which turns this node started from their own Codex
-history, without taking AgentHub's audit trail on trust.
+history, without taking Agent Hallway's audit trail on trust.
 
 **Nobody is present, so nothing is approved.** A woken turn runs unattended and
 Codex asks before it runs a command, changes a file, or widens its permissions.
@@ -111,12 +111,12 @@ holding the thread rather than this check is what covers that.
 ## Managed or unmanaged
 
 A thread this node did not start is **unmanaged**, and stays unmanaged after
-AgentHub connects to it, resumes it, or starts a turn in it.
+Agent Hallway connects to it, resumes it, or starts a turn in it.
 
 The rule is about who owns the process's lifetime, not who last spoke to it.
-AgentHub's supervisor starts `codex app-server` and can stop it; it does not
+Agent Hallway's supervisor starts `codex app-server` and can stop it; it does not
 start or stop the threads inside, and it does not create them. A thread is the
-owner's conversation, begun in their terminal or their editor, and AgentHub
+owner's conversation, begun in their terminal or their editor, and Agent Hallway
 appending a turn to it changes that no more than the owner typing into it from
 a second window would.
 

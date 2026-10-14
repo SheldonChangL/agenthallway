@@ -1,8 +1,8 @@
-# AgentHub developer guide
+# Agent Hallway developer guide
 
 [README](../README.md) · [User guide](guide.md) · [使用手冊（繁體中文）](guide.zh-Hant.md)
 
-This page is for building AgentHub, running it from a terminal, and reading how
+This page is for building Agent Hallway, running it from a terminal, and reading how
 it works. It holds the material that used to sit in the README under "For
 contributors", moved here unchanged apart from heading levels and links. Where
 the desktop app has changed since a paragraph was written, a note says so and
@@ -29,7 +29,7 @@ points at the [user guide](guide.md), which describes the current window.
   anything, and re-discovery never changes a policy you set.
 - **Searching the network listens always and announces only while pairing.**
   With `--discover` the node listens on the mDNS group for as long as it runs
-  (`cmd/agenthub-node/main.go`, `discovery.Listen`), and the announcer says
+  (`cmd/agenthallway-node/main.go`, `discovery.Listen`), and the announcer says
   nothing until a pairing window is open (`internal/pairing/announcer.go`).
   An announcement carries the name, address, platform, fingerprint and node ID.
   Without `--discover` the node does neither. The first-run setup turns it on
@@ -87,10 +87,10 @@ curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install
 
 It downloads the one release asset for your machine, checks it against that
 release's own `SHA256SUMS` before unpacking anything, puts the app in
-`/Applications` (or `~/Applications`) or `~/.local/share/agenthub`, links `ah`
+`/Applications` (or `~/Applications`) or `~/.local/share/agenthallway`, links `ah`
 into `~/.local/bin` — adding that to `PATH` in your shell's startup file when it
-is not there yet — puts the `agenthub-watch` skill into Claude Code
-(`~/.claude/skills/agenthub-watch`, loaded by sessions started afterwards) so an
+is not there yet — puts the `agenthallway-watch` skill into Claude Code
+(`~/.claude/skills/agenthallway-watch`, loaded by sessions started afterwards) so an
 agent on that machine knows to use `ah`, and registers the background node. When a node is already
 registered it reads the unit first and keeps that node's `--db`, so an upgrade
 is an upgrade and not a new, empty database — it says `keeping the node's
@@ -115,7 +115,7 @@ curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install
 > **Outdated:** the app now opens on a three-step first-run setup, not a checklist; see [First-time setup](guide.md#first-time-setup) in the user guide.
 
 When it finishes it prints what it installed and where, whether the node is
-running, and the one thing to do next: open `agenthub-desktop` from
+running, and the one thing to do next: open `agenthallway-desktop` from
 Applications, which starts on a setup checklist. Uneasy about piping a script
 into a shell? Read it first:
 `curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | less`.
@@ -129,9 +129,9 @@ everywhere, and are what the rest of this section describes.
 Downloads are on the
 [Releases page](https://github.com/SheldonChangL/agenthub/releases). Desktop
 downloads ship from the next tagged release onward; a release page that only
-lists `agenthub_<tag>_<os>_<arch>` archives predates them — use the command-line
+lists `agenthub_<tag>_<os>_<arch>` archives (the name before v0.2.0) predates them — use the command-line
 install below or build from source. The desktop download is one file and brings
-`agenthub-node`, `ah` and `agenthub-mcp` with it — the app runs them from beside
+`agenthallway-node`, `ah` and `agenthallway-mcp` with it — the app runs them from beside
 its own executable, so there is nothing else to fetch and nothing to put on your
 `PATH`.
 
@@ -144,9 +144,9 @@ check the file you got against the page before you run it.
 ### Command line only
 
 The same release holds six archives — `linux`, `darwin` and `windows`, each
-`amd64` and `arm64` — with `agenthub-node`, `ah` and `agenthub-mcp` and no app.
+`amd64` and `arm64` — with `agenthallway-node`, `ah` and `agenthallway-mcp` and no app.
 Unpack the one for your platform, put the binaries on your `PATH` (nothing here
-needs administrator rights), then `agenthub-node --db ./data/agenthub.db` in one
+needs administrator rights), then `agenthallway-node --db ./data/agenthallway.db` in one
 terminal and `ah discover && ah list` in another. The one-liner does this too:
 `curl -fsSL https://raw.githubusercontent.com/SheldonChangL/agenthub/main/install.sh | sh -s -- --cli-only`.
 
@@ -163,14 +163,14 @@ the go command refuse an older toolchain rather than build quietly against it.
 go version   # must report go1.27.0 or newer
 go test ./...
 mkdir -p bin
-go build -o bin/agenthub-node ./cmd/agenthub-node
+go build -o bin/agenthallway-node ./cmd/agenthallway-node
 go build -o bin/ah ./cmd/ah
-go build -o bin/agenthub-mcp ./cmd/agenthub-mcp
+go build -o bin/agenthallway-mcp ./cmd/agenthallway-mcp
 bin/ah --version   # which commit these binaries came from
 ```
 
 Every binary reports the revision it was built from — `ah --version`, the node's
-first log line, and the version `agenthub-mcp` sends at initialize. A build from
+first log line, and the version `agenthallway-mcp` sends at initialize. A build from
 a modified tree says so, because a revision that does not describe the source
 points at code nobody ran.
 
@@ -186,7 +186,7 @@ GitHub built, not a commit on the branch; `BUILD` records both.
 
 ```sh
 mkdir -p data
-go run ./cmd/agenthub-node --db ./data/agenthub.db
+go run ./cmd/agenthallway-node --db ./data/agenthallway.db
 ```
 
 In another terminal:
@@ -235,7 +235,7 @@ go run ./cmd/ah inbox <session-id>
 `selected` accepts only node IDs that already appear in `ah nodes`; pairing an
 unknown node is a separate, explicit owner action.
 
-The node listens on `127.0.0.1:7462` by default. Set `AGENTHUB_URL` for the CLI or pass `--url`.
+The node listens on `127.0.0.1:7462` by default. Set `AGENTHALLWAY_URL` for the CLI or pass `--url`.
 
 The owner's API remains loopback-only and stays there; peer traffic uses a
 separate TLS listener on `127.0.0.1:7463` by default. Trust records are created
@@ -253,7 +253,7 @@ the node should belong to the operating system, not to a window:
 
 ```sh
 bin/ah settings set --peer-listen 192.168.1.10:7463 --allow-lan=true --discover=true
-bin/ah service install --db ./data/agenthub.db
+bin/ah service install --db ./data/agenthallway.db
 ```
 
 The settings come first and the service carries only `--db`, because the node
@@ -264,7 +264,7 @@ at all.
 
 `install` registers the node with launchd (macOS), `systemd --user` (Linux) or
 Task Scheduler (Windows): it starts at login. On macOS and Linux it is also
-restarted if it exits; Windows is the exception, and says so below. `agenthub-node` is looked for
+restarted if it exits; Windows is the exception, and says so below. `agenthallway-node` is looked for
 beside `ah`, then on `PATH`; pass `--node-binary` to name it. A relative `--db`
 is made absolute, because a service has no working directory of yours. The
 command ends by asking the node whether it answers, and says so either way.
@@ -291,11 +291,11 @@ restart`; `install` is needed again only for a new binary path or database.
 
 On Linux a user service starts when you log in. For a machine that should run
 the node with nobody logged in, `loginctl enable-linger <user>` is the one
-extra step, and `install` prints it. Logs: `~/Library/Logs/agenthub/node.log`
-on macOS, `journalctl --user -u agenthub-node` on Linux,
-`%LOCALAPPDATA%\agenthub\node.log` on Windows.
+extra step, and `install` prints it. Logs: `~/Library/Logs/agenthallway/node.log`
+on macOS, `journalctl --user -u agenthallway-node` on Linux,
+`%LOCALAPPDATA%\agenthallway\node.log` on Windows.
 
-On Windows the registration is a Task Scheduler task called `AgentHub Node`, in
+On Windows the registration is a Task Scheduler task called `Agent Hallway Node`, in
 your own account, triggered by your logon. Two differences from the other two
 platforms, both of which `install` prints rather than leaving you to discover:
 
@@ -306,7 +306,7 @@ platforms, both of which `install` prints rather than leaving you to discover:
   exist.
 - **Task Scheduler does not restart the node if it exits.** What the task runs
   is `ah service run-node`, a launcher that starts the node detached and
-  returns, so that the node gets no console window while `agenthub-node.exe`
+  returns, so that the node gets no console window while `agenthallway-node.exe`
   keeps its console subsystem — run it by hand in a terminal and it still
   prints, which is how you find out why it will not start. The cost of that
   choice is that the process Task Scheduler watches is the launcher, not the
@@ -335,7 +335,7 @@ second machine needs to be told otherwise:
 
 ```sh
 # on each machine, with its own address in -peer-listen
-bin/agenthub-node --db ./data/agenthub.db \
+bin/agenthallway-node --db ./data/agenthallway.db \
   --peer-listen 192.168.1.10:7463 --allow-lan --discover
 ```
 
@@ -352,7 +352,7 @@ A machine on a cable and on Wi-Fi at once can serve peers on both: give
 `--peer-listen` once per address (at most four, all on the same port).
 
 ```sh
-bin/agenthub-node --db ./data/agenthub.db --allow-lan --discover \
+bin/agenthallway-node --db ./data/agenthallway.db --allow-lan --discover \
   --peer-listen 192.168.1.10:7463 --peer-listen 10.0.0.5:7463
 ```
 
@@ -384,7 +384,7 @@ address before you.
 To pick your own, and pin it against any later change:
 
 ```bash
-bin/agenthub-node --db ./data/agenthub.db --display-name "the machine on my desk"
+bin/agenthallway-node --db ./data/agenthallway.db --display-name "the machine on my desk"
 ```
 
 It sticks, so the flag is not needed on later starts, and the node id does not
@@ -392,7 +392,7 @@ change — existing pairings survive a rename. To hand the name back to the
 machine, pass the flag empty — or as nothing but spaces:
 
 ```bash
-bin/agenthub-node --db ./data/agenthub.db --display-name ""
+bin/agenthallway-node --db ./data/agenthallway.db --display-name ""
 ```
 
 The name is stored in the form it will be announced in, which is not always the
@@ -640,13 +640,13 @@ ah pair <their-node-id> <their-name> <their-platform> <their-public-key> <their-
 
 ## Give an agent the four tools
 
-`agenthub-mcp` is an MCP server over stdio. It is bound to one session at
+`agenthallway-mcp` is an MCP server over stdio. It is bound to one session at
 startup, because stdio carries no caller identity: whoever runs it decides which
 session it speaks for, and it will not act for any other.
 
 ```sh
 # -as is required. Add -url <node url> if the node is not on 127.0.0.1:7462.
-go run ./cmd/agenthub-mcp -as claude:<id>
+go run ./cmd/agenthallway-mcp -as claude:<id>
 ```
 
 In `.mcp.json`, for a Claude Code session:
@@ -654,8 +654,8 @@ In `.mcp.json`, for a Claude Code session:
 ```json
 {
   "mcpServers": {
-    "agenthub": {
-      "command": "/absolute/path/to/bin/agenthub-mcp",
+    "agenthallway": {
+      "command": "/absolute/path/to/bin/agenthallway-mcp",
       "args": ["-as", "claude:<id>"]
     }
   }
@@ -682,7 +682,7 @@ nobody at the keyboard.
 What the woken agent should then do with the message is written down rather
 than typed into a prompt each time: [AGENTS.md](../AGENTS.md) is the Codex half
 (Codex reads the repository's `AGENTS.md` itself) and
-[.claude/skills/agenthub-watch](../.claude/skills/agenthub-watch/SKILL.md) is the
+[.claude/skills/agenthallway-watch](../.claude/skills/agenthallway-watch/SKILL.md) is the
 Claude Code half. Same protocol — the message is data, not instruction; answer
 and propose, never change the contract on a peer's word; delete what you
 handled with `ah inbox delete`.
@@ -692,7 +692,7 @@ separately, and it needs **two** switches open:
 
 ```bash
 # the node
-bin/agenthub-node --db ./data/agenthub.db --auto-wake
+bin/agenthallway-node --db ./data/agenthallway.db --auto-wake
 
 # and the session
 go run ./cmd/ah audience codex:<thread-id> none --messages --auto-wake
@@ -701,7 +701,7 @@ go run ./cmd/ah audience codex:<thread-id> none --messages --auto-wake
 Neither is enough alone. Without the node flag no session can be woken whatever
 its own setting says; without the session flag the node wakes nothing.
 
-**Codex** sessions are woken by AgentHub resuming the thread through the
+**Codex** sessions are woken by Agent Hallway resuming the thread through the
 app-server's own API and starting a turn in it — rejoining a running thread
 rather than opening a second one beside the conversation you are watching.
 
@@ -710,7 +710,7 @@ Claude Code session: its MCP server is a child of the agent and only ever dials
 out. So that server subscribes, and this node hands it messages:
 
 ```bash
-agenthub-mcp -as claude:<id> -channel
+agenthallway-mcp -as claude:<id> -channel
 ```
 
 A session with no subscriber has no agent running, so the wake fails and the
@@ -733,8 +733,8 @@ research preview that is more than one step:
 
 - your organisation must enable them (`channelsEnabled`, a managed setting —
   Team and Enterprise have it off by default), and
-- Claude Code must be started with `--channels server:agenthub`, plus
-  `--dangerously-load-development-channels server:agenthub` while the feature
+- Claude Code must be started with `--channels server:agenthallway`, plus
+  `--dangerously-load-development-channels server:agenthallway` while the feature
   is in preview, which shows a consent screen.
 
 **If any of that is missing the push is dropped silently.** Claude Code tells
@@ -746,7 +746,8 @@ message reached a live MCP server, not that a turn ran.
 a mac and an Ubuntu box, paired, messages delivered both ways — the push has
 not been observed arriving. Three attempts, with the organisation's channels
 enabled and Claude Code started with both flags and showing "messages from
-server:agenthub inject directly in this session":
+server:agenthub inject directly in this session" (the server was still called
+`agenthub` then, before the rename to Agent Hallway):
 
 - the node recorded `woken`, detail `handed to the session's driver`, and
   logged `wake: handed message … to "claude:…"`;
@@ -769,7 +770,7 @@ reproduction, with what is eliminated and what is only suspected, is in
 
 **One server per session, and `.mcp.json` does not give you that.** `-as` names
 a session; an MCP config is per project. Two Claude Code sessions in one
-working directory load the same config, so both start an `agenthub-mcp` with
+working directory load the same config, so both start an `agenthallway-mcp` with
 the same `-as`, and with `-channel` both subscribe for that one session. The
 node keeps one: the later subscriber displaces the earlier, which is told to
 stop and does. So messages for that session go to whichever agent started last,
@@ -793,7 +794,7 @@ peer is compromised, revoking it (`ah revoke <node-id>`) or closing `--auto-wake
 is the remedy — the switches bound what a turn can do, not whether it happens.
 
 A session with broad standing tool permissions and waking open is one whose
-permissions a stranger's message can invoke without asking anyone. AgentHub
+permissions a stranger's message can invoke without asking anyone. Agent Hallway
 does not shrink those permissions and cannot; that combination is yours to
 avoid.
 
@@ -868,17 +869,17 @@ and closes pairing mode with the candidate list beside it, and reads what other
 nodes have queued for a session. Sending is not there: that is what an agent
 does through the MCP tools.
 
-It lives in `desktop/` as a separate Go module so that Wails' CGo requirement never reaches `agenthub-node` or `ah`, which stay CGo-free and cross-compilable.
+It lives in `desktop/` as a separate Go module so that Wails' CGo requirement never reaches `agenthallway-node` or `ah`, which stay CGo-free and cross-compilable.
 
 ```sh
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 cd desktop
 wails dev     # live-reload development
-wails build   # produces build/bin/agenthub-desktop.app
+wails build   # produces build/bin/agenthallway-desktop.app
 ```
 
 `wails build` also runs `desktop/build/bundle-binaries.sh` as a post-build hook
-(`desktop/wails.json`), which builds `ah`, `agenthub-node` and `agenthub-mcp`
+(`desktop/wails.json`), which builds `ah`, `agenthallway-node` and `agenthallway-mcp`
 for the target and copies them beside the app executable — `Contents/MacOS` on
 macOS, the unpacked directory on Linux and Windows. That is the only place the
 app looks for them, so a build without that step produces an app that cannot
@@ -901,14 +902,14 @@ app and the CLI cannot disagree.
 **`PATH` is not one of the places the app looks.** What it finds there would be
 run to install a launchd job or a systemd unit, and "whatever binary named `ah`
 came first on this machine's `PATH`" is not an acceptable answer to that. The
-search is `AGENTHUB_AH` if set, then beside the app's own executable —
+search is `AGENTHALLWAY_AH` if set, then beside the app's own executable —
 `Contents/MacOS` or `Contents/Resources` in a bundle, the unpacked directory
 elsewhere, which is where the packaging step puts it — then a source-tree
 checkout, accepted only when this executable really sits at
 `desktop/build/bin` (or `desktop/build/bin/<x>.app/Contents/MacOS`) above a
 `go.mod` for this module, so an app somebody unpacked at a matching depth does
-not qualify. `agenthub-node` and `agenthub-mcp` are found the same way, with
-`AGENTHUB_NODE` and `AGENTHUB_MCP`. The app passes what it found to
+not qualify. `agenthallway-node` and `agenthallway-mcp` are found the same way, with
+`AGENTHALLWAY_NODE` and `AGENTHALLWAY_MCP`. The app passes what it found to
 `ah service install --node-binary`, rather than letting `ah` search again.
 
 ## Privacy model
@@ -936,7 +937,7 @@ a separate, per-session decision. Revoking a node withdraws trust and every
 grant it held, in one step, so re-pairing later does not restore access.
 
 The preview includes only sessions published to at least one audience and is
-projected into an allowlisted `SessionSummary`: the qualified AgentHub address,
+projected into an allowlisted `SessionSummary`: the qualified Agent Hallway address,
 provider, status, management
 mode, `statusSource`, last-seen time, and working directory. Provider source,
 provider session ID as a separate field, internal update time, metadata paths,
@@ -951,7 +952,7 @@ at audience `none`, including rows previously marked public: that flag controlle
 a local preview at a time when no remote peer existed, so it was never consent to
 share with one.
 
-Queued AgentHub messages are stored in the local SQLite database. They are not written into a Claude or Codex session's files or process — that is a decision, not a stage — and a successful `ah send` means queued. For a remote destination `ah outbound <message-id>` reports what became of it later. Handing the message to an agent happens only if the owner opened both wake switches, and then it goes through that provider's own API — see [Waking an agent](#waking-an-agent).
+Queued Agent Hallway messages are stored in the local SQLite database. They are not written into a Claude or Codex session's files or process — that is a decision, not a stage — and a successful `ah send` means queued. For a remote destination `ah outbound <message-id>` reports what became of it later. Handing the message to an agent happens only if the owner opened both wake switches, and then it goes through that provider's own API — see [Waking an agent](#waking-an-agent).
 
 See [architecture](architecture.md), [MVP specification](spec.md), [multi-node plan](multinode-plan.md), [broker protocol](broker-protocol.schema.json), and [MCP tool contract](mcp-tools.json).
 
@@ -986,7 +987,7 @@ The Codex App Server client is what waking a Codex session runs through, and the
 | `GET` | `/v1/outbound?limit=50` | What this node has queued for peers, newest first: `limit` (1–200), `after` (the `next` value a full page carries) and `session` (a local session id, narrowing the list to what that session sent — a present but blank `session` is refused (400); giving it twice is too). No bodies — state, attempts and the last error |
 | `GET` | `/v1/outbound/{id}` | What became of one queued message |
 | `GET` | `/v1/wakes?limit=50` | What has woken agents on this node, newest first, with the refusals and the limits that produced them: `limit` (1–200) and `session` (a local session id, narrowing the trail to that session — a present but blank `session` is refused (400); giving it twice is too). `ah wakes` renders it |
-| `GET` | `/v1/sessions/{id}/wake-stream` | Where an agent's own MCP server waits to be told that session has a message. `agenthub-mcp -channel` holds this long poll; the node answers just short of its write deadline and says how long it held in `Agenthub-Wake-Wait` |
+| `GET` | `/v1/sessions/{id}/wake-stream` | Where an agent's own MCP server waits to be told that session has a message. `agenthallway-mcp -channel` holds this long poll; the node answers just short of its write deadline and says how long it held in `Agenthub-Wake-Wait` |
 | `GET` | `/v1/pairing` | Whether this node is advertising, whether it was started with `-discover` (`discovery`), and what the announce loop last managed to send |
 | `POST` | `/v1/pairing` | Open the window, optionally `{"seconds":N}` (30s–15m, default 5m) |
 | `DELETE` | `/v1/pairing` | Stop advertising now |

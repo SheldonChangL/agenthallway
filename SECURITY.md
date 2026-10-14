@@ -26,7 +26,7 @@ names and addresses that are not yours to share.
 
 ## What to expect
 
-AgentHub is a one-person project, maintained in spare time. Reports are handled
+Agent Hallway is a one-person project, maintained in spare time. Reports are handled
 on a best-effort basis and there is no guaranteed response time. What you can
 expect:
 
@@ -54,7 +54,7 @@ expect:
   asset it checked against that release's `SHA256SUMS`, or that writes outside
   the locations [docs/install-script.md](docs/install-script.md) lists.
 - **The desktop app's service install** — the app running an `ah`,
-  `agenthub-node` or `agenthub-mcp` other than the one it found where the
+  `agenthallway-node` or `agenthallway-mcp` other than the one it found where the
   [developer guide](docs/developer.md#desktop-app) says it looks, or
   registering a service that does something other than
   what the form showed.
@@ -78,7 +78,7 @@ is in [How it stays private](docs/developer.md#how-it-stays-private) and in
 - **An agent that follows a message.** Messages from another machine are
   marked as untrusted and attributed to their sender; nothing makes a model
   refuse. What a woken agent may do is its own tool configuration in Claude
-  Code or Codex, which AgentHub does not shrink.
+  Code or Codex, which Agent Hallway does not shrink.
 - **Unsigned binaries.** The macOS app is ad-hoc signed and not notarized, and
   the Windows installer is not signed. A matching `SHA256SUMS` proves the file
   is what the release workflow published, not that the release page itself is
